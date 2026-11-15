@@ -58,7 +58,7 @@ Below, a small boosting engine written in JavaScript runs on the real retail-sal
   question="Set the learning rate to **1** (each tree's full correction is added) and use **depth-3** trees. As you add trees from 25 to 300, what happens to the error on the **held-out** months?"
   options={['It keeps falling, because more trees always mean a better fit', 'It stays flat after about 25 trees', 'It starts to rise: the model memorizes the training years', 'It falls to zero, like the training error']}
   answer={2}
-  explain="Training error collapses to essentially zero, but held-out RMSE reaches its low of about $15.2 billion after 26 trees and then climbs to $16.3 billion by tree 300. Each extra tree is chasing noise in the training years. With learning rate 0.1, held-out error keeps improving for longer and ends lower (about $11.7 billion with depth-3 trees)."
+  explain="Training error collapses to essentially zero, but held-out RMSE reaches its low of about \$15.2 billion after 26 trees and then climbs to \$16.3 billion by tree 300. Each extra tree is chasing noise in the training years. With learning rate 0.1, held-out error keeps improving for longer and ends lower (about \$11.7 billion with depth-3 trees)."
 />
 
 <div class="breakout">
@@ -117,7 +117,7 @@ Tuning is choosing settings (learning rate, depth, number of trees) without peek
   question="Gradient-boosted trees (LightGBM) won the M5 competition. On this one series, U.S. retail sales, what do you expect from tuned XGBoost one month ahead?"
   options={['It beats ETS by a wide margin', 'It is in the same range as ETS and the random forest, and does not clearly win', 'It loses to seasonal naive']}
   answer={1}
-  explain="Tuned XGBoost misses by $10.3 billion a month on average (MAE), ETS by $8.4 billion and the random forest by $9.1 billion. All three halve the error of seasonal naive ($16.1 billion). With one series and a clean seasonal pattern, there is not much left for a flexible model to find."
+  explain="Tuned XGBoost misses by \$10.3 billion a month on average (MAE), ETS by \$8.4 billion and the random forest by \$9.1 billion. All three halve the error of seasonal naive (\$16.1 billion). With one series and a clean seasonal pattern, there is not much left for a flexible model to find."
 />
 
 <div class="breakout">
@@ -278,8 +278,8 @@ Explain November 2025 yourself. Fill in the two blanks (`______`) and press **Ru
 </div>
 
 <Predict client:load kind="check"
-  question="A colleague's SHAP waterfall shows the unemployment rate pushing next month's sales forecast down by $3 billion. Which statement is justified?"
-  options={['If unemployment fell, sales would rise by about $3 billion', 'The model relied on the unemployment rate to lower this forecast by about $3 billion relative to its average', 'Unemployment is the main cause of the expected sales decline', 'The model is wrong, because unemployment cannot affect next month\'s sales']}
+  question="A colleague's SHAP waterfall shows the unemployment rate pushing next month's sales forecast down by \$3 billion. Which statement is justified?"
+  options={['If unemployment fell, sales would rise by about \$3 billion', 'The model relied on the unemployment rate to lower this forecast by about \$3 billion relative to its average', 'Unemployment is the main cause of the expected sales decline', 'The model is wrong, because unemployment cannot affect next month\'s sales']}
   answer={1}
   explain="SHAP values describe the model's arithmetic for this one forecast: base value plus contributions equals the prediction. They are not causal effects, and correlated features (such as sentiment or claims) could have picked up the same signal."
 />

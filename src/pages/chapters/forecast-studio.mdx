@@ -60,7 +60,7 @@ Below is a complete forecasting dashboard. It runs entirely in your browser in a
   question="Before you touch anything: the Studio opens on **U.S. retail sales** (not seasonally adjusted, strong December peak), data through September 2026, forecasting 12 months ahead. Which method do you expect to top the scorecard?"
   options={['Naive (last value carried forward)', 'Seasonal naive (same month last year)', 'Holt damped (trend, no seasonality)', 'Holt-Winters multiplicative (trend + seasonality that scales with the level)']}
   answer={3}
-  explain="Holt-Winters multiplicative wins, with a mean absolute error (MAE) of about $10.7 billion averaged over horizons 1 to 12, against $16.5 billion for seasonal naive. Methods that ignore seasonality (naive, drift, SES, Holt) are worse than seasonal naive by a wide margin: their MAE is about $30 to $39 billion, because they miss every December. Seasonality is the first thing any model of this series must capture."
+  explain="Holt-Winters multiplicative wins, with a mean absolute error (MAE) of about \$10.7 billion averaged over horizons 1 to 12, against \$16.5 billion for seasonal naive. Methods that ignore seasonality (naive, drift, SES, Holt) are worse than seasonal naive by a wide margin: their MAE is about \$30 to \$39 billion, because they miss every December. Seasonality is the first thing any model of this series must capture."
 />
 
 <div class="breakout">
@@ -86,15 +86,15 @@ Each smoothing model's parameters are re-estimated at every origin by minimizing
 </Callout>
 
 <Predict client:load kind="check"
-  question="With all eight methods ticked, the **Combination** row for retail sales has an MAE of about $18.1 billion, worse than either Holt-Winters model alone (about $10.7 and $12.6 billion). Untick **SES** and **Holt damped**. What happens, and why?"
+  question="With all eight methods ticked, the **Combination** row for retail sales has an MAE of about \$18.1 billion, worse than either Holt-Winters model alone (about \$10.7 and \$12.6 billion). Untick **SES** and **Holt damped**. What happens, and why?"
   options={[
     'Nothing; the combination always averages all eight methods',
-    'The combination improves to about $11.1 billion, because it now averages only the two models that handle seasonality',
+    'The combination improves to about \$11.1 billion, because it now averages only the two models that handle seasonality',
     'The combination gets worse, because averaging fewer models always loses information',
     'The combination becomes the best method, because combinations always win'
   ]}
   answer={1}
-  explain="The combination averages the smoothing models you have ticked. SES and Holt have no seasonal component, so they drag the average toward a forecast that misses every December. Without them, the combination's MAE falls to about $11.1 billion. It still does not beat Holt-Winters multiplicative here ($10.7 billion). Combinations usually help when the ingredients are all reasonable and make <em>different</em> mistakes; they are not magic."
+  explain="The combination averages the smoothing models you have ticked. SES and Holt have no seasonal component, so they drag the average toward a forecast that misses every December. Without them, the combination's MAE falls to about \$11.1 billion. It still does not beat Holt-Winters multiplicative here (\$10.7 billion). Combinations usually help when the ingredients are all reasonable and make <em>different</em> mistakes; they are not magic."
 />
 
 ### What surprised you: forecasts made just before a shock
@@ -151,7 +151,7 @@ Plus one chart (the fan chart, titled with the takeaway) and nothing else unless
   </div>
   <div class="sc-good">
     <div class="sc-h">After</div>
-    <p>We expect U.S. retail sales to be about $652.7 billion in September 2027, 2.8% above September 2026. Our 80% range is $626.1 to $658.2 billion. Over the past four years this method's typical miss was $8.8 billion one month ahead and $12.8 billion a year ahead, 35% smaller than using the same month last year. Key risk: it has tended to over-forecast by about $4.9 billion, so the outcome may land below our central number. We will revisit the forecast if actual sales fall outside the range two months in a row.</p>
+    <p>We expect U.S. retail sales to be about \$652.7 billion in September 2027, 2.8% above September 2026. Our 80% range is \$626.1 to \$658.2 billion. Over the past four years this method's typical miss was \$8.8 billion one month ahead and \$12.8 billion a year ahead, 35% smaller than using the same month last year. Key risk: it has tended to over-forecast by about \$4.9 billion, so the outcome may land below our central number. We will revisit the forecast if actual sales fall outside the range two months in a row.</p>
   </div>
 </div>
 

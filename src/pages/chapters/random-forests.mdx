@@ -117,7 +117,7 @@ The depth experiment in the lab tells the same story as the explorer: training e
 Here is the property of trees that matters most for economic data, and that most machine-learning tutorials never mention. Look again at how a leaf forecasts: it returns an **average of training targets**. An average can never be larger than the largest value it averages.
 
 <Predict client:load
-  question="A random forest is trained on the **level** of U.S. e-commerce sales up to December 2022, when sales reached an all-time high of about $90.5 billion a month. Sales kept climbing after that. What will the forest's forecasts for 2023–2025 look like?"
+  question="A random forest is trained on the **level** of U.S. e-commerce sales up to December 2022, when sales reached an all-time high of about \$90.5 billion a month. Sales kept climbing after that. What will the forest's forecasts for 2023–2025 look like?"
   options={[
     'A rising line that follows the trend, because the lags keep rising',
     'Roughly flat, and never above about \$90.5 billion',
@@ -125,7 +125,7 @@ Here is the property of trees that matters most for economic data, and that most
     'An explosion upward, because recursive forecasts compound'
   ]}
   answer={1}
-  explain="Every leaf in every tree predicts an average of training months, and none of those exceeded $90.5 billion. So no matter how high the lags go, the forest's forecast is stuck under the training maximum. Try it below."
+  explain="Every leaf in every tree predicts an average of training months, and none of those exceeded \$90.5 billion. So no matter how high the lags go, the forest's forecast is stuck under the training maximum. Try it below."
 />
 
 <div class="breakout">
@@ -231,7 +231,7 @@ Time to put the forest on the course scorecard. Same series, same split as Chapt
   question="On the 2023-onward test months, who will have the lowest MAE: seasonal naive, ETS, the forest on **levels**, or the forest on **growth rates**?"
   options={['Seasonal naive', 'ETS', 'Random forest on levels', 'Random forest on growth rates']}
   answer={1}
-  explain="ETS, but only just: $12,965 million vs $12,980 million for the forest on growth rates, a difference of $15 million on monthly sales of about $600,000 million. Call it a tie. The forest on levels falls into the extrapolation trap and barely beats seasonal naive. Run the lab to see the full scorecard, including a surprise in the last row."
+  explain="ETS, but only just: \$12,965 million vs \$12,980 million for the forest on growth rates, a difference of \$15 million on monthly sales of about \$600,000 million. Call it a tie. The forest on levels falls into the extrapolation trap and barely beats seasonal naive. Run the lab to see the full scorecard, including a surprise in the last row."
 />
 
 <div class="breakout">
