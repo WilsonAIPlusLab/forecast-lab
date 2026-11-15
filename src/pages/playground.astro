@@ -7,24 +7,25 @@ const manifest = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'public', '
 const ids = Object.keys(manifest);
 const starterR = `# Playground: a full R session in your browser.
 # Every bundled FRED series is available via fred("ID"); see the list below.
-library(forecast)
+library(forecast)                         # auto.arima(), forecast()
 
-y  <- fred("UNRATE", start = 2000)        # try "PAYEMS", "CPIAUCSL", "HOUSTNSA" ...
-fit <- auto.arima(y)
-fc  <- forecast(fit, h = 24)
+y  <- fred("UNRATE", start = 2000)        # unemployment rate (%), monthly; try "PAYEMS", "CPIAUCSL", "HOUSTNSA" ...
+fit <- auto.arima(y)                      # let R pick the ARIMA orders automatically
+fc  <- forecast(fit, h = 24)              # forecast 24 months ahead, with 80% and 95% ranges
 
-viz_ts(y, title = "Your series", recessions = TRUE)
-viz_forecast(fc, from = 2015, title = "24-month forecast")
-summary(fit)
+viz_ts(y, title = "Your series", recessions = TRUE)          # line chart, recessions shaded
+viz_forecast(fc, from = 2015, title = "24-month forecast")   # forecast fan chart, history from 2015
+summary(fit)                              # chosen model, coefficients and accuracy
 `;
 const starterPy = `# Playground: Python (pandas, numpy, statsmodels, scikit-learn...) in your browser.
-y = fred("UNRATE", start=2000)
-from statsmodels.tsa.holtwinters import ExponentialSmoothing
-fit = ExponentialSmoothing(y, trend="add", damped_trend=True).fit()
-fc = fit.forecast(24)
-viz_ts(y, title="Your series", recessions=True)
+y = fred("UNRATE", start=2000)            # unemployment rate (%), monthly from 2000; try "PAYEMS", "CPIAUCSL" ...
+from statsmodels.tsa.holtwinters import ExponentialSmoothing   # Holt-Winters exponential smoothing
+fit = ExponentialSmoothing(y, trend="add", damped_trend=True).fit()   # damped-trend Holt model, no seasonality
+fc = fit.forecast(24)                     # forecast 24 months ahead (point forecasts only)
+viz_ts(y, title="Your series", recessions=True)   # line chart, recessions shaded
+# history from 2015 plus the forecast; ** unpacks the dict so the label can contain a space
 viz_compare(history=y["2015":], **{"Damped Holt": fc}, title="24-month forecast")
-print(fit.params)
+print(fit.params)                         # fitted smoothing parameters
 `;
 ---
 <Base title="Playground · Forecast Lab" description={`A free R and Python session in your browser with ${ids.length} bundled economic data series.`}>

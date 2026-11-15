@@ -1,3 +1,4 @@
+# Hidden check (not shown to students): recomputes the SHAP forecast and confirms the two blanks.
 _truth = nov["lag1"].iloc[0] * (1 + fit.predict(dnov)[0] / 100)
 _S = pd.Series(fit.predict(dnov, pred_contribs=True)[0], index=features + ["base"])
 _drag = _S[biggest_drag] * nov["lag1"].iloc[0] / 100 / 1000

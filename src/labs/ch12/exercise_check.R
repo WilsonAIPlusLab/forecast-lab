@@ -1,3 +1,4 @@
+# Hidden check (not shown to students): recomputes the SHAP forecast and confirms the two blanks.
 .p <- predict(fit, dnov); .truth <- nov$lag1 * (1 + .p / 100)
 .S <- predict(fit, dnov, predcontrib = TRUE); .drag <- .S[1, biggest_drag] * nov$lag1 / 100 / 1000
 check_that(is.matrix(S) && ncol(S) == length(features) + 1 && exists("forecast_from_shap") && abs(forecast_from_shap - .truth) < 1,

@@ -1,3 +1,4 @@
+# Hidden grader: recomputes the bottom-up forecast and compares it with the student's bu_total.
 .tr <- lapply(parts, window, end = c(2025, 9))
 .fc <- sapply(.tr, function(s) forecast(ets(s, model = "ZZN"), h = 12)$mean)
 .bu <- rowSums(.fc)

@@ -1,3 +1,4 @@
+# Hidden check (not shown to students): refits the forest with the permits gap and compares the MAE.
 .gap  <- lag_k(100 * log(as.numeric(permits) / as.numeric(starts)), 1)
 .d    <- d; .d$gap1 <- .gap
 .tr   <- na.omit(.d[.d$date < "2023-01-01", ]); .te <- .d[.d$date >= "2023-01-01", ]

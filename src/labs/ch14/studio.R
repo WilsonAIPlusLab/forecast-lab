@@ -1,44 +1,52 @@
 #| **The configuration.** This rebuilds the Studio's default view: U.S. retail sales excluding food services (FRED `RSXFSN`, **not seasonally adjusted**), divided by 1,000 to turn $ millions into **$ billions**, January 2010 through the latest month, forecast 12 months ahead. We evaluate at **12 forecast origins**, one every four months over the last four years (the Studio uses all 48 months; re-fitting ARIMA 48 times would be too slow in a browser).
-library(forecast)
-y <- fred("RSXFSN", start = 2010) / 1000
-h <- 12
-origins <- seq(length(y) - 48, length(y) - 4, by = 4)
+library(forecast)                                      # ets(), auto.arima(), snaive(), rwf()
+y <- fred("RSXFSN", start = 2010) / 1000               # monthly retail sales, $ billions, not SA
+h <- 12                                                # forecast 12 months ahead
+origins <- seq(length(y) - 48, length(y) - 4, by = 4)  # 12 origins: every 4th month of the last four years
 
 #| **Choose the model forms using only data before the first origin.** `ets()` picks the exponential-smoothing form by AICc ([Chapter 6](/chapters/exponential-smoothing/)); we limit it to multiplicative errors and seasonality (`"MZM"`) to keep it quick. `auto.arima()` picks the ARIMA orders ([Chapter 7](/chapters/arima/)). Because `pre` ends at the first origin, nothing we evaluate later has been seen during model selection.
-pre <- window(y, end = time(y)[origins[1]])
-e_form <- ets(pre, model = "MZM")
-a_form <- auto.arima(pre, stepwise = TRUE, approximation = TRUE)
-c(ETS = e_form$method, ARIMA = as.character(a_form))
+pre <- window(y, end = time(y)[origins[1]])            # data up to the first origin only
+e_form <- ets(pre, model = "MZM")                      # Z = "let R choose" the trend type
+a_form <- auto.arima(pre, stepwise = TRUE, approximation = TRUE)   # fast search for ARIMA orders
+c(ETS = e_form$method, ARIMA = as.character(a_form))   # the chosen forms, e.g. ETS(M,Ad,M)
 
 #| **Four forecasting functions.** Each takes the data up to an origin, **re-estimates** its parameters on that data alone, and returns `h` forecasts. The combination is the plain average of ETS and ARIMA ([Chapter 11](/chapters/uncertainty/)).
-f <- list(`Seasonal naive` = function(x) snaive(x, h = h)$mean,
-          Drift = function(x) rwf(x, h = h, drift = TRUE)$mean,
+f <- list(`Seasonal naive` = function(x) snaive(x, h = h)$mean,   # same month last year
+          Drift = function(x) rwf(x, h = h, drift = TRUE)$mean,    # straight line from first to last point
+          # ETS with the chosen form: components 1-3 give letters like "MAM", component 4 says damped or not
           ETS = function(x) forecast(ets(x, model = paste(e_form$components[1:3], collapse = ""),
                                          damped = e_form$components[4] == "TRUE"), h = h)$mean,
+          # ARIMA with the chosen (p,d,q)(P,D,Q) orders, plus drift if the chosen model had one
           ARIMA = function(x) forecast(Arima(x, order = arimaorder(a_form)[1:3], seasonal = arimaorder(a_form)[4:6], include.drift = "drift" %in% names(coef(a_form))), h = h)$mean)
 
 #| **Rolling-origin evaluation** ([Chapter 3](/chapters/benchmarks/)). At each origin `o`, every method is re-fitted on `y[1:o]` and its forecasts are compared with the 12 values that followed: one row of errors per origin, one column per horizon. Values past the end of the data are `NA` and are skipped. The combination's errors are the average of the ETS and ARIMA errors.
+# for each method (lapply) and each origin (sapply): actual minus forecast for horizons 1..12
 errs <- lapply(f, function(fun) t(sapply(origins, function(o) y[o + 1:h] - as.numeric(fun(window(y, end = time(y)[o]))))))
-errs$Combination <- (errs$ETS + errs$ARIMA) / 2
-fc <- lapply(f, function(fun) fun(y))
+errs$Combination <- (errs$ETS + errs$ARIMA) / 2        # averaging forecasts = averaging their errors
+fc <- lapply(f, function(fun) fun(y))                  # final forecasts from all the data
 fc$Combination <- (fc$ETS + fc$ARIMA) / 2
 
 #| **The scorecard.** `mae_h` holds the MAE at each horizon (rows) for each method (columns). The scorecard averages over horizons 1 to 12, like the Studio. MASE divides by the in-sample seasonal naive MAE, and Bias is the mean error (positive = forecasts too low).
-mae_h <- sapply(errs, function(m) colMeans(abs(m), na.rm = TRUE))
-score <- data.frame(MAE = colMeans(mae_h),
+mae_h <- sapply(errs, function(m) colMeans(abs(m), na.rm = TRUE))   # 12 x 5: MAE by horizon and method
+score <- data.frame(MAE = colMeans(mae_h),                           # average over the 12 horizons
+                    # RMSE at each horizon, then averaged over horizons
                     RMSE = sapply(errs, function(m) mean(sqrt(colMeans(m^2, na.rm = TRUE)))),
+                    # scale = in-sample seasonal naive MAE (mean of lag-12 differences)
                     MASE = colMeans(mae_h) / mean(abs(diff(y, lag = 12))),
-                    Bias = sapply(errs, function(m) mean(m, na.rm = TRUE)))
-best <- rownames(score)[which.min(score$MAE)]
+                    Bias = sapply(errs, function(m) mean(m, na.rm = TRUE)))  # mean error
+best <- rownames(score)[which.min(score$MAE)]          # name of the method with the lowest MAE
 viz_table(score, highlight = c("MAE", "RMSE", "MASE"), digits = 2,
           title = sprintf("%s wins on 12 rolling origins ($ billions)", best))
+# MAE by horizon for four methods (drift left out)
 viz_lines(1:h, `Seasonal naive` = mae_h[, "Seasonal naive"], ETS = mae_h[, "ETS"], ARIMA = mae_h[, "ARIMA"],
           Combination = mae_h[, "Combination"], xlab = "months ahead", ylab = "MAE ($ billions)", zero = TRUE,
           title = "The models' edge over seasonal naive shrinks as the horizon grows")
 
 #| **Fan chart with honest ranges.** Like the Studio, the 50% and 80% ranges come from the best method's own past errors at each horizon: the forecast plus the 10th, 25th, 75th and 90th percentiles of those errors. With only 10 to 12 errors per horizon these edges are rough; that is the price of fewer origins. We wrap them in a `forecast` object so `viz_forecast()` can draw it.
+# apply(..., 2, ...) runs quantile() on each column (horizon): 4 x 12 matrix of error percentiles
 q <- apply(errs[[best]], 2, quantile, probs = c(.10, .25, .75, .90), na.rm = TRUE)
-point <- fc[[best]]
+point <- fc[[best]]                                    # best method's point forecasts
+# structure(..., class = "forecast") builds an object that looks like forecast() output
 final <- structure(list(mean = point, x = y, level = c(50, 80), method = best,
                         lower = cbind(`50%` = point + q[2, ], `80%` = point + q[1, ]),
                         upper = cbind(`50%` = point + q[3, ], `80%` = point + q[4, ])), class = "forecast")
@@ -47,6 +55,7 @@ viz_forecast(final, from = 2020, ylab = "$ billions", title = sprintf("Retail sa
 #| **The executive summary, generated from the numbers.** `sprintf()` fills each `%` slot with a value: `%.1f` means one decimal place, `%s` a piece of text, `%%` a literal percent sign. Every number in this paragraph comes from code above, so it updates itself when the data do.
 summary_text <- sprintf(
   "We expect U.S. retail sales excluding food services (not seasonally adjusted) to be about $%.1f billion in %s (80%% range $%.1f to $%.1f billion). Over %d forecast origins in the past four years, the most accurate method was %s, with a typical miss of $%.1f billion one month ahead and $%.1f billion %d months ahead, %.0f%% smaller than the seasonal naive rule.",
+  # values for the slots, in order; the last one is the % MAE gain over seasonal naive
   point[h], format(as.Date(ts_dates(point)[h]), "%B %Y"), final$lower[h, "80%"], final$upper[h, "80%"],
   length(origins), best, mae_h[1, best], mae_h[h, best], h, 100 * (1 - score[best, "MAE"] / score["Seasonal naive", "MAE"]))
-cat(strwrap(summary_text, 90), sep = "\n")
+cat(strwrap(summary_text, 90), sep = "\n")             # print, wrapped at 90 characters per line

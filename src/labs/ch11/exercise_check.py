@@ -1,3 +1,4 @@
+# Hidden check (not shown to students): refits the forest with the permits gap and compares the MAE.
 _d = d.copy(); _d["gap1"] = (100 * np.log(permits / starts)).shift(1)
 _tr, _te = _d[:"2022-12"].dropna(), _d["2023-01":]
 _cols = ["g1", "g2", "g12", "gap1"]

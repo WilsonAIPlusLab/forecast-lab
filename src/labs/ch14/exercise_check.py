@@ -1,3 +1,4 @@
+# Hidden grader: recomputes the rolling-origin forecast, range and summary, then checks the student's values.
 def _ff(x):
     return ExponentialSmoothing(x, trend="add", damped_trend=True, seasonal="mul", seasonal_periods=12).fit(use_brute=False).forecast(12)
 _n = len(y); _o = range(_n - 48, _n - 3, 4)

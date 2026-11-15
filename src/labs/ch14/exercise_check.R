@@ -1,3 +1,4 @@
+# Hidden grader: recomputes the rolling-origin forecast, range and summary, then checks the student's values.
 .ff <- function(x) forecast(ets(x, model = "MAM", damped = TRUE), h = 12)
 .o <- seq(length(y) - 48, length(y) - 4, by = 4)
 .e <- t(sapply(.o, function(o) y[o + 1:12] - as.numeric(.ff(window(y, end = time(y)[o]))$mean)))

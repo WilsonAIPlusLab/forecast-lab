@@ -8,17 +8,21 @@
 #   learned default direction for missing values; base score = mean label (one Newton step, as in xgboost >= 2).
 # SHAP values (predcontrib = TRUE) are exact path-dependent Shapley values (cover-weighted), the quantity
 # TreeSHAP computes. Natively it reproduces CRAN xgboost 3.x results (tree_method = "exact", subsample = 1).
+# Everything runs inside local() so helper objects do not leak into the student's workspace.
 local({
+  # Only act in the browser (webR = "emscripten"), and only if the real package is missing.
   if (!identical(R.version$os, "emscripten") || "package:xgboost" %in% search()) return(invisible())
   if (isTRUE(tryCatch(suppressWarnings(suppressMessages(requireNamespace("xgboost", quietly = TRUE))), error = function(e) FALSE))) return(invisible())
-  x <- new.env()
+  x <- new.env()                                  # the functions to attach as "package:xgboost"
 
+  # xgb.DMatrix(): stores the feature matrix (as doubles) and the optional label
   x$xgb.DMatrix <- function(data, label = NULL, ...) {
     m <- as.matrix(data); storage.mode(m) <- "double"
     structure(list(x = m, y = if (is.null(label)) NULL else as.numeric(label)), class = "xgb.DMatrix")
   }
   dim.xgb.DMatrix <- function(x) dim(x$x)
 
+  # grow(): builds one regression tree recursively from gradients g on the given rows; returns a nested list.
   # ords[[f]]: this node's rows with non-missing values of feature f, sorted by value.
   # Children inherit their slices of these orders, so each node costs time proportional to its own size.
   # out$upd[rows] receives each training row's leaf value, so training predictions need no extra pass.
@@ -60,6 +64,7 @@ local({
          left  = grow(X, lapply(ords, function(o) o[inL[o]]),  g, rows[goL],  depth + 1, P, out),
          right = grow(X, lapply(ords, function(o) o[!inL[o]]), g, rows[!goL], depth + 1, P, out))
   }
+  # tree_pred(): sends every row of X down tree t and returns its leaf values
   tree_pred <- function(t, X) {
     out <- numeric(nrow(X))
     walk <- function(t, idx) {
@@ -71,6 +76,8 @@ local({
     walk(t, seq_len(nrow(X))); out
   }
 
+  # xgb.train(): boosting loop. Each round fits a tree to the current residual gradients, adds it to the
+  # predictions, records RMSE on the evals sets, and stops early if the last eval set stops improving.
   x$xgb.train <- function(params = list(), data, nrounds, evals = list(), early_stopping_rounds = NULL, verbose = 1, ...) {
     P <- modifyList(list(eta = 0.3, max_depth = 6, lambda = 1, gamma = 0, min_child_weight = 1, subsample = 1), params)
     P$eta <- as.numeric(P$eta); P$max_depth <- as.numeric(P$max_depth)
@@ -114,6 +121,8 @@ local({
     }
     (t$left$cover * cond_exp(t$left, xr, S) + t$right$cover * cond_exp(t$right, xr, S)) / t$cover
   }
+  # used(): the features a tree splits on; shap_tree(): exact Shapley values for one tree, one row
+  # (enumerates every subset of the used features; fine for the shallow trees in these labs)
   used <- function(t) if (t$leaf) integer(0) else unique(c(t$f, used(t$left), used(t$right)))
   shap_tree <- function(t, xr, p) {
     phi <- numeric(p + 1); U <- used(t); m <- length(U)
@@ -130,6 +139,8 @@ local({
     phi
   }
 
+  # predict(): sums the trees' outputs plus the base score; with predcontrib = TRUE returns SHAP values
+  # (one column per feature plus "(Intercept)"). Honors early stopping's best iteration, like xgboost.
   predict.xgb.Booster <- function(object, newdata, predcontrib = FALSE, iterationrange = NULL, ...) {
     X <- if (inherits(newdata, "xgb.DMatrix")) newdata$x else as.matrix(newdata)
     n_use <- length(object$trees)
@@ -144,6 +155,7 @@ local({
     colnames(S) <- c(object$features, "(Intercept)"); S
   }
 
+  # xgb.importance(): Gain, Cover and Frequency shares per feature, summed over all splits
   x$xgb.importance <- function(model, ...) {
     acc <- list()
     walk <- function(t) if (!t$leaf) {
@@ -156,6 +168,7 @@ local({
   }
   print.xgb.Booster <- function(x, ...) cat(sprintf("xgb.Booster (browser edition): %d trees\n", length(x$trees)))
 
+  # register the methods, attach the fake package, and tell the student a substitute is in use
   registerS3method("predict", "xgb.Booster", predict.xgb.Booster)
   registerS3method("print", "xgb.Booster", print.xgb.Booster)
   registerS3method("dim", "xgb.DMatrix", dim.xgb.DMatrix)

@@ -1,3 +1,4 @@
+# Hidden grader: recomputes the bottom-up forecast and compares it with the student's bu_total.
 _fc = pd.DataFrame({c: damped_fc(parts[:"2025-09"][c]) for c in parts.columns}, index=test_total.index).sum(axis=1)
 _m1 = float((test_total - _fc).abs().mean()); _m2 = float(np.abs(test_total.values - damped_fc(total[:"2025-09"])).mean())
 check_that("bu_total" in globals() and len(bu_total) == 12 and np.allclose(np.asarray(bu_total, float), _fc.values),
