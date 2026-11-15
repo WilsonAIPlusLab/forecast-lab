@@ -1,0 +1,713 @@
+{
+ "A191RL1Q225SBEA": {
+  "file": "A191RL1Q225SBEA.csv",
+  "cols": [
+   "observation_date",
+   "A191RL1Q225SBEA"
+  ],
+  "n": 318,
+  "start": "1947-04-01",
+  "end": "2026-07-01"
+ },
+ "AWHMAN": {
+  "file": "AWHMAN.csv",
+  "cols": [
+   "observation_date",
+   "AWHMAN"
+  ],
+  "n": 1054,
+  "start": "1939-01-01",
+  "end": "2026-10-01"
+ },
+ "BAA10Y": {
+  "file": "BAA10Y.csv",
+  "cols": [
+   "observation_date",
+   "BAA10Y"
+  ],
+  "n": 10661,
+  "start": "1986-01-02",
+  "end": "2026-11-12"
+ },
+ "CCSA": {
+  "file": "CCSA.csv",
+  "cols": [
+   "observation_date",
+   "CCSA"
+  ],
+  "n": 3122,
+  "start": "1967-01-07",
+  "end": "2026-10-31"
+ },
+ "CIVPART": {
+  "file": "CIVPART.csv",
+  "cols": [
+   "observation_date",
+   "CIVPART"
+  ],
+  "n": 946,
+  "start": "1948-01-01",
+  "end": "2026-10-01"
+ },
+ "CPIAUCSL": {
+  "file": "CPIAUCSL.csv",
+  "cols": [
+   "observation_date",
+   "CPIAUCSL"
+  ],
+  "n": 958,
+  "start": "1947-01-01",
+  "end": "2026-10-01"
+ },
+ "CPILFESL": {
+  "file": "CPILFESL.csv",
+  "cols": [
+   "observation_date",
+   "CPILFESL"
+  ],
+  "n": 838,
+  "start": "1957-01-01",
+  "end": "2026-10-01"
+ },
+ "CPIUFDSL": {
+  "file": "CPIUFDSL.csv",
+  "cols": [
+   "observation_date",
+   "CPIUFDSL"
+  ],
+  "n": 958,
+  "start": "1947-01-01",
+  "end": "2026-10-01"
+ },
+ "DCOILWTICO": {
+  "file": "DCOILWTICO.csv",
+  "cols": [
+   "observation_date",
+   "DCOILWTICO"
+  ],
+  "n": 10660,
+  "start": "1986-01-02",
+  "end": "2026-11-11"
+ },
+ "DIVISIA_M4": {
+  "file": "DIVISIA_M4.csv",
+  "cols": [
+   "observation_date",
+   "DM4",
+   "DM4_YOY"
+  ],
+  "n": 697,
+  "start": "1967-01-01",
+  "end": "2025-01-01"
+ },
+ "DSPIC96": {
+  "file": "DSPIC96.csv",
+  "cols": [
+   "observation_date",
+   "DSPIC96"
+  ],
+  "n": 813,
+  "start": "1959-01-01",
+  "end": "2026-09-01"
+ },
+ "EXUSEU": {
+  "file": "EXUSEU.csv",
+  "cols": [
+   "observation_date",
+   "EXUSEU"
+  ],
+  "n": 334,
+  "start": "1999-01-01",
+  "end": "2026-10-01"
+ },
+ "FEDFUNDS": {
+  "file": "FEDFUNDS.csv",
+  "cols": [
+   "observation_date",
+   "FEDFUNDS"
+  ],
+  "n": 868,
+  "start": "1954-07-01",
+  "end": "2026-10-01"
+ },
+ "GASREGW": {
+  "file": "GASREGW.csv",
+  "cols": [
+   "observation_date",
+   "GASREGW"
+  ],
+  "n": 1891,
+  "start": "1990-08-20",
+  "end": "2026-11-09"
+ },
+ "GDPC1": {
+  "file": "GDPC1.csv",
+  "cols": [
+   "observation_date",
+   "GDPC1"
+  ],
+  "n": 319,
+  "start": "1947-01-01",
+  "end": "2026-07-01"
+ },
+ "GDPNOW": {
+  "file": "GDPNOW.csv",
+  "cols": [
+   "observation_date",
+   "GDPNOW"
+  ],
+  "n": 62,
+  "start": "2011-07-01",
+  "end": "2026-10-01"
+ },
+ "GS10": {
+  "file": "GS10.csv",
+  "cols": [
+   "observation_date",
+   "GS10"
+  ],
+  "n": 883,
+  "start": "1953-04-01",
+  "end": "2026-10-01"
+ },
+ "HOUST": {
+  "file": "HOUST.csv",
+  "cols": [
+   "observation_date",
+   "HOUST"
+  ],
+  "n": 813,
+  "start": "1959-01-01",
+  "end": "2026-09-01"
+ },
+ "HOUSTNSA": {
+  "file": "HOUSTNSA.csv",
+  "cols": [
+   "observation_date",
+   "HOUSTNSA"
+  ],
+  "n": 813,
+  "start": "1959-01-01",
+  "end": "2026-09-01"
+ },
+ "IANA": {
+  "file": "IANA.csv",
+  "cols": [
+   "observation_date",
+   "IANA"
+  ],
+  "n": 441,
+  "start": "1990-01-01",
+  "end": "2026-09-01"
+ },
+ "IAUR": {
+  "file": "IAUR.csv",
+  "cols": [
+   "observation_date",
+   "IAUR"
+  ],
+  "n": 609,
+  "start": "1976-01-01",
+  "end": "2026-09-01"
+ },
+ "ICSA": {
+  "file": "ICSA.csv",
+  "cols": [
+   "observation_date",
+   "ICSA"
+  ],
+  "n": 3123,
+  "start": "1967-01-07",
+  "end": "2026-11-07"
+ },
+ "INDPRO": {
+  "file": "INDPRO.csv",
+  "cols": [
+   "observation_date",
+   "INDPRO"
+  ],
+  "n": 1293,
+  "start": "1919-01-01",
+  "end": "2026-09-01"
+ },
+ "IPG2211A2N": {
+  "file": "IPG2211A2N.csv",
+  "cols": [
+   "observation_date",
+   "IPG2211A2N"
+  ],
+  "n": 1053,
+  "start": "1939-01-01",
+  "end": "2026-09-01"
+ },
+ "JTSJOL": {
+  "file": "JTSJOL.csv",
+  "cols": [
+   "observation_date",
+   "JTSJOL"
+  ],
+  "n": 310,
+  "start": "2000-12-01",
+  "end": "2026-09-01"
+ },
+ "M2SL": {
+  "file": "M2SL.csv",
+  "cols": [
+   "observation_date",
+   "M2SL"
+  ],
+  "n": 813,
+  "start": "1959-01-01",
+  "end": "2026-09-01"
+ },
+ "MORTGAGE30US": {
+  "file": "MORTGAGE30US.csv",
+  "cols": [
+   "observation_date",
+   "MORTGAGE30US"
+  ],
+  "n": 2903,
+  "start": "1971-04-02",
+  "end": "2026-11-12"
+ },
+ "MRTSSM441USN": {
+  "file": "MRTSSM441USN.csv",
+  "cols": [
+   "observation_date",
+   "MRTSSM441USN"
+  ],
+  "n": 416,
+  "start": "1992-01-01",
+  "end": "2026-08-01"
+ },
+ "MRTSSM442USN": {
+  "file": "MRTSSM442USN.csv",
+  "cols": [
+   "observation_date",
+   "MRTSSM442USN"
+  ],
+  "n": 416,
+  "start": "1992-01-01",
+  "end": "2026-08-01"
+ },
+ "MRTSSM443USN": {
+  "file": "MRTSSM443USN.csv",
+  "cols": [
+   "observation_date",
+   "MRTSSM443USN"
+  ],
+  "n": 416,
+  "start": "1992-01-01",
+  "end": "2026-08-01"
+ },
+ "MRTSSM444USN": {
+  "file": "MRTSSM444USN.csv",
+  "cols": [
+   "observation_date",
+   "MRTSSM444USN"
+  ],
+  "n": 416,
+  "start": "1992-01-01",
+  "end": "2026-08-01"
+ },
+ "MRTSSM445USN": {
+  "file": "MRTSSM445USN.csv",
+  "cols": [
+   "observation_date",
+   "MRTSSM445USN"
+  ],
+  "n": 416,
+  "start": "1992-01-01",
+  "end": "2026-08-01"
+ },
+ "MRTSSM446USN": {
+  "file": "MRTSSM446USN.csv",
+  "cols": [
+   "observation_date",
+   "MRTSSM446USN"
+  ],
+  "n": 416,
+  "start": "1992-01-01",
+  "end": "2026-08-01"
+ },
+ "MRTSSM447USN": {
+  "file": "MRTSSM447USN.csv",
+  "cols": [
+   "observation_date",
+   "MRTSSM447USN"
+  ],
+  "n": 416,
+  "start": "1992-01-01",
+  "end": "2026-08-01"
+ },
+ "MRTSSM448USN": {
+  "file": "MRTSSM448USN.csv",
+  "cols": [
+   "observation_date",
+   "MRTSSM448USN"
+  ],
+  "n": 416,
+  "start": "1992-01-01",
+  "end": "2026-08-01"
+ },
+ "MRTSSM451USN": {
+  "file": "MRTSSM451USN.csv",
+  "cols": [
+   "observation_date",
+   "MRTSSM451USN"
+  ],
+  "n": 416,
+  "start": "1992-01-01",
+  "end": "2026-08-01"
+ },
+ "MRTSSM452USN": {
+  "file": "MRTSSM452USN.csv",
+  "cols": [
+   "observation_date",
+   "MRTSSM452USN"
+  ],
+  "n": 416,
+  "start": "1992-01-01",
+  "end": "2026-08-01"
+ },
+ "MRTSSM453USN": {
+  "file": "MRTSSM453USN.csv",
+  "cols": [
+   "observation_date",
+   "MRTSSM453USN"
+  ],
+  "n": 416,
+  "start": "1992-01-01",
+  "end": "2026-08-01"
+ },
+ "MRTSSM4541USN": {
+  "file": "MRTSSM4541USN.csv",
+  "cols": [
+   "observation_date",
+   "MRTSSM4541USN"
+  ],
+  "n": 416,
+  "start": "1992-01-01",
+  "end": "2026-08-01"
+ },
+ "MRTSSM4541USS": {
+  "file": "MRTSSM4541USS.csv",
+  "cols": [
+   "observation_date",
+   "MRTSSM4541USS"
+  ],
+  "n": 416,
+  "start": "1992-01-01",
+  "end": "2026-08-01"
+ },
+ "MRTSSM454USN": {
+  "file": "MRTSSM454USN.csv",
+  "cols": [
+   "observation_date",
+   "MRTSSM454USN"
+  ],
+  "n": 416,
+  "start": "1992-01-01",
+  "end": "2026-08-01"
+ },
+ "MRTSSM722USN": {
+  "file": "MRTSSM722USN.csv",
+  "cols": [
+   "observation_date",
+   "MRTSSM722USN"
+  ],
+  "n": 416,
+  "start": "1992-01-01",
+  "end": "2026-08-01"
+ },
+ "NFCI": {
+  "file": "NFCI.csv",
+  "cols": [
+   "observation_date",
+   "NFCI"
+  ],
+  "n": 2914,
+  "start": "1971-01-08",
+  "end": "2026-11-06"
+ },
+ "PAYEMS": {
+  "file": "PAYEMS.csv",
+  "cols": [
+   "observation_date",
+   "PAYEMS"
+  ],
+  "n": 1054,
+  "start": "1939-01-01",
+  "end": "2026-10-01"
+ },
+ "PCE": {
+  "file": "PCE.csv",
+  "cols": [
+   "observation_date",
+   "PCE"
+  ],
+  "n": 813,
+  "start": "1959-01-01",
+  "end": "2026-09-01"
+ },
+ "PCEPILFE": {
+  "file": "PCEPILFE.csv",
+  "cols": [
+   "observation_date",
+   "PCEPILFE"
+  ],
+  "n": 813,
+  "start": "1959-01-01",
+  "end": "2026-09-01"
+ },
+ "PERMIT": {
+  "file": "PERMIT.csv",
+  "cols": [
+   "observation_date",
+   "PERMIT"
+  ],
+  "n": 801,
+  "start": "1960-01-01",
+  "end": "2026-09-01"
+ },
+ "PPIACO": {
+  "file": "PPIACO.csv",
+  "cols": [
+   "observation_date",
+   "PPIACO"
+  ],
+  "n": 1366,
+  "start": "1913-01-01",
+  "end": "2026-10-01"
+ },
+ "RRSFS": {
+  "file": "RRSFS.csv",
+  "cols": [
+   "observation_date",
+   "RRSFS"
+  ],
+  "n": 417,
+  "start": "1992-01-01",
+  "end": "2026-09-01"
+ },
+ "RSAFS": {
+  "file": "RSAFS.csv",
+  "cols": [
+   "observation_date",
+   "RSAFS"
+  ],
+  "n": 417,
+  "start": "1992-01-01",
+  "end": "2026-09-01"
+ },
+ "RSCCAS": {
+  "file": "RSCCAS.csv",
+  "cols": [
+   "observation_date",
+   "RSCCAS"
+  ],
+  "n": 417,
+  "start": "1992-01-01",
+  "end": "2026-09-01"
+ },
+ "RSDBS": {
+  "file": "RSDBS.csv",
+  "cols": [
+   "observation_date",
+   "RSDBS"
+  ],
+  "n": 417,
+  "start": "1992-01-01",
+  "end": "2026-09-01"
+ },
+ "RSEAS": {
+  "file": "RSEAS.csv",
+  "cols": [
+   "observation_date",
+   "RSEAS"
+  ],
+  "n": 417,
+  "start": "1992-01-01",
+  "end": "2026-09-01"
+ },
+ "RSFHFS": {
+  "file": "RSFHFS.csv",
+  "cols": [
+   "observation_date",
+   "RSFHFS"
+  ],
+  "n": 417,
+  "start": "1992-01-01",
+  "end": "2026-09-01"
+ },
+ "RSFSDP": {
+  "file": "RSFSDP.csv",
+  "cols": [
+   "observation_date",
+   "RSFSDP"
+  ],
+  "n": 417,
+  "start": "1992-01-01",
+  "end": "2026-09-01"
+ },
+ "RSFSXMV": {
+  "file": "RSFSXMV.csv",
+  "cols": [
+   "observation_date",
+   "RSFSXMV"
+  ],
+  "n": 417,
+  "start": "1992-01-01",
+  "end": "2026-09-01"
+ },
+ "RSGASS": {
+  "file": "RSGASS.csv",
+  "cols": [
+   "observation_date",
+   "RSGASS"
+  ],
+  "n": 417,
+  "start": "1992-01-01",
+  "end": "2026-09-01"
+ },
+ "RSGMS": {
+  "file": "RSGMS.csv",
+  "cols": [
+   "observation_date",
+   "RSGMS"
+  ],
+  "n": 417,
+  "start": "1992-01-01",
+  "end": "2026-09-01"
+ },
+ "RSHPCS": {
+  "file": "RSHPCS.csv",
+  "cols": [
+   "observation_date",
+   "RSHPCS"
+  ],
+  "n": 417,
+  "start": "1992-01-01",
+  "end": "2026-09-01"
+ },
+ "RSMVPD": {
+  "file": "RSMVPD.csv",
+  "cols": [
+   "observation_date",
+   "RSMVPD"
+  ],
+  "n": 417,
+  "start": "1992-01-01",
+  "end": "2026-09-01"
+ },
+ "RSNSR": {
+  "file": "RSNSR.csv",
+  "cols": [
+   "observation_date",
+   "RSNSR"
+  ],
+  "n": 417,
+  "start": "1992-01-01",
+  "end": "2026-09-01"
+ },
+ "RSXFSN": {
+  "file": "RSXFSN.csv",
+  "cols": [
+   "observation_date",
+   "RSXFSN"
+  ],
+  "n": 417,
+  "start": "1992-01-01",
+  "end": "2026-09-01"
+ },
+ "T10Y2Y": {
+  "file": "T10Y2Y.csv",
+  "cols": [
+   "observation_date",
+   "T10Y2Y"
+  ],
+  "n": 13164,
+  "start": "1976-06-01",
+  "end": "2026-11-13"
+ },
+ "T10Y3M": {
+  "file": "T10Y3M.csv",
+  "cols": [
+   "observation_date",
+   "T10Y3M"
+  ],
+  "n": 11705,
+  "start": "1982-01-04",
+  "end": "2026-11-13"
+ },
+ "TB3MS": {
+  "file": "TB3MS.csv",
+  "cols": [
+   "observation_date",
+   "TB3MS"
+  ],
+  "n": 1114,
+  "start": "1934-01-01",
+  "end": "2026-10-01"
+ },
+ "TOTALNSA": {
+  "file": "TOTALNSA.csv",
+  "cols": [
+   "observation_date",
+   "TOTALNSA"
+  ],
+  "n": 610,
+  "start": "1976-01-01",
+  "end": "2026-10-01"
+ },
+ "TOTALSA": {
+  "file": "TOTALSA.csv",
+  "cols": [
+   "observation_date",
+   "TOTALSA"
+  ],
+  "n": 610,
+  "start": "1976-01-01",
+  "end": "2026-10-01"
+ },
+ "UMCSENT": {
+  "file": "UMCSENT.csv",
+  "cols": [
+   "observation_date",
+   "UMCSENT"
+  ],
+  "n": 887,
+  "start": "1952-11-01",
+  "end": "2026-09-01"
+ },
+ "UNEMPLOY": {
+  "file": "UNEMPLOY.csv",
+  "cols": [
+   "observation_date",
+   "UNEMPLOY"
+  ],
+  "n": 946,
+  "start": "1948-01-01",
+  "end": "2026-10-01"
+ },
+ "UNRATE": {
+  "file": "UNRATE.csv",
+  "cols": [
+   "observation_date",
+   "UNRATE"
+  ],
+  "n": 946,
+  "start": "1948-01-01",
+  "end": "2026-10-01"
+ },
+ "USREC": {
+  "file": "USREC.csv",
+  "cols": [
+   "observation_date",
+   "USREC"
+  ],
+  "n": 2063,
+  "start": "1854-12-01",
+  "end": "2026-10-01"
+ }
+}

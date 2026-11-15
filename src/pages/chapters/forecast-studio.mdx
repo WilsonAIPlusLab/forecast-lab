@@ -1,0 +1,320 @@
+---
+layout: ../../layouts/Chapter.astro
+slug: forecast-studio
+minutes: 60
+build:
+  - A working forecast dashboard for any of 10 U.S. series, with a rolling-origin scorecard, an error-by-horizon chart and a fan chart whose ranges come from the method's real past errors
+  - A one-paragraph executive summary, generated from the numbers, that you can paste into an email to a manager
+  - An end-to-end R (or Python) script that goes from raw FRED data to benchmarks, ETS, ARIMA, a combination, tsCV and a summary in about 40 lines
+  - A tracking-signal monitor that tells you when a deployed forecast has gone stale
+skills: [pipeline, tsCV, "ets()", "auto.arima()", combination, empirical intervals, "sprintf()", tracking signal, reproducibility, ExponentialSmoothing, SARIMAX]
+---
+import CodeLab from '../../components/CodeLab.svelte';
+import Callout from '../../components/Callout.astro';
+import KeyIdea from '../../components/KeyIdea.astro';
+import Predict from '../../components/Predict.svelte';
+import Term from '../../components/Term.astro';
+import InstructorKit from '../../components/InstructorKit.astro';
+import Studio from '../../components/ch14/Studio.svelte';
+import Pipeline from '../../components/ch14/Pipeline.svelte';
+import Monitor from '../../components/ch14/Monitor.svelte';
+import studioR from '../../labs/ch14/studio.R?raw';
+import studioPy from '../../labs/ch14/studio.py?raw';
+import monR from '../../labs/ch14/monitor.R?raw';
+import exR from '../../labs/ch14/exercise.R?raw';
+import exSolR from '../../labs/ch14/exercise_solution.R?raw';
+import exCheckR from '../../labs/ch14/exercise_check.R?raw';
+import exPy from '../../labs/ch14/exercise.py?raw';
+import exSolPy from '../../labs/ch14/exercise_solution.py?raw';
+import exCheckPy from '../../labs/ch14/exercise_check.py?raw';
+
+<p class="lede">Your manager stops by your desk on a Friday: “What will retail sales look like next September, and how sure are you? I need something for Monday's planning meeting.” She does not want a residual plot or an AICc table. She wants one number, a range she can plan around, a sentence on why she should trust it, and a warning if something could go badly wrong. This chapter is about producing exactly that, quickly and honestly.</p>
+
+You already have every tool you need. In the earlier chapters you built benchmarks, smoothing models, ARIMA, regressions, tree ensembles, intervals and a scorecard. What separates a class exercise from a forecast an employer will actually use is the **workflow** around those tools: a fixed sequence of steps, honest evaluation, and communication aimed at the person making the decision. In this capstone lab you will run that workflow end to end, first in a dashboard, then in code.
+
+<KeyIdea>A professional forecast is a number, a range, a track record and a risk, delivered to someone who has to make a decision. The model is only one ingredient.</KeyIdea>
+
+## The pipeline, in nine steps
+
+Every serious forecasting team follows some version of the sequence below. The order matters: you cannot choose a metric before you know the decision, and you cannot trust a model before you have seen the benchmark it has to beat. Click through the steps. Each one links back to the chapter where you learned it, and you can tick the steps off as you complete your own forecast (the ticks are saved only in this browser).
+
+<div class="breakout">
+<Pipeline client:load />
+</div>
+
+Two steps deserve a second look because students skip them most often:
+
+- **Step 1, the decision and the loss.** A forecast of grocery sales for a store manager ordering milk and a forecast for an investor valuing the chain are different products, even on the same data. The first cares about next week and hates stock-outs; the second cares about next year and hates bias. Write the decision down before you open R.
+- **Step 2, the data.** In this course alone you have met seasonally adjusted and unadjusted versions of the same series, $ millions next to $ billions, weekly data that had to be averaged to months, and a pandemic that broke every pattern in 2020. A quick plot and a one-line data note (source, units, SA or NSA) prevents most embarrassing mistakes.
+
+## The Forecast Studio
+
+Below is a complete forecasting dashboard. It runs entirely in your browser in a fraction of a second, without R. It follows steps 3 to 9 of the pipeline:
+
+- **Benchmark and candidate models.** Three benchmarks (naive, seasonal naive, drift) and four exponential smoothing models from [Chapter 5](/chapters/exponential-smoothing/), plus an equal-weight combination.<sup>[2](#refs)</sup>
+- **Rolling-origin evaluation.** Every method is re-fitted at each of the last 48 months before the cut-off and asked to forecast 1 to *h* months ahead ([Chapter 3](/chapters/benchmarks/)).<sup>[1](#refs)</sup> The scorecard averages the errors over horizons; the lower chart shows them horizon by horizon.
+- **Intervals.** The fan chart's ranges are built from the charted method's own past errors (more on this below).
+- **Communication.** An executive summary writes itself from the numbers, with buttons to copy it, download the chart as a slide-ready PNG, or copy a link to the exact view.
+
+<Predict client:load
+  question="Before you touch anything: the Studio opens on **U.S. retail sales** (not seasonally adjusted, strong December peak), data through September 2026, forecasting 12 months ahead. Which method do you expect to top the scorecard?"
+  options={['Naive (last value carried forward)', 'Seasonal naive (same month last year)', 'Holt damped (trend, no seasonality)', 'Holt-Winters multiplicative (trend + seasonality that scales with the level)']}
+  answer={3}
+  explain="Holt-Winters multiplicative wins, with a mean absolute error (MAE) of about $10.7 billion averaged over horizons 1 to 12, against $16.5 billion for seasonal naive. Methods that ignore seasonality (naive, drift, SES, Holt) are worse than seasonal naive by a wide margin: their MAE is about $30 to $39 billion, because they miss every December. Seasonality is the first thing any model of this series must capture."
+/>
+
+<div class="breakout">
+<Studio client:load />
+</div>
+
+### Reading the dashboard
+
+With the default settings the Studio tells you that **Holt-Winters multiplicative** is the best of the eight methods: its typical miss is \$8.8 billion one month ahead and \$12.8 billion twelve months ahead, 35% smaller than the seasonal naive rule's. It expects retail sales of about **\$652.7 billion in September 2027**, with an 80% range of \$626.1 to \$658.2 billion.
+
+Notice two things about that range. It is **lopsided**: it reaches \$26.5 billion below the forecast but only \$5.6 billion above. And the summary flags the reason as its key risk: over the past four years this method has tended to *over*-forecast, by about \$4.9 billion on average. A range built from the method's real errors carries that bias along, which is exactly what you want a decision-maker to see.
+
+<Callout type="math" title="How the Studio builds its ranges">
+Let $e_{o,h} = y_{o+h} - \hat y_{o+h \mid o}$ be the error the method made when it forecast $h$ months ahead from origin $o$, for each of the last 48 origins (fewer at long horizons, because the actual value must already be known). The 80% range for the real forecast $h$ months ahead is
+
+$$
+\Big[\;\hat y_{T+h\mid T} + q_{0.10}(e_{\cdot,h}),\;\; \hat y_{T+h\mid T} + q_{0.90}(e_{\cdot,h})\;\Big],
+$$
+
+where $q_p$ is the $p$-th sample quantile (R's default, type 7), and the 50% range uses $q_{0.25}$ and $q_{0.75}$. Nothing here assumes normal errors or a correct model, which is the appeal. The price: it assumes the next year's errors look like the last four years' errors, and with 25 to 48 errors per horizon the band edges are rough. That is why the Studio shows no 95% range: it would rest on the one or two most extreme misses. [Chapter 10](/chapters/uncertainty/) develops the same idea further as *conformal* prediction.
+
+Each smoothing model's parameters are re-estimated at every origin by minimizing one-step squared errors with the Nelder–Mead method, so no origin ever sees data from its own future. The parameter limits match R's `ets()` ($\beta \le \alpha$, $\gamma \le 1 - \alpha$, damping between 0.8 and 0.98), but `ets()` maximizes a likelihood rather than minimizing squared errors, so its estimates can differ a little. The MASE column divides each method's MAE by the in-sample seasonal naive MAE, as R's `accuracy()` does.
+</Callout>
+
+<Predict client:load kind="check"
+  question="With all eight methods ticked, the **Combination** row for retail sales has an MAE of about $18.1 billion, worse than either Holt-Winters model alone (about $10.7 and $12.6 billion). Untick **SES** and **Holt damped**. What happens, and why?"
+  options={[
+    'Nothing; the combination always averages all eight methods',
+    'The combination improves to about $11.1 billion, because it now averages only the two models that handle seasonality',
+    'The combination gets worse, because averaging fewer models always loses information',
+    'The combination becomes the best method, because combinations always win'
+  ]}
+  answer={1}
+  explain="The combination averages the smoothing models you have ticked. SES and Holt have no seasonal component, so they drag the average toward a forecast that misses every December. Without them, the combination's MAE falls to about $11.1 billion. It still does not beat Holt-Winters multiplicative here ($10.7 billion). Combinations usually help when the ingredients are all reasonable and make <em>different</em> mistakes; they are not magic."
+/>
+
+### What surprised you: forecasts made just before a shock
+
+The dashboard becomes a time machine when you drag **Data through** backward. The gold line then shows what actually happened after the cut-off, and the note below the chart counts how many months landed inside the 80% range. Try two dates on retail sales:
+
+- **September 2019** ([open this view](/chapters/forecast-studio/?s=RSXFSN&end=2019-09&h=12&f=best)). Holt-Winters additive wins the scorecard with a typical one-month miss of only \$6.5 billion, and its ranges are narrow. Then March and April 2020 arrive: only **4 of the 12** actual months land inside the 80% range. Nothing in four calm years of errors could have warned you about a pandemic.
+- **June 2021** ([open this view](/chapters/forecast-studio/?s=RSXFSN&end=2021-06&h=12&f=best)). Now the track record *includes* 2020, and the summary's key risk says so. The best model has latched onto the stimulus-fueled boom of early 2021 and extrapolates it: it expects \$670.7 billion in June 2022. The actual figure was \$600.7 billion, and **0 of 12** months landed inside the range.
+
+Neither failure is a bug. They are the honest limits of forecasting from the past, and they are why steps 7 (coverage) and the monitoring section below exist. Your executive summary should always say what the forecast assumes, so that when the world changes, your reader knows the forecast has expired.
+
+<Callout type="tip" title="For instructors: deep links">
+Every control is stored in the page address. Set up a view (series, cut-off, horizon, methods, charted method), press **Copy link to this view**, and paste it into a slide or the LMS. Students who open it see exactly the same configuration. The parameters are `s` (FRED ID), `end` (YYYY-MM), `h` (6, 12, 18 or 24), `m` (comma-separated methods: `naive,snaive,drift,ses,holt,hwa,hwm,combo`) and `f` (`best` or a method).
+</Callout>
+
+## Reproduce it in code
+
+A dashboard is for exploring; a script is what you ship. The lab below rebuilds the Studio's default view in about 40 lines of R, with two upgrades the Studio cannot do instantly in a browser: R's automatic `ets()` model selection and `auto.arima()`. Both choose their model form using only the data **before the first forecast origin**, and every model is **re-estimated from scratch at every origin** on the data available at that date. Re-fitting ARIMA 48 times would take too long in your browser, so the lab uses 12 origins, one every four months over the same four years. It then builds the same kind of empirical fan chart and writes the executive summary with `sprintf()`.
+
+<div class="breakout">
+<CodeLab client:load id="ch14-studio" title="From raw data to executive summary in one script" r={studioR} py={studioPy}
+  packages={['forecast']} pyPackages={['statsmodels']}
+  goal="Rebuild the Studio's retail-sales forecast end to end: benchmarks, ETS, ARIMA, a combination, rolling-origin evaluation, a fan chart and a generated summary." />
+</div>
+
+When you run it, compare with the dashboard:
+
+- **The benchmark agrees.** Seasonal naive scores an MAE of \$16.41 billion on the lab's 12 origins and \$16.47 billion on the Studio's 48. Same data, same rule, nearly the same number: a useful check that the two pipelines are set up alike.
+- **Using only data through September 2022 (the first origin), `ets()` picks ETS(M,Ad,M) and `auto.arima()` picks ARIMA(0,1,2)(0,1,1)[12].** Re-fitted at each origin, ETS wins with an MAE of \$12.23 billion (MASE 0.56). ARIMA scores \$14.16 billion, and their combination \$12.55 billion: here the average does *not* beat the better ingredient, because ARIMA has tended to over-forecast (bias −\$6.9 billion) while ETS is almost unbiased. Notice also how the edge over seasonal naive shrinks with the horizon: ETS misses by \$9.6 billion one month ahead but \$15.7 billion twelve months ahead, against about \$17 billion for seasonal naive.
+- **The headline is similar.** R expects \$641.8 billion in September 2027, with an 80% range of \$624.7 to \$663.9 billion; the Studio said \$652.7 billion (\$626.1 to \$658.2 billion). Two honest pipelines, same story: roughly \$640 to \$655 billion, give or take \$15 to \$25 billion. The Python version re-fits statsmodels' damped Holt-Winters and `SARIMAX` at the same 12 origins: its ARIMA MAE matches R's to two decimals (\$14.16 billion), and its Holt-Winters model, close to but not identical to ETS(M,Ad,M), forecasts \$638.2 billion.
+
+<Callout type="pitfall" title="Why the lab re-fits at every origin">
+A shortcut you will see online re-uses the parameters estimated on the full sample and only re-runs the model at each past origin. It is much faster, but those parameters were estimated with data from *after* the origin: look-ahead leakage, the sin from [Chapter 3](/chapters/benchmarks/). The same goes for choosing the model form on the full sample and then scoring it on part of that sample. That is why this lab selects forms on data before the first origin and re-estimates everything at each origin. When time is short, use fewer origins, not leaky ones.
+</Callout>
+
+<span id="communicate"></span>
+
+## Writing for decision-makers
+
+The executive summary is the only part of your work most readers will see. The Studio's generator follows five rules that you should follow whenever you write one by hand:
+
+1. **Bottom line up front.** The first sentence is the forecast: a number, a date and units. Not the method, not the data, not a caveat.
+2. **A range, not just a point.** “About \$653 billion, 80% range \$626 to \$658 billion” lets a planner size inventory or a budget buffer. A point forecast alone invites false precision.
+3. **A track record in plain words.** “Its typical miss was \$8.8 billion one month ahead” beats “MASE = 0.49”. Translate every metric into the reader's units, and compare with a rule they understand (“35% smaller than using the same month last year”).
+4. **One key risk.** Name the single thing most likely to make the forecast wrong, and in which direction: a bias, a shock in the evaluation window, a near-tie between methods.
+5. **What would change our view.** A concrete trigger (“two months in a row outside the 80% range”) tells the reader when to come back to you. It also commits you to monitoring.
+
+Plus one chart (the fan chart, titled with the takeaway) and nothing else unless asked. Keep the diagnostics in an appendix.
+
+<div class="sum-compare" aria-label="A weak and a strong executive summary side by side">
+  <div class="sc-bad">
+    <div class="sc-h">Before</div>
+    <p>We estimated eight models including ETS and Holt-Winters variants using rolling-origin cross-validation. The HW multiplicative model achieved the lowest MASE (0.489) and an RMSE of 13.59. Forecasts for the next 12 months are shown in Figure 3. Results should be interpreted with caution.</p>
+  </div>
+  <div class="sc-good">
+    <div class="sc-h">After</div>
+    <p>We expect U.S. retail sales to be about $652.7 billion in September 2027, 2.8% above September 2026. Our 80% range is $626.1 to $658.2 billion. Over the past four years this method's typical miss was $8.8 billion one month ahead and $12.8 billion a year ahead, 35% smaller than using the same month last year. Key risk: it has tended to over-forecast by about $4.9 billion, so the outcome may land below our central number. We will revisit the forecast if actual sales fall outside the range two months in a row.</p>
+  </div>
+</div>
+
+<Callout type="business" title="Uncertainty does not cost you credibility">
+Students often fear that giving a range makes them look unsure. The evidence points the other way. In large experiments, including one run with BBC News, stating the uncertainty around numbers as a range reduced readers' trust in those numbers only slightly.<sup>[5](#refs)</sup> What does destroy credibility is a confident forecast that misses. Overconfidence is common even among professionals: in a decade of surveys, U.S. chief financial officers' 80% intervals for next year's stock-market return contained the actual return only 36% of the time.<sup>[6](#refs)</sup> Ranges built from your own past errors, as in the Studio, are a direct defense against that trap.
+</Callout>
+
+<Callout type="pitfall" title="Judgmental adjustments: when to override the model">
+Someone will want to “adjust” your forecast: sales thinks it is too low, finance thinks it is too high. A study of more than 60,000 forecasts at four supply-chain companies found that **large** adjustments, usually based on real information the model lacked (a promotion, a lost customer), tended to improve accuracy, while **small** tweaks often made it worse. **Upward** adjustments were much less likely to help than downward ones, a sign of optimism bias.<sup>[3](#refs)</sup> The practical rule: adjust only for specific information the model cannot see, write the reason down, and track whether the adjustments add value, the forecast value added idea from [Chapter 3](/chapters/benchmarks/).
+</Callout>
+
+<Predict client:load kind="check"
+  question="Your summary's key risk says the track record includes the 2020 COVID shock, so the 80% range is wide. Your manager asks: *“Can't you just make the range narrower?”* What is the most honest response?"
+  options={[
+    'Switch to the method with the narrowest range, whatever its accuracy',
+    'Drop the range and give only the point forecast',
+    'Offer two scenarios: the range including 2020-style shocks, and a narrower one if she judges such a shock unlikely, and let her choose with the assumption stated',
+    'Shrink the range by half; managers prefer confident numbers'
+  ]}
+  answer={2}
+  explain="Uncertainty is a business fact, not a formatting choice. You can legitimately show what the range looks like under a different assumption (move <strong>Data through</strong> so the evaluation window excludes 2020 and compare), but the assumption must be explicit, and the decision about which world to plan for belongs to the decision-maker. Scenarios are how forecasters say “it depends” usefully."
+/>
+
+## After you ship: monitoring
+
+A forecast is not finished when you send it. Every month a new actual value arrives, and you need to know whether the model is still working. The standard tool is the <Term def="The running sum of forecast errors divided by the mean absolute error (MAD). It stays near zero when errors are random and drifts away when they pile up on one side, signaling bias.">tracking signal</Term>, in use for exactly this purpose since at least the 1960s.<sup>[7](#refs)</sup> Enterprise planning software uses it too: SAP's materials-planning module, for example, flags a forecast for review when the absolute tracking signal exceeds a default limit of 4.<sup>[8](#refs)</sup>
+
+<div class="breakout">
+<Monitor client:load />
+</div>
+
+Three lessons from the monitor:
+
+- **Bias shows up fast.** On e-commerce sales, the model deployed in January 2019 under-forecast every month from January to May, so the alarm fired in **May 2019**, long before COVID. Online sales were simply growing faster than the 2010–2018 trend the model had learned.
+- **Re-fitting on alarm helps, modestly.** For e-commerce, re-estimating the parameters whenever the alarm fires cuts the average one-month miss from \$1.62 billion to \$1.41 billion, about 13%. For restaurant and bar sales it cuts \$3.00 billion to \$2.79 billion, about 7%.
+- **The limit is a trade-off.** Drag the limit down to 2 and alarms fire constantly, most of them false. Push it to 8 and you learn about real breaks late. Pick the limit the way you pick a metric: by the cost of each kind of mistake.
+
+The lab below computes the same tracking signal in R. Here keeping the parameters frozen (`model = fit`) is the point, not a shortcut: the model was estimated on data through 2018 only, exactly as a deployed model would be, and we watch how it behaves on data it has never seen. The lab ends with a habit worth copying into every forecast you ship: a **reproducibility stamp**.
+
+<div class="breakout">
+<CodeLab client:load id="ch14-monitor" title="Watch a deployed forecast with a tracking signal" r={monR} packages={['forecast']}
+  goal="Deploy an ETS model in January 2019, compute its tracking signal month by month, find the first alarm, and stamp the result with the software versions and data vintage." />
+</div>
+
+<Callout type="tip" title="Retraining triggers that teams actually use">
+<ul>
+<li><strong>Bias trigger:</strong> |tracking signal| above 4 (investigate, then re-fit if there is no one-off explanation).</li>
+<li><strong>Coverage trigger:</strong> actuals outside the 80% range two months in a row, or far more often than 1 month in 5 over a year.</li>
+<li><strong>Calendar trigger:</strong> re-fit on a schedule (monthly or quarterly) even when nothing looks wrong, and re-run the whole scorecard once a year.</li>
+<li><strong>Data trigger:</strong> a benchmark revision, a definition change or a new seasonal-adjustment vintage from the statistical agency.</li>
+</ul>
+</Callout>
+
+## Reproducible and honest
+
+Two habits separate forecasts people trust from forecasts that quietly cause damage.
+
+**Reproducibility.** Anyone, including you in six months, should be able to rerun your forecast and get the same numbers. In practice that means: one script from raw data to final chart (no copy-pasting into spreadsheets); the series ID and the date you pulled the data written into the output, because economic data get revised; package versions recorded (the stamp in the lab above); and `set.seed()` before anything random, such as a random forest or simulated paths ([Chapter 11](/chapters/random-forests/)). Save the data file you used next to the script.
+
+**Honesty about uncertainty.** A forecast influences real decisions about inventory, hiring and budgets. Three rules keep you on the right side:
+
+- Never report accuracy on data you used to choose the model. Report rolling-origin results, and report the benchmark next to your model, even when the benchmark wins (it does on the unemployment rate: try it in the Studio).
+- Never trim the range to make a forecast look sharper. If the range is too wide to be useful, say so; that is information too.
+- Keep score of your own forecasts. Philip Tetlock's forecasting tournaments found that the most accurate forecasters were not the most confident ones but those who stated probabilities, tracked their record and updated often.<sup>[4](#refs)</sup>
+
+<Callout type="pitfall" title="The tempting shortcuts">
+Choosing the cut-off date that makes your model look best. Dropping 2020 without saying so. Quoting MAPE for a series near zero. Presenting a model's in-sample fit as its accuracy. Each makes the forecast look better today and costs you credibility the first time reality disagrees.
+</Callout>
+
+## Your turn
+
+Ship an executive summary for a series you have not used yet: **U.S. grocery store sales** (food and beverage stores, FRED `MRTSSM445USN`, **not seasonally adjusted**, converted to \$ billions). Fill the three blanks (`______`) and press **Run & check**. The check recomputes the forecast, the 80% range and the typical miss independently and confirms that your numbers, and your summary text, match.
+
+<div class="breakout">
+<CodeLab client:load id="ch14-ex1" exercise title="Exercise: write the executive summary for grocery sales" r={exR} solution={exSolR} check={exCheckR} py={exPy} solutionPy={exSolPy} checkPy={exCheckPy}
+  packages={['forecast']} pyPackages={['statsmodels']}
+  goal="Forecast grocery store sales 12 months ahead, build an 80% range from the errors the re-fitted model made at 12 past origins, and generate a summary sentence with the forecast, the range and the typical one-month-ahead miss."
+  hints={['In R the exponential smoothing function is `ets()`. In Python the class is `ExponentialSmoothing`.', 'The errors matrix has one column per horizon. The 80% range for the 12-month forecast uses column 12 in R (`h`) and column 11 in Python (`h - 1`), because Python counts from 0.', 'The last number in the summary is the typical one-month-ahead miss, stored in `mae1`.']} />
+</div>
+
+When it passes, go one step further: paste your summary into the Studio's style by adding a **key risk** and a **trigger**, then compare with the Studio's own summary for a series of your choice.
+
+## Chapter checklist
+
+- Follow the pipeline: decision and loss, data, benchmark, candidate models, rolling-origin evaluation by horizon, combination, intervals and coverage, explanation, communication.
+- Judge every model on rolling origins against a benchmark, and report error **by horizon** in the reader's units.
+- Build ranges you can defend, for example from your method's own past errors, and check how often past ranges caught the truth.
+- Write the summary **bottom line first**: one number, one range, one track record, one risk, one trigger. One chart.
+- After shipping, **monitor** with a tracking signal and clear retraining triggers.
+- Make it **reproducible**: one script, recorded data vintage and package versions, seeds for anything random.
+
+<InstructorKit
+  minutes={75}
+  data={['RSXFSN', 'MRTSSM4541USS', 'HOUSTNSA', 'PAYEMS', 'UNRATE', 'CPIAUCSL', 'MRTSSM445USN']}
+  objectives={[
+    'List the nine steps of a professional forecasting pipeline in order, and name the chapter tool for each.',
+    'Use rolling-origin evaluation to choose a method, and read a scorecard and an error-by-horizon chart.',
+    'Build prediction ranges from a method’s own past errors and explain what they assume.',
+    'Write a decision-ready executive summary: bottom line first, a range, a track record in plain words, one risk, one trigger.',
+    'Monitor a deployed forecast with a tracking signal and state sensible retraining triggers.',
+    'Make a forecast reproducible (one script, data vintage, package versions, seeds).'
+  ]}
+  discussion={[
+    'The Studio’s range for retail sales is lopsided: far more room below the forecast than above. Is that a feature or a bug? What would a normal-distribution interval hide?',
+    'On the unemployment rate, naive beats every smoothing model. Would you still ship a smoothing model to look sophisticated? What would you tell a manager who asks “why are we paying you to copy last month’s number?”',
+    'A sales director wants to raise your forecast by 3% “to be ambitious”. Using the evidence on judgmental adjustments, how do you respond?'
+  ]}
+  misconceptions={[
+    '“The best model is the one with the best in-sample fit.” Only rolling-origin, out-of-sample errors count.',
+    '“A combination always wins.” It wins when the ingredients are good and different; averaging in a model that ignores seasonality makes it worse.',
+    '“Admitting uncertainty makes me look less competent.” Experiments find only a small loss of trust; confident misses cost far more.',
+    '“Once deployed, a model can be left alone.” Without monitoring, bias can run for months (e-commerce alarmed within five months of deployment).'
+  ]}
+>
+
+**Forecast pitch (40 minutes).** Teams of three. Assign each team one series in the Studio (data through the latest month, horizon 12, all methods ticked). Instructors can send each team a deep link, for example `/chapters/forecast-studio/?s=HOUSTNSA&h=12`.
+
+1. **Investigate (15 min).** Read the scorecard and the error-by-horizon chart. Move **Data through** back to September 2019 and June 2021 to see how the chosen method performed through the pandemic. Decide whether to chart the best method or another one, and why.
+2. **Prepare (10 min).** Edit the generated summary into your own words. Keep the five elements: number, range, track record, risk, trigger. Export the fan chart PNG.
+3. **Brief (2 minutes per team).** One slide (the PNG), one paragraph spoken aloud. The rest of the class plays the management team and asks one question each.
+
+*Expected results (bundled data through August, September or October 2026, depending on the series; horizon 12, all eight methods; the October 2025 gap in UNRATE and CPI is filled by linear interpolation in the data loader):*
+
+| Series | Best method | Forecast (12 months ahead) | 80% range | Key risk flagged |
+|---|---|---|---|---|
+| Retail sales, `RSXFSN` (NSA) | Holt-Winters multiplicative, MASE 0.49 | \$652.7 bn, Sep 2027 | \$626.1 to \$658.2 bn | Tends to over-forecast (≈ \$4.9 bn) |
+| E-commerce, `MRTSSM4541USS` (SA) | Drift | \$122.5 bn, Aug 2027 | \$119.8 to \$126.1 bn | No model beat a simple benchmark |
+| Housing starts, `HOUSTNSA` (NSA) | Holt-Winters additive | 112.1 thousand, Sep 2027 | 97.2 to 119.0 thousand | Wide range (about ±10%) |
+| Payroll jobs, `PAYEMS` (SA) | Combination | 160.08 million, Oct 2027 | 159.61 to 161.58 million | Tends to under-forecast (≈ 221 thousand) |
+| Unemployment rate, `UNRATE` (SA) | Naive | 4.1%, Oct 2027 | 4.0% to 4.6% | No model beat a simple benchmark |
+| CPI, `CPIAUCSL` (SA) | Combination | 346.1, Oct 2027 | 345.2 to 351.1 | Tends to under-forecast (≈ 1.0 points) |
+
+Good discussion points: the unemployment and e-commerce teams must defend a *benchmark* as their recommendation (a valuable lesson in itself); the housing team has the widest relative range and should talk scenarios; the payrolls and CPI teams should notice that their ranges sit mostly above the forecast because of past under-forecasting. When data are updated, numbers will shift; re-run the Studio before class.
+
+</InstructorKit>
+
+<div class="refs" id="refs">
+
+**References**
+
+1. Hyndman, R. J., & Athanasopoulos, G. (2021). *Forecasting: Principles and Practice* (3rd ed.), ch. 5 “The forecaster’s toolbox” and ch. 13 “Some practical forecasting issues” (13.4 Forecast combinations). [otexts.com/fpp3](https://otexts.com/fpp3/)
+2. Bates, J. M., & Granger, C. W. J. (1969). The combination of forecasts. *Operational Research Quarterly*, 20(4), 451–468. See also Clemen, R. T. (1989). Combining forecasts: A review and annotated bibliography. *International Journal of Forecasting*, 5(4), 559–583.
+3. Fildes, R., Goodwin, P., Lawrence, M., & Nikolopoulos, K. (2009). Effective forecasting and judgmental adjustments: an empirical evaluation and strategies for improvement in supply-chain planning. *International Journal of Forecasting*, 25(1), 3–23.
+4. Tetlock, P. E., & Gardner, D. (2015). *Superforecasting: The Art and Science of Prediction*. New York: Crown.
+5. van der Bles, A. M., van der Linden, S., Freeman, A. L. J., & Spiegelhalter, D. J. (2020). The effects of communicating uncertainty on public trust in facts and numbers. *PNAS*, 117(14), 7672–7683. See also van der Bles et al. (2019). Communicating uncertainty about facts, numbers and science. *Royal Society Open Science*, 6, 181870.
+6. Ben-David, I., Graham, J. R., & Harvey, C. R. (2013). Managerial miscalibration. *Quarterly Journal of Economics*, 128(4), 1547–1584.
+7. Trigg, D. W. (1964). Monitoring a forecasting system. *Operational Research Quarterly*, 15(3), 271–274. (Trigg proposes a smoothed version of the signal; the Studio and the lab use the cumulative version.)
+8. SAP documentation, “Monitoring the selected forecast model” (tracking signal, default limit 4.00). [help.sap.com](https://help.sap.com/saphelp_46C/helpdata/EN/7d/c27422454011d182b40000e829fbfe/content.htm)
+
+</div>
+
+<style>{`
+  .sum-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.6rem 0 2rem; }
+  @media (max-width: 760px) { .sum-compare { grid-template-columns: 1fr; } }
+  .sum-compare > div { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: .9rem 1.1rem; background: var(--surface); }
+  .sum-compare p { margin: .4rem 0 0; font-size: .92rem; line-height: 1.6; }
+  .sc-h { font-size: .8rem; font-weight: 700; }
+  .sc-bad { border-left: 3px solid var(--danger) !important; }
+  .sc-bad .sc-h { color: var(--danger); }
+  .sc-bad p { color: var(--text-2); }
+  .sc-good { border-left: 3px solid var(--good) !important; }
+  .sc-good .sc-h { color: var(--good); }
+  .refs { font-size: .86rem; color: var(--text-2); margin-top: 3rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+  .ch-body table { margin: 1.4rem 0 2rem; font-size: .88rem; }
+  .ch-body td { vertical-align: top; }
+`}</style>

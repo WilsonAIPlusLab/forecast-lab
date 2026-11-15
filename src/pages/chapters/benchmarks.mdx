@@ -1,0 +1,240 @@
+---
+layout: ../../layouts/Chapter.astro
+slug: benchmarks
+minutes: 40
+build:
+  - A benchmark scorecard (MAE, RMSE, MAPE, MASE) that every later model must beat
+  - An error-by-horizon curve from time-series cross-validation, the way professionals report accuracy
+  - A Diebold–Mariano test of whether one forecast is genuinely better than another
+skills: [train/test split, meanf, naive, snaive, rwf, accuracy, MASE, tsCV, dm.test]
+---
+import CodeLab from '../../components/CodeLab.svelte';
+import Callout from '../../components/Callout.astro';
+import KeyIdea from '../../components/KeyIdea.astro';
+import Predict from '../../components/Predict.svelte';
+import Term from '../../components/Term.astro';
+import BenchmarkExplorer from '../../components/ch03/BenchmarkExplorer.svelte';
+import RollingOrigin from '../../components/ch03/RollingOrigin.svelte';
+import ErrorPlayground from '../../components/ch03/ErrorPlayground.svelte';
+import benchR from '../../labs/ch03/benchmarks.R?raw';
+import benchPy from '../../labs/ch03/benchmarks.py?raw';
+import cvR from '../../labs/ch03/tscv.R?raw';
+import cvPy from '../../labs/ch03/tscv.py?raw';
+import exR from '../../labs/ch03/exercise.R?raw';
+import exSolR from '../../labs/ch03/exercise_solution.R?raw';
+import exCheckR from '../../labs/ch03/exercise_check.R?raw';
+import InstructorKit from '../../components/InstructorKit.astro';
+
+<p class="lede">A vendor shows you a slick AI forecasting tool. Its chart looks impressive. Before you sign anything, ask one question: <strong>is it more accurate than simply assuming this month will look like the same month last year?</strong> You will be surprised how often the answer is no.</p>
+
+In 2018 the M4 forecasting competition pitted 61 forecasting methods against each other on 100,000 real time series.<sup>[1](#refs)</sup> The six "pure" machine-learning entries did poorly: **none** was more accurate than a simple average of three exponential-smoothing methods, and only one beat a seasonally adjusted naive forecast.<sup>[2](#refs)</sup> Sophistication is not the same as accuracy. This chapter gives you the tools to tell them apart.
+
+<KeyIdea>Never judge a forecast on its own. Judge it against a simple benchmark, on data the model has never seen.</KeyIdea>
+
+## Four benchmarks
+
+A <Term def="A deliberately simple forecasting rule used as a yardstick. A model that cannot beat it adds no value.">benchmark</Term> is a forecasting rule so simple it needs no statistics. Four of them cover almost every situation:
+
+| Method | Rule | R function | Good when… |
+|---|---|---|---|
+| **Mean** | Forecast = average of all past values | `meanf()` | The series fluctuates around a stable level |
+| **Naive** | Forecast = last observed value | `naive()` | The series wanders like a stock price |
+| **Seasonal naive** | Forecast = value from the same season last year | `snaive()` | There is a strong seasonal pattern |
+| **Drift** | Draw a line from the first to the last observation and extend it | `rwf(drift = TRUE)` | There is a steady trend |
+
+Play with them on real U.S. data. Pick a series, then drag the **forecast origin**: you are choosing the date you stand on when making the forecast. Everything to the right is hidden from the methods and used only to score them.
+
+<div class="breakout">
+<BenchmarkExplorer client:load />
+</div>
+
+<Predict client:load
+  question="For **retail sales**, which benchmark do you expect to win most of the time, wherever you put the origin?"
+  options={['Mean', 'Naive', 'Seasonal naive', 'Drift']}
+  answer={2}
+  explain="Retail sales jump every December and slump every January. Only seasonal naive copies that pattern. Naive and drift draw a flat or straight line through it, so they miss the seasonal peaks and troughs, often by tens of billions of dollars. Now switch to the **unemployment rate**, which has no seasonal pattern (it is seasonally adjusted): there, naive is usually hard to beat."
+/>
+
+<Callout type="intuition" title="Why the naive forecast is so hard to beat">
+Many economic series behave like a <em>random walk</em>: tomorrow's value is today's value plus an unpredictable shock. For a pure random walk, the best possible forecast <strong>is</strong> the last value. That's why exchange rates and stock prices are notoriously hard to forecast. Any model that claims to beat naive on such series should make you suspicious.
+</Callout>
+
+## The golden rule: split by time
+
+To score a forecast fairly we need data the model has never seen. With time series, the test set must come **after** the training set:
+
+<div class="split-demo" aria-hidden="true">
+  <div class="sd-train">Training set: the model learns from this</div>
+  <div class="sd-test">Test set: hidden, used only for scoring</div>
+</div>
+
+<Callout type="pitfall" title="Look-ahead leakage">
+Leakage means letting information from the future sneak into the forecast. It makes a model look brilliant on paper and useless in practice. Three common ways it happens:
+<ul>
+<li>Splitting the data <strong>randomly</strong> (as in standard machine learning), so the model trains on 2024 to "predict" 2023.</li>
+<li>Using a predictor whose value <strong>wasn't known</strong> at forecast time, such as this month's unemployment rate to forecast this month's retail sales.</li>
+<li>Choosing your model by peeking at the test set, then reporting the test score as if it were honest.</li>
+</ul>
+</Callout>
+
+## Keeping score: error metrics
+
+Once we have forecasts $\hat y$ and the actual values $y$ for the test period, each forecast error is $e_t = y_t - \hat y_t$. The question is how to summarize a list of errors in one number. Each metric answers a slightly different question, and choosing between them is a business decision as much as a statistical one.
+
+Drag the purple forecast dots below and watch the four metrics react.
+
+<div class="breakout">
+<ErrorPlayground client:load />
+</div>
+
+| Metric | Formula | In plain English | Watch out |
+|---|---|---|---|
+| **ME** (bias) | $\frac{1}{n}\sum e_t$ | Do we miss high or low on average? | Positive and negative errors cancel |
+| **MAE** | $\frac{1}{n}\sum \lvert e_t\rvert$ | How big is a typical miss, in the data's units? | Can't compare across series with different units |
+| **RMSE** | $\sqrt{\frac{1}{n}\sum e_t^2}$ | Like MAE, but big misses count much more | Sensitive to a few outliers |
+| **MAPE** | $\frac{100}{n}\sum \left\lvert \frac{e_t}{y_t}\right\rvert$ | Miss as a % of the actual value | Explodes when $y_t$ is near zero; not meaningful for rates like unemployment (%) |
+| **MASE** | $\dfrac{\text{MAE}}{\text{in-sample MAE of seasonal naive}}$ | Below 1 = smaller errors than seasonal naive made on the training data | Slightly harder to explain to a manager |
+
+<Callout type="business" title="Which metric should you report?">
+Pick the metric that matches the <em>cost</em> of a mistake. If being 10 units off costs twice as much as being 5 units off, use <strong>MAE</strong>. If one big miss is a disaster (a stock-out on Black Friday, a hospital running out of beds), use <strong>RMSE</strong>. Managers like <strong>MAPE</strong> because "we're 3% off" needs no explanation. Analysts prefer <strong>MASE</strong> because it works across any series and has a built-in benchmark. Always report <strong>bias</strong> too: a forecast that is always 5% too low leads to chronic under-stocking even if its MAE looks fine.
+</Callout>
+
+<Callout type="math" title="Why MASE is scale-free">
+MASE (Hyndman & Koehler, 2006)<sup>[3](#refs)</sup> divides the test-set MAE by the average absolute error that a seasonal naive forecast made *inside the training data*:
+
+$$
+\text{MASE} = \frac{\frac{1}{h}\sum_{t=T+1}^{T+h} |y_t - \hat y_t|}{\frac{1}{T-m}\sum_{t=m+1}^{T} |y_t - y_{t-m}|}
+$$
+
+where $m$ is the seasonal period (12 for monthly data). Both numerator and denominator are in the same units, so the units cancel: a MASE of 0.6 means the same thing for dollars, thousands of houses or percentage points. With non-seasonal data, set $m = 1$ (naive instead of seasonal naive).
+</Callout>
+
+## Build the scorecard
+
+Now in code. This lab trains all four benchmarks on data through 2022, forecasts 2023 onward, and scores them. Press **⏯ Step through** to see what each line produces.
+
+<div class="breakout">
+<CodeLab client:load id="ch03-bench" title="Benchmark scorecard for U.S. retail sales" r={benchR} py={benchPy} packages={['forecast']} goal="Produce the benchmark scorecard: the yardstick for every model in this course." />
+</div>
+
+<Callout type="tip" title="Make it yours">
+Change `"RSXFSN"` to `"MRTSSM4541USS"` (e-commerce sales, **seasonally adjusted**). With the seasonal pattern removed and a steep trend left, **drift** beats seasonal naive by a wide margin. Then try `"UNRATE"`: MAPE is awkward for a series that is already a percentage, but MASE still works.
+</Callout>
+
+## One test period is not enough: time-series cross-validation
+
+The scorecard above rests on a single test period starting in January 2023. Pick a different start date and the ranking might change. You saw this in the explorer when you dragged the origin. A more reliable approach repeats the experiment many times:
+
+1. Train on the first $k$ observations and forecast $h$ steps ahead.
+2. Record the error.
+3. Move the origin forward by one period and repeat until the data run out.
+
+This is **time-series cross-validation**, also called *evaluation on a rolling forecasting origin*. Each row of dots below is one repetition.
+
+<div class="breakout">
+<RollingOrigin client:load />
+</div>
+
+Three lessons jump out of the chart on the right:
+
+- **Error grows with the horizon.** For payroll jobs, the naive forecast misses by about 200,000 jobs one month ahead and by about 2.4 million twelve months ahead. Forecasting next month is far easier than forecasting next year.
+- **The best benchmark depends on the data.** Payrolls trend upward, so **drift** wins at every horizon. Retail sales are dominated by seasonality, so **seasonal naive** wins by a wide margin from 1 to 11 months ahead.
+- **Beware of coincidences.** Switch to retail sales and look at horizon 12: naive suddenly ties seasonal naive, and drift even beats it. Twelve months ahead, the "last observed value" is from the same month a year earlier, so naive briefly *becomes* seasonal naive (and drift becomes seasonal naive plus a year of trend). Cross-validation by horizon exposes this kind of illusion; a single test score would hide it.
+
+<div class="breakout">
+<CodeLab client:load id="ch03-tscv" title="Cross-validated accuracy by horizon" r={cvR} py={cvPy} packages={['forecast']} goal="Compute MAE at horizons 1 to 12 with tsCV(), then test whether the difference between two methods is statistically significant." />
+</div>
+
+<Callout type="math" title="The Diebold–Mariano test in one paragraph">
+Let $d_t = |e_{1,t}| - |e_{2,t}|$ be the loss differential between methods 1 and 2 (any loss works; `dm.test` uses squared errors by default). If the two methods are equally accurate, $E[d_t] = 0$. The DM statistic is $\bar d / \widehat{\text{se}}(\bar d)$, where the standard error is corrected for autocorrelation in $d_t$. Under the null it is approximately standard normal (`dm.test` adds a small-sample correction and compares it with a $t$ distribution).<sup>[4](#refs)</sup> A p-value below 0.05 says the accuracy gap is unlikely to be luck.
+</Callout>
+
+## From benchmark to business value
+
+In companies, the benchmark idea becomes a metric called <Term def="The reduction in forecast error achieved by a step in the forecasting process (a model, an analyst's adjustment), compared with a naive benchmark.">forecast value added (FVA)</Term>. Each step in the forecasting process (the statistical model, the analyst's adjustments, the sales team's "gut feel") is scored against the naive benchmark. Steps that make the forecast worse get removed.<sup>[6](#refs)</sup> The results are often humbling: a study of more than 60,000 forecasts at four supply-chain companies found that large manual adjustments usually helped, but small ones often made forecasts *worse*, and upward adjustments were much less likely to help than downward ones.<sup>[7](#refs)</sup>
+
+<Predict client:load kind="check"
+  question="A model's MASE on the test set is **1.35**. What should you conclude?"
+  options={[
+    'It is 35% more accurate than the seasonal naive benchmark',
+    'Its errors are 35% larger than the in-sample seasonal naive errors, so it is probably not worth using',
+    'MASE above 1 means the model is overfitting',
+    'Nothing; MASE cannot be interpreted without the data units'
+  ]}
+  answer={1}
+  explain="MASE is a ratio to the seasonal naive benchmark's in-sample error. Above 1 means worse than that benchmark. And because MASE is scale-free, you can say this without knowing the units."
+/>
+
+## Your turn
+
+Fill in the two blanks (`______`) and press **Run & check**. Hints unlock one at a time if you need them.
+
+<div class="breakout">
+<CodeLab client:load id="ch03-ex1" exercise title="Exercise: score seasonal naive on e-commerce sales" r={exR} solution={exSolR} check={exCheckR} packages={['forecast']}
+  goal="Forecast U.S. e-commerce sales for 2023 onward with the seasonal naive method, then compute its MAE yourself, without `accuracy()`."
+  hints={['The seasonal naive function in the `forecast` package is `snaive()`.', 'An error is **actual minus forecast**. The actual values for the test period are stored in `test`.']} />
+</div>
+
+## Chapter checklist
+
+- Benchmarks first: **mean, naive, seasonal naive, drift**. A model earns its place only by beating the best of them.
+- Split by time, never randomly. Guard against **leakage**.
+- Report **MAE or RMSE** in the data's units, **MASE** to compare across series, and **ME** to check bias. Use MAPE with care.
+- Prefer **time-series cross-validation** to a single split, and report accuracy **by horizon**.
+- Use **Diebold–Mariano** to test whether a difference is real.
+
+<InstructorKit
+  minutes={75}
+  data={['RSXFSN', 'PAYEMS', 'MRTSSM4541USS', 'HOUST', 'UNRATE']}
+  objectives={[
+    'Explain why every forecast must be compared with a simple benchmark, and produce the four standard benchmarks in R.',
+    'Split a time series into training and test sets **by time**, and identify three forms of look-ahead leakage.',
+    'Compute and interpret ME, MAE, RMSE, MAPE and MASE, and choose a metric that matches the business cost of errors.',
+    'Run time-series cross-validation with `tsCV()` and report accuracy by horizon.',
+    'Use the Diebold–Mariano test to judge whether an accuracy difference is statistically meaningful.'
+  ]}
+  discussion={[
+    'A vendor reports a MAPE of 3% for its AI tool. What three questions would you ask before believing it is useful?',
+    'Your company loses \$50 for each unit of excess inventory and \$400 for each lost sale. Which metric (or which loss) should drive model choice?',
+    'Why might a forecaster be **rewarded** for beating a naive benchmark rather than for a low MAPE?'
+  ]}
+  misconceptions={[
+    '“A lower in-sample (training) error means a better forecaster.” Only out-of-sample error counts.',
+    '“MAPE is always the best metric because it is in percent.” It explodes near zero and penalizes over- and under-forecasts asymmetrically.',
+    '“One test period is enough.” Rankings can flip with the start date and with the horizon.'
+  ]}
+>
+
+**Forecasting tournament (25 minutes).** Put students in teams of three. Each team takes one series from the explorer at the top of the chapter (retail, housing starts, unemployment, e-commerce).
+
+1. **Predict (5 min).** Before touching any code, each team writes down which benchmark they expect to win and why.
+2. **Test (10 min).** Run the scorecard lab on their series with the origin at December 2022, then repeat with tsCV.
+3. **Report (10 min).** Each team gives a 60-second "forecast brief": the winning benchmark, its MASE, and whether the winner changes by horizon.
+
+*Expected results:* seasonal naive wins on retail sales (strong seasonality); drift wins on e-commerce and payrolls (seasonally adjusted, trending); for housing starts, naive wins narrowly over drift. Unemployment is the interesting case: at the December 2022 origin, seasonal naive edges out naive even though the series is seasonally adjusted. Ask the class whether that is skill or luck, then let tsCV settle it. Use the disagreements between teams' predictions and results to motivate the next chapters.
+
+</InstructorKit>
+
+<div class="refs" id="refs">
+
+**References**
+
+1. Makridakis, S., Spiliotis, E., & Assimakopoulos, V. (2020). The M4 Competition: 100,000 time series and 61 forecasting methods. *International Journal of Forecasting*, 36(1), 54–74.
+2. Makridakis, S., Spiliotis, E., & Assimakopoulos, V. (2018). The M4 Competition: Results, findings, conclusion and way forward. *International Journal of Forecasting*, 34(4), 802–808.
+3. Hyndman, R. J., & Koehler, A. B. (2006). Another look at measures of forecast accuracy. *International Journal of Forecasting*, 22(4), 679–688.
+4. Diebold, F. X., & Mariano, R. S. (1995). Comparing predictive accuracy. *Journal of Business & Economic Statistics*, 13(3), 253–263. Small-sample correction: Harvey, D., Leybourne, S., & Newbold, P. (1997). Testing the equality of prediction mean squared errors. *International Journal of Forecasting*, 13(2), 281–291.
+5. Hyndman, R. J., & Athanasopoulos, G. (2021). *Forecasting: Principles and Practice* (3rd ed.), ch. 5. [otexts.com/fpp3](https://otexts.com/fpp3/)
+6. Gilliland, M. (2010). *The Business Forecasting Deal*. Wiley.
+7. Fildes, R., Goodwin, P., Lawrence, M., & Nikolopoulos, K. (2009). Effective forecasting and judgmental adjustments: An empirical evaluation and strategies for improvement in supply-chain planning. *International Journal of Forecasting*, 25(1), 3–23.
+
+</div>
+
+<style>{`
+  .split-demo { display: grid; grid-template-columns: 3fr 1fr; gap: 4px; margin: 1.2rem 0 1.6rem; font-size: .8rem; font-weight: 600; }
+  .split-demo > div { padding: .7rem .9rem; border-radius: 8px; }
+  .sd-train { background: color-mix(in srgb, var(--c-s2) 18%, transparent); color: var(--c-s2); border: 1px solid color-mix(in srgb, var(--c-s2) 40%, transparent); }
+  .sd-test { background: color-mix(in srgb, var(--c-actual) 15%, transparent); color: var(--c-actual); border: 1px solid color-mix(in srgb, var(--c-actual) 40%, transparent); }
+  .refs { font-size: .86rem; color: var(--text-2); margin-top: 3rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+  .ch-body table { margin: 1.4rem 0 2rem; font-size: .88rem; }
+  .ch-body td { vertical-align: top; }
+`}</style>

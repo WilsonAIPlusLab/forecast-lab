@@ -1,0 +1,62 @@
+---
+import Base from '../../layouts/Base.astro';
+import { chapters, parts } from '../../lib/chapters';
+import { sparkPath, chapterSeries } from '../../lib/spark';
+const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
+const pages = import.meta.glob('./*.mdx', { eager: true }) as Record<string, any>;
+const fm = Object.fromEntries(Object.values(pages).map((m: any) => [m.frontmatter.slug, m.frontmatter]));
+---
+<Base title="All chapters · Forecast Lab">
+  <main id="main" class="idx">
+    <header class="idx-h">
+      <h1>All chapters</h1>
+      <p class="lede">Fifteen chapters in five parts. Each starts from a real question, ends with something you can show an employer, and comes with an instructor kit.</p>
+    </header>
+    {parts.map((p) => (
+      <section class="idx-part">
+        <h2>{p}</h2>
+        <ol class="idx-list">
+          {chapters.filter((c) => c.part === p).map((c) => {
+            const f = fm[c.slug];
+            return (
+              <li style={`--c:${c.accent}`}>
+                <a href={`${base}chapters/${c.slug}/`} class="row" data-slug={c.slug}>
+                  <span class="num">{c.n}</span>
+                  <span class="main">
+                    <span class="t">{c.title}<span class="seen" aria-label="visited">✓</span></span>
+                    <span class="q">{c.question}</span>
+                    {f?.build && <span class="b">You will build: {f.build.join(' · ')}</span>}
+                    {!f && <span class="b soon">In preparation</span>}
+                  </span>
+                  <svg viewBox="0 0 160 40" preserveAspectRatio="none" aria-hidden="true"><path d={sparkPath(chapterSeries[c.slug].id, chapterSeries[c.slug])} /></svg>
+                </a>
+              </li>
+            );
+          })}
+        </ol>
+      </section>
+    ))}
+  </main>
+  <script>
+    try { const v = JSON.parse(localStorage.getItem('fl-visited') || '{}'); document.querySelectorAll<HTMLElement>('.row').forEach((r) => { if (v[r.dataset.slug!]) r.classList.add('is-seen'); }); } catch {}
+  </script>
+  <style>
+    .idx { max-width: 1040px; margin: 0 auto; padding: 3.5rem 1.5rem 0; }
+    .idx-h h1 { margin: 0 0 .6rem; }
+    .idx-part h2 { font-size: 1.4rem; margin: 3rem 0 .8rem; padding-bottom: .5rem; border-bottom: 1px solid var(--border); }
+    .idx-list { list-style: none; padding: 0; margin: 0; display: grid; gap: .3rem; }
+    .row { display: grid; grid-template-columns: 2.6rem minmax(0, 1fr) 160px; gap: 1.2rem; align-items: center; padding: .9rem 1rem; border-radius: 12px; color: var(--text); text-decoration: none !important; border: 1px solid transparent; }
+    .row:hover { background: var(--surface); border-color: var(--border); }
+    @media (max-width: 680px) { .row { grid-template-columns: 2.2rem 1fr; } .row svg { display: none; } }
+    .num { font-weight: 700; font-size: 1.3rem; color: var(--c); font-variant-numeric: tabular-nums; text-align: right; }
+    .main { display: flex; flex-direction: column; gap: .15rem; }
+    .t { font-weight: 650; font-size: 1.08rem; }
+    .seen { color: var(--good); margin-left: .5rem; font-size: .85rem; opacity: 0; }
+    .is-seen .seen { opacity: 1; }
+    .q { color: var(--text-2); font-size: .93rem; }
+    .b { color: var(--muted); font-size: .82rem; margin-top: .2rem; }
+    .b.soon { font-style: italic; }
+    .row svg { width: 160px; height: 40px; }
+    .row svg path { fill: none; stroke: var(--c); stroke-width: 1.4; vector-effect: non-scaling-stroke; }
+  </style>
+</Base>

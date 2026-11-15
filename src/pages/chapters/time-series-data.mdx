@@ -1,0 +1,347 @@
+---
+layout: ../../layouts/Chapter.astro
+slug: time-series-data
+minutes: 55
+build:
+  - An auto-labelled “economy at a glance” panel of five key U.S. indicators, with recessions shaded, that updates itself when the data do
+  - A transformation table that reads one series six ways (levels, logs, MoM, YoY, annualized, index) and says when each is right
+  - Real (inflation-adjusted) retail sales, built by hand from nominal sales and CPI and checked against FRED’s official series
+skills: [ts, start/end/frequency, window, read.csv, aggregate, diff, log, "stats::lag", resample, shift, deflating, FRED]
+---
+import CodeLab from '../../components/CodeLab.svelte';
+import Callout from '../../components/Callout.astro';
+import KeyIdea from '../../components/KeyIdea.astro';
+import Predict from '../../components/Predict.svelte';
+import Term from '../../components/Term.astro';
+import InstructorKit from '../../components/InstructorKit.astro';
+import DataShapes from '../../components/ch01/DataShapes.svelte';
+import TransformLab from '../../components/ch01/TransformLab.svelte';
+import FrequencyZoom from '../../components/ch01/FrequencyZoom.svelte';
+import RealNominal from '../../components/ch01/RealNominal.svelte';
+import WorkflowMap from '../../components/ch01/WorkflowMap.svelte';
+import inspectR from '../../labs/ch01/inspect.R?raw';
+import inspectPy from '../../labs/ch01/inspect.py?raw';
+import aggR from '../../labs/ch01/aggregate.R?raw';
+import aggPy from '../../labs/ch01/aggregate.py?raw';
+import transR from '../../labs/ch01/transform.R?raw';
+import transPy from '../../labs/ch01/transform.py?raw';
+import realR from '../../labs/ch01/real.R?raw';
+import realPy from '../../labs/ch01/real.py?raw';
+import exR from '../../labs/ch01/exercise.R?raw';
+import exSolR from '../../labs/ch01/exercise_solution.R?raw';
+import exCheckR from '../../labs/ch01/exercise_check.R?raw';
+import exPy from '../../labs/ch01/exercise.py?raw';
+import exSolPy from '../../labs/ch01/exercise_solution.py?raw';
+import exCheckPy from '../../labs/ch01/exercise_check.py?raw';
+
+<p class="lede">Your manager forwards a headline: <em>“Retail sales jumped 12% last month!”</em> and asks whether to hire more staff. Before you build any model, you need to know what that 12% actually measures. Was it December? Is it in dollars or in goods? Will the number be revised next month? This chapter covers the questions every forecaster asks about the data before modeling it.</p>
+
+(The 12% is real, by the way: U.S. retail sales (excluding food services) rose 11.8% from November to December 2025, before seasonal adjustment. You will see in a few minutes why it means almost nothing.)
+
+## What exactly is a forecast?
+
+A <Term def="A statement about the value of a variable at a future date, made using only the information available at the time the forecast is made, ideally with a measure of uncertainty.">forecast</Term> is more specific than a guess about the future. Every forecast has five parts:
+
+| Part | Meaning | Example |
+|---|---|---|
+| **Target** | The exact variable being forecast, with units | U.S. CPI inflation, % change from a year earlier |
+| **Origin** | The date you stand on when you make it | Today, with data through September 2026 |
+| **Horizon** $h$ | How far ahead | 6 months ahead, so March 2027 |
+| **Information set** | Everything you are allowed to use: data released by the origin, nothing later | CPI, wages, oil prices *as published by today* |
+| **Uncertainty** | A point forecast (one number) and an interval (a range) | 3.1%, with an 80% interval of 2.4% to 3.8% (illustrative numbers) |
+
+Forecasters write this compactly as $\hat y_{T+h \mid T}$: the forecast of $y$ at time $T+h$, made with information up to time $T$. The hat means "estimate", the bar means "given what we know at".
+
+<KeyIdea>A forecast is a statement about a specific variable at a specific future date, made with only the information available at the origin, and it should come with a range, not only a single number.</KeyIdea>
+
+Two distinctions trip up beginners.
+
+- **A forecast is not a target or a plan.** "We will sell 10,000 units" might be a sales goal. The forecast is what you expect to happen if nothing changes; the plan is what you decide to do about it.<sup>[1](#refs)</sup>
+- **Forecasting is not explaining.** To explain *why* unemployment rose, you need causes. To forecast it, any reliable signal will do, even one that causes nothing. Jobless claims do not cause unemployment, but they move first, so they help forecast it (you will test exactly this in Chapter 7).
+
+<Predict client:load kind="check"
+  question="Which of these is a complete forecast?"
+  options={[
+    'Inflation will come down.',
+    'Our goal is to grow sales 8% next year.',
+    'As of today, we expect U.S. payroll employment in June 2027 to be 159.9 million, with an 80% interval of 159.2 to 160.6 million.',
+    'Rising interest rates caused housing starts to fall in 2023.'
+  ]}
+  answer={2}
+  explain="Option C (illustrative numbers) has all five parts: a target with units, an origin (“as of today”), a horizon (June 2027), an implied information set, and an interval. A has no date or number, B is a goal, and D is an explanation of the past."
+/>
+
+## Three shapes of data
+
+Economic data come in three shapes. The difference decides which methods you can use.
+
+- A <Term def="Data on many units (people, firms, states, products) observed at one point in time.">cross-section</Term> compares many units at **one** time: sales of every store type in 2025.
+- A <Term def="Observations of one variable on one unit, recorded at regular intervals over time, in time order.">time series</Term> follows **one** unit over many periods: monthly online sales from 2015 to today. Order matters: you cannot shuffle the rows.
+- A <Term def="Data on many units, each observed over many periods. Also called longitudinal data.">panel</Term> holds both: every store type, every year. A panel is a stack of time series, or equivalently a sequence of cross-sections.
+
+<div class="breakout">
+<DataShapes client:load />
+</div>
+
+Click **Restaurants & bars** and look at the 2020 column of the panel: sales fell 16.9% while nonstore (mostly online) sales rose 29.2%. No single cross-section or single time series shows that contrast as clearly as the panel does. Most of this course works with time series. Chapter 13 returns to panels, when you forecast hundreds of related series at once.
+
+## Time series in R and Python
+
+In R, a time series is a <Term def="R's built-in time-series class. It stores the values plus a start date and a frequency (observations per year), from which R works out the date of every observation.">`ts` object</Term>; in Python, it is a pandas `Series` with a <Term def="A pandas index made of timestamps. It lets you slice by date strings, resample to other frequencies and shift by periods.">`DatetimeIndex`</Term>. Either way, the data carry their dates with them, so you can select "2019 to 2021" instead of "rows 853 to 888".
+
+The first lab starts from the raw file, so you can see what the course helper `fred()` does for you. Press **Step through** to run it one step at a time.
+
+<div class="breakout">
+<CodeLab client:load id="ch01-inspect" title="Load, inspect and chart five key indicators" r={inspectR} py={inspectPy}
+  goal="Build a time series from a raw CSV, interrogate it with start(), end(), frequency() and window(), and produce a self-labelling small-multiples dashboard of the U.S. economy." />
+</div>
+
+<Callout type="pitfall" title="The month that does not exist">
+The fifth step of the lab finds a hole: there is **no unemployment rate and no CPI for October 2025**. The federal government shut down from October 1 to November 12, 2025. The household survey behind the unemployment rate was not collected that month and was not collected afterwards, and BLS could not publish most October 2025 price indexes either.<sup>[2, 3](#refs)</sup> The gap is permanent.
+
+Missing values must stay in place as `NA`. A `ts` object assumes evenly spaced observations. If you delete the blank row, every later value slides one month earlier. Nothing errors, but every month after September 2025 is now labelled wrong, and a year-over-year change computed from it silently compares months 13 apart.
+
+The course helper `fred()` takes a middle road. It keeps every month on the calendar, but it fills a gap of one to three months by *linear interpolation* (the average of the neighbors) and prints a **Note** saying so, because most models cannot run on `NA`. That is fine for fitting a model. It is not fine for reporting a number: an October 2026 inflation rate built on an interpolated October 2025 divides by a price level nobody measured. BLS will not publish that 12-month change for the same reason.<sup>[3](#refs)</sup> Whenever `fred()` prints a Note, ask whether the number you are about to quote depends on the filled month.
+</Callout>
+
+## Changing frequency: sum, average, or last value?
+
+Models need every series at the same frequency. Often that means converting daily or weekly data to monthly, or monthly data to quarterly. The right way to combine the observations depends on what the series measures:
+
+| Kind of series | What it measures | Combine by | Examples |
+|---|---|---|---|
+| <Term def="A quantity measured over a period of time, such as dollars spent per month. Flows over consecutive periods add up.">Flow</Term> | An amount **during** the period | **Sum** (or the average, for a per-period rate) | Retail sales, jobless claims, new orders |
+| <Term def="A quantity measured at a point in time, such as the number of people employed. Adding stocks double-counts.">Stock</Term> | A level **at a point** in time | **Average** or **end of period** | Payroll jobs, money supply, inventories |
+| Rate or price | A ratio or price at a point in time | **Average** or **end of period** | Interest rates, unemployment rate, CPI |
+
+<Callout type="pitfall" title="Annual rates are already annualized">
+Some flows are published at a **seasonally adjusted annual rate** (SAAR): housing starts, vehicle sales, GDP. A monthly SAAR value answers "how many per year, if this month's pace lasted twelve months?" To get a quarterly SAAR value, *average* the three months. Summing them would triple the number.
+</Callout>
+
+The explorable below starts from a daily rate, the gap between the 10-year and 3-month Treasury yields (`T10Y3M`, in percentage points). When it drops below zero the yield curve is *inverted*, a classic recession warning that has preceded each U.S. recession since the 1950s.<sup>[4](#refs)</sup> Try every rule at every frequency. Then switch to weekly jobless claims, a flow, where the sum is the right answer.
+
+<div class="breakout">
+<FrequencyZoom client:load />
+</div>
+
+<Predict client:load
+  question="Since January 2019, the daily spread was below zero on 738 business days. Converted to monthly data, will the **monthly average** and the **month-end value** agree on how many months the curve was inverted?"
+  options={['Yes, always: it is the same data', 'Roughly, but they differ by a few months', 'No, they differ by more than a year']}
+  answer={1}
+  explain="The monthly average is below zero in 36 months and the month-end value in 38, and the two rules disagree about the sign in 4 months. Those are the months when the curve crossed zero partway through. Small differences like this can flip a model's prediction exactly when it matters, near a turning point."
+/>
+
+<div class="breakout">
+<CodeLab client:load id="ch01-agg" title="Aggregate a flow, a stock and a daily rate" r={aggR} py={aggPy}
+  goal="Convert monthly retail sales and payroll jobs to quarterly, and the daily yield spread to monthly, choosing the right rule for each and measuring how much the choice matters." />
+</div>
+
+In 2020 Q2 the end-of-quarter payroll count was **3.96 million jobs higher** than the quarter's average, because jobs collapsed in April and partly recovered by June. Neither number is wrong. Whichever you use, say so in your chart note.
+
+## Transformations every analyst uses
+
+Almost nobody forecasts the raw level of a series without first looking at it in other forms. Each transformation answers a different question. Switch between them below and watch the same data tell six different stories.
+
+<Predict client:load
+  question="Retail sales here are **not seasonally adjusted**. Which view would you use to judge whether spending is speeding up or slowing down?"
+  options={['Level', 'Month-over-month % change', 'Year-over-year % change', 'Annualized monthly change']}
+  answer={2}
+  explain="Year-over-year growth compares each month with the same month a year earlier, so December is compared with December and the seasonal pattern cancels out. Month-over-month growth of NSA data mostly measures the calendar, and annualizing it makes things worse. Check it in the explorer below: click MoM %, then YoY %."
+/>
+
+<div class="breakout">
+<TransformLab client:load />
+</div>
+
+| View | Formula | Answers | Use it when… |
+|---|---|---|---|
+| **Level** | $y_t$ | How big is it? | You need the actual quantity (dollars, people) |
+| **Difference** | $y_t - y_{t-1}$ | How much did it change, in its own units? | Changes are what matter: "payrolls rose by 120,000" |
+| **Log** | $\ln y_t$ | Is growth steady? | A series grows by percentages; makes growth linear and seasonal swings proportional |
+| **MoM %** | $100\left(\frac{y_t}{y_{t-1}} - 1\right)$ | What happened last month? | The data are seasonally adjusted |
+| **YoY %** | $100\left(\frac{y_t}{y_{t-12}} - 1\right)$ | How fast is it growing over a year? | Always safe, even for NSA data; the standard for inflation |
+| **Annualized** | $100\left[\left(\frac{y_t}{y_{t-1}}\right)^{12} - 1\right]$ | What if last month's pace lasted a year? | SA data only; comparing with yearly figures such as GDP growth |
+| **Index** | $100\,\frac{y_t}{\bar y_{2019}}$ | How does it compare with a base period? | Comparing series in different units on one chart |
+
+<Callout type="math" title="Why log differences are (almost) percent changes">
+For a small growth rate $g$, $\ln(1+g) \approx g$. Since $y_t / y_{t-1} = 1 + g_t$,
+
+$$
+100\,\Delta \ln y_t = 100 \ln\frac{y_t}{y_{t-1}} = 100\ln(1+g_t) \approx 100\, g_t .
+$$
+
+The approximation is excellent for moves of a few percent and poor for big ones. In the lab, January 2026 retail sales fell 19.2%, while the log difference says −21.3. Log differences have one big advantage: they add up. The log change over a year is exactly the sum of the twelve monthly log changes, which is why models are usually written in logs.
+</Callout>
+
+<div class="breakout">
+<CodeLab client:load id="ch01-transform" title="Six ways to read one series" r={transR} py={transPy}
+  goal="Compute differences, logs, MoM, YoY, annualized and indexed versions of retail sales, and compare them side by side for the last six months." />
+</div>
+
+Read the table the lab produces. In September 2026, the same retail sales data say −3.2% (MoM) and +6.7% (YoY). Both are correct arithmetic; only one is a sensible headline for NSA data. The SA annualized column jumps from −4.8% in July to +16.6% in August, which shows how much compounding magnifies monthly noise.
+
+## Real vs. nominal: more stuff, or higher prices?
+
+Retail sales are measured in current dollars. These are <Term def="Measured in the prices of the time. Nominal growth mixes changes in quantity with changes in price.">nominal</Term> values. When prices rise 30%, nominal sales rise even if people buy exactly the same things. To measure the quantity of goods, you divide by a price index. The result is a <Term def="Adjusted for inflation by dividing by a price index; measured in the prices of a fixed base period.">real</Term> series, also called a *deflated* series. Guess first.
+
+<div class="breakout">
+<RealNominal client:load />
+</div>
+
+From the 2019 average to September 2026, nominal retail and food services sales grew 47.4%. Consumer prices grew 31.5% over the same span. Real sales grew only **12.0%**. Notice that subtracting gives about 15.8 points (the lab subtracts the unrounded rates), not 12.0. Growth rates combine by division, not subtraction: $1.474 / 1.315 \approx 1.12$.
+
+<div class="breakout">
+<CodeLab client:load id="ch01-real" title="Deflate retail sales by hand" r={realR} py={realPy}
+  goal="Turn nominal retail sales into real sales with the CPI, verify your series against FRED's official real retail sales, and split growth since 2019 into price and quantity." />
+</div>
+
+<Callout type="business" title="When a company reports “record sales”">
+With inflation running at 3–4%, a company whose nominal sales grew 3% sold *fewer* units than last year. Annual reports, budgets and wage negotiations all hinge on this. Pick the deflator that matches what is being bought: CPI for consumer spending, a producer price index for business inputs, the GDP deflator for the whole economy.
+</Callout>
+
+## Data get revised: vintages and ALFRED
+
+The numbers you download today are not necessarily the numbers that were published at the time. Statistical agencies release a first estimate fast, then revise it as more complete source data arrive.
+
+<Predict client:load
+  question="On January 30, 2009, the first official estimate said U.S. real GDP shrank at a **3.8%** annual rate in the fourth quarter of 2008. What does today's data say?"
+  options={['−3.8%: GDP is measured once and stays fixed', '−2.0%: it was revised up once the panic passed', '−6.2%', '−8.5%']}
+  answer={3}
+  explain="The second estimate, one month later, was already −6.2%. After annual and comprehensive revisions, the bundled data (`A191RL1Q225SBEA`) now show **−8.5%**: the worst quarter of the Great Recession was more than twice as bad as first reported. A forecaster in early 2009 was working from much rosier numbers than the ones we see today."
+/>
+
+For GDP, the Bureau of Economic Analysis (BEA) publishes an *advance* estimate roughly four weeks after the quarter ends, then a second and a third estimate as more data arrive, then annual updates each summer and comprehensive updates about every five years.<sup>[5, 6](#refs)</sup> Seasonally adjusted CPI is revised too: each February, BLS recomputes its seasonal factors and revises the previous five years of seasonally adjusted data.<sup>[7](#refs)</sup>
+
+Each published version of a series is called a <Term def="The version of a data series as it was published on a particular date. Real-time forecast evaluation uses the vintage that was available at each forecast origin.">vintage</Term>. The St. Louis Fed keeps every vintage of many FRED series in <Term def="Archival FRED: the St. Louis Fed's archive of past vintages of FRED series, at alfred.stlouisfed.org.">ALFRED</Term>.<sup>[8](#refs)</sup>
+
+<Callout type="pitfall" title="Revisions are a hidden form of look-ahead leakage">
+If you test a forecasting model on today's revised data, you give it cleaner numbers than any forecaster had at the time. For a fair "how would this have done in 2009?" test, use the vintage available at each forecast origin. Chapter 3 shows how leakage flatters a model; Chapter 7 runs a real-time out-of-sample test.
+</Callout>
+
+## Where the data come from
+
+| Source | Who | Publishes (examples) | Series IDs used in this course |
+|---|---|---|---|
+| **BLS** | Bureau of Labor Statistics | Jobs, unemployment, CPI, wages | `PAYEMS`, `UNRATE`, `CPIAUCSL` |
+| **BEA** | Bureau of Economic Analysis | GDP, consumer spending, income | `GDPC1`, `PCE`, `DSPIC96` |
+| **Census** | U.S. Census Bureau | Retail sales, housing starts, e-commerce | `RSXFSN`, `HOUST`, `MRTSSM4541USS` |
+| **Federal Reserve** | Board of Governors, regional Feds | Industrial production, interest rates | `INDPRO`, `FEDFUNDS` |
+| **FRED** | Federal Reserve Bank of St. Louis | Collects all of the above in one place, free | every ID above |
+
+The agencies produce the numbers; <Term def="Federal Reserve Economic Data, a free database maintained by the Federal Reserve Bank of St. Louis that collects series from many agencies in one format.">FRED</Term> collects them in one consistent format.<sup>[9](#refs)</sup> In this course's browser labs, `fred("UNRATE")` reads a copy of each series bundled with the site, so every student gets identical numbers, even offline. On the job, you would fetch the live data yourself:
+
+```r
+# R: download the latest data straight from FRED (no key needed)
+raw <- read.csv("https://fred.stlouisfed.org/graph/fredgraph.csv?id=UNRATE")
+unrate <- ts(raw$UNRATE, start = c(1948, 1), frequency = 12)
+
+# R: the FRED API, via the fredr package (free API key from fred.stlouisfed.org)
+library(fredr)
+fredr_set_key("YOUR_KEY")
+u <- fredr(series_id = "UNRATE", observation_start = as.Date("2000-01-01"))
+```
+
+```python
+# Python: the same CSV, straight into a Series with a DatetimeIndex
+import pandas as pd
+url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=UNRATE"
+unrate = pd.read_csv(url, index_col=0, parse_dates=True)["UNRATE"]
+```
+
+The file you get is exactly the format you opened in the first lab: a date column and a value column, with blanks where data are missing.<sup>[10](#refs)</sup>
+
+<Callout type="tip" title="Before you use any series, answer five questions">
+1. **Units**: dollars, thousands of people, an index, a percent?
+2. **Frequency**: daily, weekly, monthly, quarterly?
+3. **Adjustment**: seasonally adjusted (SA) or not (NSA)? At an annual rate (SAAR)?
+4. **Nominal or real?** If real, in which base year's prices?
+5. **Release and revision**: when does it come out, and how much does it get revised?
+
+FRED's series page answers the first four in the line under the title. Write the answers in your chart notes.
+</Callout>
+
+## The forecasting workflow
+
+Everything in this course fits into one loop. This chapter covers step 2, getting the data, and the start of step 3, looking at it.
+
+<div class="breakout">
+<WorkflowMap client:load />
+</div>
+
+## Your turn
+
+The Bureau of Labor Statistics reports inflation as the percent change in CPI from a year earlier. Compute it yourself and find the latest month you *can* compute from published data. The lab reads the raw CSV, so the unpublished October 2025 stays `NA`. Fill in the blanks (`______`) and press **Run & check**.
+
+<div class="breakout">
+<CodeLab client:load id="ch01-ex1" exercise title="Exercise: compute CPI inflation and find the latest reading" r={exR} solution={exSolR} check={exCheckR} py={exPy} solutionPy={exSolPy} checkPy={exCheckPy}
+  goal="Build the CPI as a monthly time series, compute year-over-year inflation, and report the most recent value that can actually be computed."
+  hints={['A monthly series has 12 observations per year, so `frequency = 12`. In Python, `shift(12)` gives the value from 12 months earlier.', 'In R, `stats::lag(cpi, -12)` gives the value from 12 months *earlier* (the minus sign means “from the past”). In Python, `last_valid_index()` returns the date of the last non-missing value.']} />
+</div>
+
+## Chapter checklist
+
+- A forecast has a **target**, an **origin**, a **horizon**, an **information set** and an **uncertainty range**. Forecasting is not explaining, and it is not goal-setting.
+- Know your data's shape: **cross-section**, **time series** or **panel**.
+- Store series with their dates (`ts` or a `DatetimeIndex`). Keep missing months as `NA`; never delete them.
+- When changing frequency, **sum flows**, **average or take the last value of stocks and rates**, and never sum a SAAR series.
+- Use **YoY** for NSA data, **MoM** and **annualized** rates only for SA data, **logs** for growth, and an **index** to compare units.
+- **Deflate** nominal values by a price index to get real quantities. Growth rates combine by division, not subtraction.
+- Data are **revised**. Test forecasts on the vintage that was available at the time (ALFRED).
+
+<InstructorKit
+  minutes={75}
+  data={['UNRATE', 'CPIAUCSL', 'PAYEMS', 'INDPRO', 'GDPC1', 'RSXFSN', 'RSAFS', 'RRSFS', 'T10Y3M', 'ICSA', 'A191RL1Q225SBEA']}
+  objectives={[
+    'State the five parts of a forecast (target, origin, horizon, information set, uncertainty) and distinguish a forecast from a goal and from a causal explanation.',
+    'Classify a data set as cross-section, time series or panel.',
+    'Create and interrogate a `ts` object (`start`, `end`, `frequency`, `time`, `window`) and a pandas series with a `DatetimeIndex`, keeping missing observations in place.',
+    'Aggregate to a lower frequency with the correct rule for flows, stocks and rates.',
+    'Compute and interpret differences, logs, MoM, YoY, annualized and indexed series, and choose the right one for SA and NSA data.',
+    'Deflate a nominal series with the CPI and decompose nominal growth into real growth and inflation.',
+    'Explain data revisions and vintages, and why they matter for evaluating forecasts.'
+  ]}
+  discussion={[
+    'A news story says “retail sales jumped 11.8% in December.” What would you check before repeating it to your manager?',
+    'Your firm’s nominal revenue grew 5% last year while CPI rose 3.7%. Did the firm grow? By how much, and what would make CPI the wrong deflator?',
+    'A model looks excellent when tested on today’s GDP data for 2008–09. Why might it have looked much worse to someone using it at the time?'
+  ]}
+  misconceptions={[
+    '“Month-over-month growth is always more up-to-date, so it is always better.” For NSA data it mostly measures the calendar.',
+    '“Real growth = nominal growth − inflation.” Only approximately; over several years the gap is large (15.8 vs. 12.0 points here).',
+    '“A missing month can just be dropped.” In a regularly spaced series, dropping it shifts every later date.',
+    '“Published data are final.” GDP for 2008 Q4 went from −3.8% to −8.5%.'
+  ]}
+>
+
+**Data detective (30 minutes).** Teams of three each get one FRED ID: `RSXFSN`, `HOUST`, `ICSA`, `T10Y3M` or `GDPC1`.
+
+1. **Identify (10 min).** From the FRED series page, answer the five questions in the tip box: units, frequency, SA/NSA, nominal/real, release schedule.
+2. **Transform (10 min).** In the “Six ways to read one series” code lab, change the series ID and decide which single view the team would put on a slide for executives, and why.
+3. **Aggregate (10 min).** Convert the series to quarterly with the right rule, and state the rule in one sentence.
+
+*Expected results:* `RSXFSN` is monthly, \$ millions, NSA, nominal, so use YoY and quarterly **sums**. `HOUST` is thousands of units at a SAAR, so quarterly **averages**, never sums. `ICSA` is weekly and SA; it is a flow, so sum to monthly (four or five weeks per month) or average. `T10Y3M` is a daily rate in percentage points, so use the average or the end of period; the lab finds 36 inverted months by average and 38 by month-end since 2019. `GDPC1` is quarterly, chained 2017 dollars (already real) and SAAR, so quote growth as annualized quarterly or YoY. Close by asking each team what they would forecast with their series, and at what horizon.
+
+</InstructorKit>
+
+<div class="refs" id="refs">
+
+**References**
+
+1. Hyndman, R. J., & Athanasopoulos, G. (2021). *Forecasting: Principles and Practice* (3rd ed.), ch. 1 (forecasts, goals and planning) and ch. 2 (time series graphics). [otexts.com/fpp3](https://otexts.com/fpp3/)
+2. U.S. Bureau of Labor Statistics. *2025 federal government shutdown impact on the Current Population Survey.* [bls.gov/cps/methods/2025-federal-government-shutdown-impact-cps.htm](https://www.bls.gov/cps/methods/2025-federal-government-shutdown-impact-cps.htm)
+3. U.S. Bureau of Labor Statistics. *2025 federal government shutdown impact on the Consumer Price Index* (FAQ), and *Consumer Price Index, October 2026* news release (November 10, 2026). [bls.gov/cpi/additional-resources/2025-federal-government-shutdown-impact-cpi-faq.htm](https://www.bls.gov/cpi/additional-resources/2025-federal-government-shutdown-impact-cpi-faq.htm)
+4. Neely, C. J. (2023, September 7). What is the probability of a recession? The message from yield spreads. Federal Reserve Bank of St. Louis, *On the Economy*. [stlouisfed.org](https://www.stlouisfed.org/on-the-economy/2023/sep/what-probability-recession-message-yield-spreads)
+5. U.S. Bureau of Economic Analysis. *Why has the initial estimate of real GDP for the fourth quarter of 2008 been revised down so much?* (FAQ 1003). [bea.gov/help/faq/1003](https://www.bea.gov/help/faq/1003)
+6. U.S. Bureau of Economic Analysis (2015, July 13). *Why does BEA revise GDP estimates?* [bea.gov blog](https://www.bea.gov/news/blog/2015-07-13/why-does-bea-revise-gdp-estimates)
+7. U.S. Bureau of Labor Statistics. *Seasonal adjustment in the CPI.* [bls.gov/cpi/seasonal-adjustment](https://www.bls.gov/cpi/seasonal-adjustment/)
+8. Federal Reserve Bank of St. Louis. *ALFRED: Archival Federal Reserve Economic Data.* [alfred.stlouisfed.org](https://alfred.stlouisfed.org/)
+9. Federal Reserve Bank of St. Louis. *FRED: Federal Reserve Economic Data*, and the FRED API documentation. [fred.stlouisfed.org](https://fred.stlouisfed.org/), [fred.stlouisfed.org/docs/api/fred](https://fred.stlouisfed.org/docs/api/fred/)
+10. U.S. Census Bureau. *Monthly Retail Trade Survey* (source of the retail sales series). [census.gov/retail](https://www.census.gov/retail/index.html)
+
+</div>
+
+<style>{`
+  .refs { font-size: .86rem; color: var(--text-2); margin-top: 3rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+  .ch-body table { margin: 1.4rem 0 2rem; font-size: .88rem; }
+  .ch-body td { vertical-align: top; }
+`}</style>

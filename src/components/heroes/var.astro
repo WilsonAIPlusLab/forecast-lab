@@ -1,0 +1,81 @@
+---
+// Signature hero for Chapter 9: a surprise rate hike ripples through a three-variable VAR.
+// The two sparklines are the real impulse responses from the chapter's VAR(4) (var_data.json).
+import data from '../ch09/var_data.json';
+const W = 520, H = 372;
+const N = { ffr: [260, 86], infl: [112, 214], unemp: [408, 214] } as const;
+const R = 34;
+const irf = (data as any).irf['infl,unemp,ffr'].ffr;
+function spark(arr: number[], x0: number, x1: number, yMid: number, scale: number) {
+  return arr.map((v, i) => `${i ? 'L' : 'M'}${(x0 + (i / (arr.length - 1)) * (x1 - x0)).toFixed(1)},${(yMid - v * scale).toFixed(1)}`).join('');
+}
+const S = 160; // px per percentage point
+const sp = {
+  infl: spark(irf.infl.pt, 52, 172, 306, S),
+  unemp: spark(irf.unemp.pt, 348, 468, 306, S),
+};
+const edge = (a: readonly number[], b: readonly number[], pad = R + 6) => {
+  const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy);
+  return { x1: a[0] + (dx / L) * pad, y1: a[1] + (dy / L) * pad, x2: b[0] - (dx / L) * pad, y2: b[1] - (dy / L) * pad };
+};
+const eI = edge(N.ffr, N.infl), eU = edge(N.ffr, N.unemp), eIU = edge(N.infl, N.unemp);
+---
+<svg viewBox={`0 0 ${W} ${H}`} class="vh" role="img" aria-label="A surprise interest-rate hike sends ripples to inflation and unemployment; small charts show inflation briefly rising then falling, and unemployment rising slowly for two years">
+  <!-- edges: every variable feeds every other through lags -->
+  <g class="edges">
+    <line {...eI} class="e" style="--d:.5s" />
+    <line {...eU} class="e" style="--d:.6s" />
+    <line {...eIU} class="e faint" style="--d:.7s" />
+  </g>
+  <!-- the shock: rings expanding from the Fed node -->
+  <g class="rings" transform={`translate(${N.ffr[0]} ${N.ffr[1]})`}>
+    <circle r={R} class="ring" style="--d:1.25s" />
+    <circle r={R} class="ring" style="--d:1.5s" />
+    <circle r={R} class="ring loop" />
+  </g>
+  <!-- pulses travelling along the edges -->
+  <circle cx={eI.x1} cy={eI.y1} r="5" class="pulse" style={`--tx:${eI.x2 - eI.x1}px;--ty:${eI.y2 - eI.y1}px;--d:1.45s;--c:var(--c-s3)`} />
+  <circle cx={eU.x1} cy={eU.y1} r="5" class="pulse" style={`--tx:${eU.x2 - eU.x1}px;--ty:${eU.y2 - eU.y1}px;--d:1.6s;--c:var(--c-s3)`} />
+  <circle cx={eIU.x1} cy={eIU.y1} r="3.5" class="pulse small" style={`--tx:${eIU.x2 - eIU.x1}px;--ty:${eIU.y2 - eIU.y1}px;--d:2.15s;--c:var(--muted)`} />
+  <!-- nodes -->
+  <g class="node" style="--d:.1s;--c:var(--c-s3)"><circle cx={N.ffr[0]} cy={N.ffr[1]} r={R} class="hit" /><text x={N.ffr[0]} y={N.ffr[1] + 5} class="sym">r</text><text x={N.ffr[0]} y={N.ffr[1] - R - 12} class="nl">Fed funds rate</text></g>
+  <g class="node" style="--d:.22s;--c:var(--c-s2)"><circle cx={N.infl[0]} cy={N.infl[1]} r={R} /><text x={N.infl[0]} y={N.infl[1] + 5} class="sym">π</text><text x={N.infl[0]} y={N.infl[1] - R - 12} class="nl">Inflation</text></g>
+  <g class="node" style="--d:.34s;--c:var(--c-s1)"><circle cx={N.unemp[0]} cy={N.unemp[1]} r={R} /><text x={N.unemp[0]} y={N.unemp[1] + 5} class="sym">u</text><text x={N.unemp[0]} y={N.unemp[1] - R - 12} class="nl">Unemployment</text></g>
+  <!-- the responses that arrive: real impulse responses, quarters 0–20 -->
+  <g class="sp">
+    <line x1="52" x2="172" y1="306" y2="306" class="zero" />
+    <line x1="348" x2="468" y1="306" y2="306" class="zero" />
+    <path d={sp.infl} pathLength="1" class="spl" style="--c:var(--c-s2);--d:2.0s" />
+    <path d={sp.unemp} pathLength="1" class="spl" style="--c:var(--c-s1);--d:2.2s" />
+    <text x="112" y="346" class="cap">up first, then down</text>
+    <text x="408" y="346" class="cap">rises slowly for 2 years</text>
+  </g>
+  <text x={W / 2} y="366" class="foot">response to a surprise hike, quarters 0–20</text>
+</svg>
+<style>
+  .vh { max-width: 560px; overflow: visible; }
+  .e { stroke: var(--border-strong); stroke-width: 2; stroke-linecap: round; opacity: 0; animation: fade .5s var(--d) forwards; }
+  .e.faint { stroke-dasharray: 3 5; }
+  .node { opacity: 0; transform-box: fill-box; transform-origin: center; animation: pop .55s var(--d) cubic-bezier(.05,.7,.1,1) forwards; }
+  .node circle { fill: var(--surface-2); stroke: var(--c); stroke-width: 2.4; }
+  .node circle.hit { stroke-width: 3.2; }
+  .sym { font: italic 600 22px var(--font-display, Georgia, serif); fill: var(--c); text-anchor: middle; }
+  .nl { font: 650 13px var(--font-ui); fill: var(--text-2); text-anchor: middle; }
+  .ring { fill: none; stroke: var(--c-s3); stroke-width: 2; opacity: 0; transform-box: fill-box; transform-origin: center; animation: ripple 1.3s var(--d) cubic-bezier(.2,.6,.3,1) forwards; }
+  .ring.loop { animation: ripple 2.4s 4s cubic-bezier(.2,.6,.3,1) infinite; stroke-width: 1.4; }
+  .pulse { fill: var(--c); opacity: 0; animation: travel .75s var(--d) cubic-bezier(.4,0,.2,1) forwards; }
+  .zero { stroke: var(--border-strong); stroke-width: 1.25; }
+  .spl { fill: none; stroke: var(--c); stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw 1.1s var(--d) cubic-bezier(.65,0,.35,1) forwards; }
+  .cap { font: 500 12px var(--font-ui); fill: var(--muted); text-anchor: middle; opacity: 0; animation: fade .5s 3s forwards; }
+  .foot { font: 500 12px var(--font-ui); fill: var(--muted); text-anchor: middle; opacity: 0; animation: fade .5s 3.1s forwards; }
+  @keyframes fade { to { opacity: 1; } }
+  @keyframes pop { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: scale(1); } }
+  @keyframes ripple { 0% { opacity: .9; transform: scale(1); } 100% { opacity: 0; transform: scale(2.3); } }
+  @keyframes travel { 0% { opacity: 0; transform: translate(0, 0); } 15% { opacity: 1; } 85% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--tx), var(--ty)); } }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  @media (prefers-reduced-motion: reduce) {
+    .e, .node, .cap, .foot { animation: none; opacity: 1; transform: none; }
+    .spl { animation: none; stroke-dashoffset: 0; }
+    .ring, .pulse { animation: none; opacity: 0; }
+  }
+</style>

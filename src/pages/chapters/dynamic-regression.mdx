@@ -1,0 +1,342 @@
+---
+layout: ../../layouts/Chapter.astro
+slug: dynamic-regression
+minutes: 55
+build:
+  - A lead-lag analysis that finds how many months jobless claims run ahead of job growth
+  - An ADL model of payrolls with honest (Newey–West) standard errors and its dynamic multipliers
+  - A structural-break test that dates the downshift in U.S. job growth and diagnoses COVID
+  - An out-of-sample scorecard that tests whether claims beat an AR benchmark, without look-ahead leakage
+skills: [ccf, dynlm, "L()", ADL, NeweyWest, coeftest, "auto.arima(xreg=)", spurious regression, Fstats, sctest, breakpoints, pseudo out-of-sample]
+---
+import CodeLab from '../../components/CodeLab.svelte';
+import Callout from '../../components/Callout.astro';
+import KeyIdea from '../../components/KeyIdea.astro';
+import Predict from '../../components/Predict.svelte';
+import Term from '../../components/Term.astro';
+import InstructorKit from '../../components/InstructorKit.astro';
+import LeadLag from '../../components/ch07/LeadLag.svelte';
+import ImpulseADL from '../../components/ch07/ImpulseADL.svelte';
+import SpuriousGenerator from '../../components/ch07/SpuriousGenerator.svelte';
+import BreakHunter from '../../components/ch07/BreakHunter.svelte';
+import leadR from '../../labs/ch07/leadlag.R?raw';
+import leadPy from '../../labs/ch07/leadlag.py?raw';
+import adlR from '../../labs/ch07/adl.R?raw';
+import adlPy from '../../labs/ch07/adl.py?raw';
+import spurR from '../../labs/ch07/spurious.R?raw';
+import spurPy from '../../labs/ch07/spurious.py?raw';
+import brkR from '../../labs/ch07/breaks.R?raw';
+import brkPy from '../../labs/ch07/breaks.py?raw';
+import oosR from '../../labs/ch07/oos.R?raw';
+import oosPy from '../../labs/ch07/oos.py?raw';
+import exR from '../../labs/ch07/exercise.R?raw';
+import exSolR from '../../labs/ch07/exercise_solution.R?raw';
+import exCheckR from '../../labs/ch07/exercise_check.R?raw';
+import exPy from '../../labs/ch07/exercise.py?raw';
+import exSolPy from '../../labs/ch07/exercise_solution.py?raw';
+import exCheckPy from '../../labs/ch07/exercise_check.py?raw';
+
+<p class="lede">Every Thursday at 8:30 a.m. Eastern, the Department of Labor reports how many people filed a <em>new</em> claim for unemployment benefits the week before. The jobs report, the number markets care about most, comes out only once a month. If the weekly number told you where the monthly one was heading, you would know first. <strong>Does it?</strong> This chapter teaches you to answer that question honestly, and to avoid the three traps that make time-series regressions lie.</p>
+
+Economists sort indicators by **timing**. A <Term def="A series whose turning points tend to come before those of the overall economy, so it can be used to forecast it.">leading indicator</Term> turns before the economy does. A <Term def="A series that moves at about the same time as the overall economy, so it tells you where the economy is now.">coincident indicator</Term> moves with it. A <Term def="A series whose turning points come after those of the economy. Useful to confirm a turn, not to predict one.">lagging indicator</Term> turns afterwards. The Conference Board publishes a composite index of each:<sup>[1](#refs)</sup>
+
+| Type | Conference Board components (selection) | In this chapter |
+|---|---|---|
+| **Leading** (10 components) | average weekly initial claims for unemployment insurance; building permits; average weekly hours in manufacturing; interest rate spread (10-year Treasury minus fed funds); S&P 500; ISM new orders; consumer expectations | `ICSA`, `PERMIT`; `T10Y3M` (10-year minus 3-month) is a close cousin of the spread |
+| **Coincident** (4 components) | payroll employment; personal income less transfers; manufacturing and trade sales; industrial production | `PAYEMS`, `INDPRO` |
+| **Lagging** (7 components) | includes the average duration of unemployment, the average prime rate and the change in the CPI for services<sup>[2](#refs)</sup> | `UNRATE` behaves like one below |
+
+Notice that **payroll employment is itself a coincident indicator**. So our question, "do claims tell us where jobs are going?", is really the question of whether a leading indicator earns its name. GDP is not one of the components (it is quarterly), but it is the textbook coincident measure of the cycle.
+
+<KeyIdea>A leading indicator is only useful if it leads by a stable amount, is known before the thing you forecast, and improves on a forecast that ignores it. This chapter tests all three.</KeyIdea>
+
+## Slide one series against another
+
+The simplest test of timing is to slide one series along the time axis until it lines up with the other. Before you touch the explorer, commit to a guess.
+
+<Predict client:load
+  question="You compare four indicators with payroll job growth (1990–2019). Which one lines up best when you shift it **earlier** in time, meaning it **lags** jobs?"
+  options={['Initial jobless claims', 'Building permits', 'Industrial production', 'The unemployment rate']}
+  answer={3}
+  explain="The unemployment rate tends to keep rising for a while after job growth has turned, which is why it is usually classed as lagging. In the explorer its strongest correlation is with job growth <strong>12 months earlier</strong> (r = −0.69). Claims and permits lead; industrial production is roughly coincident."
+/>
+
+<div class="breakout">
+<LeadLag client:load />
+</div>
+
+What the explorer shows, with data from 1990 to 2019:
+
+- **Claims lead jobs by about 7 months.** The year-over-year change in claims correlates −0.73 with job growth seven months later, against −0.47 in the same month. When layoffs start to rise, hiring weakens over the following half-year.
+- **Building permits lead by about 9 months** (r = 0.68). Builders pull permits before they hire crews.
+- **Industrial production is roughly coincident** (strongest 4 months ahead, r = 0.80). The **unemployment rate lags** by about a year.
+
+Now tick **Include 2020 to today** with claims selected. The best lead collapses from 7 months to **1 month**, and the correlation at 7 months drops from −0.73 to −0.43. In March 2020 seasonally adjusted weekly claims went from 273,000 to 2.9 million in one week and to 5.9 million the week after, while payrolls fell by 20.5 million in April alone. A few extreme months now dominate every correlation. Hold on to that observation; it returns in the section on structural breaks.
+
+<Callout type="pitfall" title="Which way does the lag point?">
+R's `ccf(x, y)` reports the correlation of <code>x[t + k]</code> with <code>y[t]</code>. A peak at a <strong>negative</strong> <em>k</em> means <em>x</em> moves first. Python's statsmodels `ccf` uses a different convention (and only non-negative lags). Always check a lead you found by shifting the series and looking at the plot, as the lab below does.
+</Callout>
+
+## Find the lead in code
+
+The explorer used the <Term def="The correlation between one series and lagged or leading values of another, computed for a range of lags. Its peak suggests how far one series leads the other.">cross-correlation function</Term>. Here is the same analysis in a few lines, with a chart you can paste into a report.
+
+<div class="breakout">
+<CodeLab client:load id="ch07-ccf" title="How many months do claims lead job growth?" r={leadR} py={leadPy} pyPackages={['statsmodels']}
+  goal="Compute the cross-correlation between claims growth and job growth, find the lead, and show it visually." />
+</div>
+
+<Callout type="tip" title="Make it yours">
+Swap `"ICSA"` for `"PERMIT"` (building permits are already monthly, so `to = "month"` changes nothing). The peak moves to a 9-month lead with a **positive** correlation, because more permits mean more jobs. Then try the yield-curve spread: replace the whole `claims_yoy` line with `claims_yoy <- window(fred("T10Y3M", to = "month"), start = c(1990, 1), end = c(2019, 12))` (a spread can be negative, so no logs). The strongest correlation is now at **k = +9** and negative: within ±18 months the spread mostly *follows* job growth. Its reputation as a recession signal rests on longer horizons, which is where Chapter 8 picks it up.
+</Callout>
+
+## From correlation to a model: distributed lags
+
+A correlation tells you *that* claims lead. A forecaster needs *how much*: if claims jump 10% this month, how many fewer jobs will be added this month, next month, and the month after? That is the job of an <Term def="Autoregressive distributed lag model: the outcome depends on its own past values (autoregressive part) and on current and past values of a predictor (distributed lag part).">ADL model</Term>:
+
+$$
+\Delta \text{jobs}_t = \alpha + \sum_{i=1}^{2} \phi_i\, \Delta \text{jobs}_{t-i} + \sum_{j=0}^{3} \beta_j\, g_{t-j} + u_t
+$$
+
+where $\Delta\text{jobs}_t$ is jobs added in month $t$ (thousands) and $g_t$ is the % change in claims. The $\phi$ terms are the *autoregressive* part; the $\beta$ terms are the *distributed lag* of claims growth. Each $\beta$ is a <Term def="The change in the outcome k periods after a one-time change in the predictor, holding everything else fixed.">dynamic multiplier</Term> on its own; the $\phi$ terms make the effect echo. Try it: the explorer re-estimates the model on 1990–2019 every time you move a slider.
+
+<div class="breakout">
+<ImpulseADL client:load />
+</div>
+
+With two lags of jobs and three of claims, a lasting 10% rise in claims comes with about **112,000 fewer jobs** added in the same month, a cumulative **843,000** after a year, and about **1.03 million** in the long run. Set *p* to 0 and the response stops dead after *q* months; set it back to 2 and the shock echoes for two years, because job growth itself is persistent.
+
+<Callout type="math" title="Short-run and long-run multipliers">
+Write the model as $y_t = \alpha + \sum_{i=1}^{p}\phi_i y_{t-i} + \sum_{j=0}^{q}\beta_j x_{t-j} + u_t$.
+
+- **Impact multiplier**: $\partial y_t / \partial x_t = \beta_0$.
+- **Dynamic multipliers** $m_h$: feed a one-time unit change in $x$ through the equation, $m_h = \beta_h + \sum_{i=1}^{p}\phi_i m_{h-i}$ (with $\beta_h = 0$ for $h > q$ and $m_{h<0}=0$).
+- **Long-run multiplier**: the total effect of a permanent unit change in $x$ once everything has settled, $\displaystyle \sum_{h\ge 0} m_h = \frac{\sum_j \beta_j}{1-\sum_i \phi_i}$, which exists when $\sum_i \phi_i < 1$.
+
+Here $x$ is the *growth* of claims and $y$ the *change* in jobs. So a one-time jump in $x$ is a permanent shift in the *level* of claims, and the running total of $m_h$ is the effect on the *level* of employment.
+</Callout>
+
+### Why plain OLS is overconfident
+
+There is a catch in running any regression on time series. OLS standard errors assume each month's error is unrelated to the last. With monthly macro data that is almost never true. In the lab below, a simple regression of job gains on same-month claims growth leaves residuals with an autocorrelation of **0.74** at lag 1. Each month's surprise mostly repeats the previous one, so the 360 months carry far less independent information than 360 coin flips would, and OLS reports more precision than the data contain.
+
+Three fixes, all in the lab:
+
+1. **Keep OLS, fix the standard errors.** <Term def="Heteroskedasticity- and autocorrelation-consistent standard errors (Newey–West): they allow the regression errors to be correlated over time, so t-statistics are not overstated.">Newey–West (HAC)</Term> standard errors allow for autocorrelation. For the claims slope the standard error goes from 2.54 to **4.78**, and the t-statistic from −5.2 to **−2.7**.
+2. **Put the dynamics in the model.** Adding lags (the ADL) soaks up most of the autocorrelation. Some remains, so we still report Newey–West errors.
+3. **Model the errors directly.** <Term def="A regression y = a + b·x + e in which the error e follows an ARIMA model. Fitted in R with auto.arima(y, xreg = x).">Regression with ARIMA errors</Term> (`auto.arima(y, xreg = x)`) estimates the slope and an ARIMA model for the error together. It is also a forecasting model in its own right: forecast the predictor, and the ARIMA error carries the persistence forward.
+
+<div class="breakout">
+<CodeLab client:load id="ch07-adl" title="An ADL model of payrolls, with honest standard errors" r={adlR} py={adlPy}
+  packages={['dynlm', 'lmtest', 'sandwich', 'forecast']} pyPackages={['statsmodels']}
+  goal="Diagnose autocorrelated errors, fit an ADL(2,3) with dynlm, report Newey–West t-statistics, and compute the dynamic multipliers." />
+</div>
+
+Notice how the claims slope changes between methods: −13.1 in the static OLS regression, but −6.4 in the regression with ARIMA(2,0,2) errors. Once the errors are allowed to carry the persistent swings in job growth, less of those swings gets credited to claims. Coefficient estimates, not just standard errors, can shift when you take the time-series structure seriously.
+
+<Callout type="pitfall" title="Newey–West is a bandage, not a cure">
+HAC standard errors fix inference for the slope you estimated. They do not make a mis-specified model right, and they do nothing about the next problem, which is far worse: a "relationship" that does not exist at all.
+</Callout>
+
+## Spurious regression: when two random walks look related
+
+In 1974 Clive Granger and Paul Newbold ran a simple experiment.<sup>[3](#refs)</sup> They generated pairs of **independent** <Term def="A series where each value equals the previous value plus a new random shock. It wanders with no tendency to return to a mean, like a stock price.">random walks</Term>, regressed one on the other, and counted how often the usual t-test declared the slope "significant". It should happen about 5% of the time.
+
+<Predict client:load
+  question="You regress one random walk of 100 steps on another, completely independent one, and repeat 1,000 times. In roughly what share of regressions will |t| exceed 2?"
+  options={['About 5%, as the test promises', 'About 15%', 'About 40%', 'About 75%']}
+  answer={3}
+  explain="About three in four. In the lab's 1,000 simulations, 75% of levels regressions had |t| > 2, against 6% when both series are differenced first. Granger and Newbold found a similar rate with 50 observations. Try it below."
+/>
+
+<div class="breakout">
+<SpuriousGenerator client:load />
+</div>
+
+Why does it happen? Each random walk drifts away from its starting point and stays there for long stretches. Two such series almost always end up trending in some direction over the sample, so they look related, and the t-test, built for independent errors, cannot tell a shared drift from a real link. The residuals are themselves a random walk, which is the tell-tale sign. Granger and Newbold's rule of thumb: be suspicious whenever $R^2$ is larger than the Durbin–Watson statistic.
+
+<div class="breakout">
+<CodeLab client:load id="ch07-spurious" title="Simulate 1,000 spurious regressions" r={spurR} py={spurPy} pyPackages={['statsmodels']}
+  goal="Show that regressions between independent random walks are 'significant' most of the time, that differencing fixes it, and that more data makes it worse." />
+</div>
+
+The last chart in the lab is the most unsettling: the false-alarm rate climbs from 57% with 25 observations to 88% with 400. More data does not rescue you, because with random walks the t-statistic grows with the square root of the sample size even when there is nothing there.<sup>[4](#refs)</sup>
+
+<KeyIdea>Before regressing one trending series on another, ask whether each one wanders like a random walk. If so, regress changes on changes, or test for cointegration.</KeyIdea>
+
+Two ways out:
+
+- **Difference both series**, as we did with job gains and claims growth in this chapter. Changes of random walks are white noise, and the t-test works again.
+- **Test for <Term def="Two random-walk series are cointegrated if some combination of them is stationary: they wander, but together, tied by a long-run equilibrium.">cointegration</Term>.** Sometimes two wandering series really are tied together (consumption and income, or a stock's price in two markets). Differencing would throw away that long-run link. Chapter 9 shows how to test for it and model it with an error-correction model.
+
+## Structural breaks: when the relationship changes
+
+Even a real relationship can change. A <Term def="A change, at some date, in the parameters of a model: the mean, the slope, or the variance.">structural break</Term> is a date after which the old model no longer fits. Forecasting with a model estimated across a break blends two worlds and fits neither.
+
+If you know the date in advance (a policy change, a pandemic), the **Chow test** (Chow, 1960) compares one model fitted to the whole sample with two models fitted before and after. If you don't know the date, compute the Chow F-statistic at **every** candidate date and take the largest: the **sup-F** (or QLR) test of Andrews (1993). The catch: the largest of many F-statistics is large by chance, so it needs its own, higher critical values.<sup>[5](#refs)</sup>
+
+<div class="breakout">
+<BreakHunter client:load />
+</div>
+
+Two lessons from the break hunter:
+
+- **Annual job growth downshifted around 2000.** The sup-F statistic is 11.2, above its 5% critical value of about 8.6. Average growth was about 2.2% a year from 1960 to 2000 and about 0.7% from 2001 to 2019. The 2008 recession is a deep dip, but it does not show up as a lasting change in the average.
+- **COVID looks like a break, but it is a handful of outliers.** Switch to the claims-to-jobs link. The F-statistic jumps to 129 at March 2020 and is below 2 at the months either side of it. A real regime change would raise F over a range of dates; a spike at one date says that one or two extreme observations are pulling the fit.
+
+<Predict client:load kind="check"
+  question="You test every year from 1968 to 2010 for a break and the largest Chow F is 11.2 in 2000. An ordinary F-table says p = 0.0015. Why is that p-value too small?"
+  options={[
+    'Because annual data are autocorrelated',
+    'Because you picked 2000 *after* searching over 43 dates, so the largest F is large partly by chance',
+    'Because the F-test needs at least 100 observations',
+    'It isn\'t too small; 0.0015 is the right p-value'
+  ]}
+  answer={1}
+  explain="Searching for the best date is a form of data snooping. The sup-F test of Andrews (1993) accounts for it, and gives p = 0.015 here: still significant at 5%, but ten times less certain than the naive number."
+/>
+
+<div class="breakout">
+<CodeLab client:load id="ch07-breaks" title="Date the break in U.S. job growth, then diagnose COVID" r={brkR} py={brkPy}
+  packages={['strucchange']} pyPackages={['statsmodels', 'scipy']}
+  goal="Run sup-F and Bai–Perron break tests on job growth, then compare three ways of handling the COVID months." />
+</div>
+
+<Callout type="math" title="Chow and sup-F in one paragraph">
+With a candidate break after observation $\tau$, let $\text{RSS}_0$ be the residual sum of squares of one model on all $n$ observations, and $\text{RSS}_1+\text{RSS}_2$ that of separate models before and after $\tau$, each with $k$ coefficients. The Chow statistic is
+
+$$
+F(\tau) = \frac{(\text{RSS}_0 - \text{RSS}_1 - \text{RSS}_2)/k}{(\text{RSS}_1+\text{RSS}_2)/(n-2k)}.
+$$
+
+At a known date it follows an $F(k, n-2k)$ distribution. The sup-F statistic is $\max_\tau F(\tau)$ over the middle 70% of the sample ("15% trimming"). Its distribution was derived by Andrews (1993); for $k=1$ the 5% critical value is about 8.7 in Andrews's table (strucchange's approximation, used in the lab and the explorer, gives 8.6), compared with about 4 for a single F-test. `strucchange::Fstats` reports $k \cdot F(\tau)$, which is the same as $F(\tau)$ when $k = 1$. Bai and Perron (1998, 2003) extend the idea to several unknown breaks, as `breakpoints()` does.
+</Callout>
+
+### Handling COVID in a forecasting model
+
+The lab's last step shows how much this matters. Fitted on 2010–2024 with the pandemic months left in, the claims slope is **−30.2**: eight times the pre-COVID value. Your options:
+
+| Approach | What it does | In the lab |
+|---|---|---|
+| Ignore it | Lets a few extreme months set the slope for everything | slope −30.2 |
+| One dummy for the whole period | Shifts the average during 2020–21 but leaves the slope distorted | slope −30.16 |
+| **Pulse dummies**, one per extreme month | Each outlier gets its own intercept, so it no longer pulls the slope | slope −3.84 |
+| Drop those months / shorter window | Same estimate as pulse dummies; simplest to explain | slope −3.84 |
+| Robust methods | Down-weight outliers automatically, e.g. `tsclean()` or robust regression | not shown |
+
+<Callout type="business" title="Pick a treatment and write it down">
+After 2020, forecasters used all of these: dropping the pandemic months, one dummy per month, or models that let the size of shocks jump temporarily. Lenza and Primiceri (2022), for example, show that dropping the extreme months may be acceptable for estimating the parameters, but not for forecasting, because it hides how uncertain the future has become. Their fix keeps the months and models the temporary jump in the size of shocks.<sup>[11](#refs)</sup> Whatever you choose, **say so**: "COVID months excluded from estimation" belongs in the footnote of every forecast you publish, because it changes the numbers.
+</Callout>
+
+## Does adding claims beat the AR?
+
+Now the real test. Forget in-sample t-statistics: does adding claims make **next month's** payroll forecast more accurate than a model that only uses past payrolls? We run a <Term def="An evaluation that mimics real-time forecasting: for each target date, the model is estimated only on data before it, then scored on the value it did not see. 'Pseudo' because the data are today's revised figures, not what was available at the time.">pseudo out-of-sample</Term> test: for every month, fit on everything before it, forecast that month, record the error.
+
+<Callout type="pitfall" title="Leakage: was the predictor known when you forecast?">
+Standing at the end of month $t-1$ to forecast jobs in month $t$, you know claims through month $t-1$, not month $t$. A model that uses same-month claims is a <Term def="An estimate of the current period, made before the official number is published, using data that arrive sooner.">nowcast</Term>: legitimate, but only once month $t$'s claims are in. Almost all of a month's weekly claims figures are published before that month's jobs report (which covers the pay period including the 12th).<sup>[6](#refs)</sup> Score a nowcast as if it were a one-month-ahead forecast and you have leaked the future into your test.
+</Callout>
+
+<Predict client:load
+  question="In the calm 2010–2019 decade, how much does adding last month's claims growth cut the RMSE of a one-month-ahead AR(2) forecast of jobs added?"
+  options={['Not at all: well under 1%', 'About 5%', 'About 15%', 'About 30%']}
+  answer={0}
+  explain="RMSE goes from 116.9 to 116.7 thousand jobs. In normal times, last month's job gains already contain what claims would tell you. Claims earn their keep around turning points, as the next lab shows."
+/>
+
+<div class="breakout">
+<CodeLab client:load id="ch07-oos" title="Scorecard: AR vs AR + claims, without leakage" r={oosR} py={oosPy}
+  packages={['forecast']} pyPackages={['statsmodels', 'scipy']}
+  goal="Run expanding-window one-month-ahead forecasts in four test periods and decide, with a Diebold–Mariano test, whether claims help." />
+</div>
+
+Read the scorecard column by column (RMSE, thousands of jobs):
+
+| Test period | AR(2) | + claims (t−1) | + claims (t), nowcast | What it says |
+|---|---|---|---|---|
+| Calm, 2010–2019 | 116.9 | 116.7 | 116.5 | No gain at all (DM p = 0.83) |
+| Great Recession, 2007–2010 | 166.2 | 163.4 | **150.4** | Lagged claims help a little (p = 0.20); the **nowcast** cuts error by 10% (p = 0.01) |
+| 2022 to Oct 2026, COVID months in training | **198.3** | 417.9 | 222.1 | Claims make the forecast **twice as bad** |
+| 2022 to Oct 2026, COVID months dropped | 149.4 | 150.3 | 149.0 | AR improves by a quarter; claims still add nothing |
+
+So, **do jobless claims tell us where jobs are going?** Honestly: not much, one month ahead, in normal times. Their value is concentrated around turning points, and mostly as a *nowcast* of the current month rather than a forecast of the next. And a model estimated through COVID without care can be worse than ignoring claims entirely. This pattern, indicators that look strong in one period and add little in another, is the main finding of Stock and Watson's large survey of asset prices as leading indicators of output and inflation.<sup>[7](#refs)</sup>
+
+Two more cautions. First, all errors here are around 100,000 to 200,000 jobs, and the Bureau of Labor Statistics itself puts the 90% confidence interval for the monthly payroll change at about ±122,000 from sampling error alone.<sup>[6](#refs)</sup> No model can be much more accurate than the data it is scored on. Second, this is *pseudo* out-of-sample: payrolls are revised for months after release, and we used today's revised numbers. A fully real-time test uses archived data vintages (FRED's companion database, ALFRED, stores them).
+
+## Your turn
+
+Fill in the two blanks (`______`) and press **Run & check**.
+
+<div class="breakout">
+<CodeLab client:load id="ch07-ex1" exercise title="Exercise: impact and long-run multipliers of an ADL(1,1)" r={exR} solution={exSolR} check={exCheckR}
+  py={exPy} solutionPy={exSolPy} checkPy={exCheckPy} packages={['dynlm']} pyPackages={['statsmodels']}
+  goal="Fit an ADL(1,1) of jobs added on claims growth, then compute its impact multiplier and long-run multiplier from the coefficients."
+  hints={['The impact multiplier is the coefficient on same-month claims growth: in R it is the third coefficient, `b[3]`; in Python `b["dcl_0"]`.', 'The long-run multiplier adds up **all** claims coefficients before dividing: `(b[3] + b[4]) / (1 - b[2])`.']} />
+</div>
+
+## Chapter checklist
+
+- Classify indicators by **timing**: leading, coincident, lagging. Find the lead with the **cross-correlation function** and confirm it by shifting the series.
+- Write **ADL models** with `dynlm(y ~ L(y, 1:p) + L(x, 0:q))`, and read the **impact**, **dynamic** and **long-run multipliers**.
+- Time-series errors are autocorrelated: report **Newey–West** standard errors, add lags, or use **regression with ARIMA errors**.
+- Never regress one **random walk** on another in levels: difference both, or test for **cointegration** (Chapter 9).
+- Test for **structural breaks** with Chow (known date) or **sup-F** and `breakpoints()` (unknown date). Treat COVID as outliers with pulse dummies or exclusion, and say so.
+- Judge an indicator **out of sample**, against an AR benchmark, using only data **known at forecast time**.
+
+<InstructorKit
+  minutes={70}
+  data={['ICSA', 'PAYEMS', 'PERMIT', 'INDPRO', 'UNRATE', 'T10Y3M']}
+  objectives={[
+    'Classify economic indicators as leading, coincident or lagging, and estimate a lead time with the cross-correlation function.',
+    'Estimate an ADL model with `dynlm` and interpret impact, dynamic and long-run multipliers.',
+    'Explain why OLS standard errors are overstated with autocorrelated errors, and apply Newey–West errors or regression with ARIMA errors.',
+    'Demonstrate spurious regression by simulation and explain why differencing (or cointegration) is needed.',
+    'Test for structural breaks at known and unknown dates (Chow, sup-F, Bai–Perron), and choose a defensible treatment of the COVID months.',
+    'Evaluate an indicator-based forecast out of sample against an AR benchmark without look-ahead leakage.'
+  ]}
+  discussion={[
+    'Claims cut the nowcast error by 10% in the Great Recession but did nothing in the 2010s. Would you pay for a data feed with that track record? What if it only mattered in recessions, when forecasts matter most?',
+    'A colleague shows you a regression of U.S. GDP on the number of Netflix subscribers with R² = 0.97. What do you check first, and why?',
+    'Your 2026 model drops March 2020 to December 2021. Your manager asks: "Isn\'t that hiding the most important data we have?" How do you answer?'
+  ]}
+  misconceptions={[
+    '“A high correlation at some lag proves the indicator leads.” Smooth, trending series correlate at many lags; the lead must be stable and survive an out-of-sample test.',
+    '“Newey–West standard errors fix spurious regression.” They do not: with two random walks the slope estimate itself is meaningless.',
+    '“A huge F-statistic at March 2020 means the economy changed regime.” A spike at one date is the signature of outliers; a regime change raises F over a range of dates.',
+    '“Using this month’s claims to forecast this month’s jobs is fine because claims come out weekly.” It is a nowcast; scoring it as a forecast leaks future information.'
+  ]}
+>
+
+**Indicator draft (30 minutes).** Teams of three each "draft" one indicator in the lead-lag explorer: claims, building permits, industrial production or the unemployment rate.
+
+1. **Predict (5 min).** Each team writes down whether its indicator leads, lags or moves with job growth, and by how many months.
+2. **Measure (10 min).** Use the explorer (1990–2019) and record the best lead and its correlation. Then tick *Include 2020 to today* and record both again.
+3. **Spurious check (5 min).** Every student clicks *New pair* in the spurious-regression generator five times and counts red lines. Tally the class.
+4. **Report (10 min).** Each team gives a 60-second verdict: "Would you put this indicator in a payroll forecasting model?"
+
+*Expected results (1990–2019):* claims lead by 7 months (r = −0.73); building permits lead by 9 months (r = 0.68); industrial production is strongest at a 4-month lead (r = 0.80) and is best called roughly coincident; the unemployment rate lags by 12 months (r = −0.69). With 2020 onward included, the claims lead collapses to 1 month (r = −0.82) and the correlation at 7 months falls to −0.43. In the spurious check, expect about three red lines in every four clicks; across the lab's 1,000 simulations, 75% of levels regressions had |t| > 2. Close with the out-of-sample scorecard: a strong lead-lag correlation did not translate into better one-month-ahead forecasts in the 2010s.
+
+</InstructorKit>
+
+<div class="refs" id="refs">
+
+**References**
+
+1. The Conference Board. *U.S. Leading Indicators* (component lists for the LEI and CEI). [conference-board.org/topics/us-leading-indicators](https://www.conference-board.org/topics/us-leading-indicators)
+2. The Conference Board. *Technical Notes on the U.S. Composite Indexes* (lagging index components). [conference-board.org](https://conference-board.org/pdf_free/press/US%20LEI%20-%20Tech%20Notes%20NOVEMBER%202019.pdf)
+3. Granger, C. W. J., & Newbold, P. (1974). Spurious regressions in econometrics. *Journal of Econometrics*, 2(2), 111–120.
+4. Phillips, P. C. B. (1986). Understanding spurious regressions in econometrics. *Journal of Econometrics*, 33(3), 311–340.
+5. Chow, G. C. (1960). Tests of equality between sets of coefficients in two linear regressions. *Econometrica*, 28(3), 591–605. Andrews, D. W. K. (1993). Tests for parameter instability and structural change with unknown change point. *Econometrica*, 61(4), 821–856. Bai, J., & Perron, P. (1998). Estimating and testing linear models with multiple structural changes. *Econometrica*, 66(1), 47–78; (2003). Computation and analysis of multiple structural change models. *Journal of Applied Econometrics*, 18(1), 1–22.
+6. U.S. Bureau of Labor Statistics. *The Employment Situation: Technical Note* (reference period; 90% confidence interval for the monthly change in total nonfarm employment). [bls.gov/news.release/empsit.tn.htm](https://www.bls.gov/news.release/empsit.tn.htm). U.S. Department of Labor. *Unemployment Insurance Weekly Claims* (released each Thursday). [dol.gov/ui/data.pdf](https://www.dol.gov/ui/data.pdf)
+7. Stock, J. H., & Watson, M. W. (2003). Forecasting output and inflation: The role of asset prices. *Journal of Economic Literature*, 41(3), 788–829. See also Stock, J. H., & Watson, M. W. (1989). New indexes of coincident and leading economic indicators. *NBER Macroeconomics Annual*, 4, 351–394.
+8. Newey, W. K., & West, K. D. (1987). A simple, positive semi-definite, heteroskedasticity and autocorrelation consistent covariance matrix. *Econometrica*, 55(3), 703–708.
+9. Zeileis, A., Leisch, F., Hornik, K., & Kleiber, C. (2002). strucchange: An R package for testing for structural change in linear regression models. *Journal of Statistical Software*, 7(2), 1–38.
+10. Hyndman, R. J., & Athanasopoulos, G. (2021). *Forecasting: Principles and Practice* (3rd ed.), ch. 10 (dynamic regression models). [otexts.com/fpp3](https://otexts.com/fpp3/)
+11. Lenza, M., & Primiceri, G. E. (2022). How to estimate a vector autoregression after March 2020. *Journal of Applied Econometrics*, 37(4), 688–699.
+
+</div>
+
+<style>{`
+  .refs { font-size: .86rem; color: var(--text-2); margin-top: 3rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+  .ch-body table { margin: 1.4rem 0 2rem; font-size: .88rem; }
+  .ch-body td { vertical-align: top; }
+`}</style>

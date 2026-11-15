@@ -1,0 +1,138 @@
+---
+import Base from './Base.astro';
+import { chapters, parts, bySlug } from '../lib/chapters';
+const { frontmatter, headings = [] } = Astro.props;
+const ch = bySlug(frontmatter.slug);
+const i = chapters.indexOf(ch);
+const prev = chapters[i - 1], next = chapters[i + 1];
+const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
+const href = (s: string) => `${base}chapters/${s}/`;
+const toc = headings.filter((h: any) => h.depth === 2);
+const pad = (n: number) => String(n).padStart(2, '0');
+// Per-chapter signature hero visual: src/components/heroes/<slug>.astro (optional)
+const heroes = import.meta.glob('../components/heroes/*.astro', { eager: true }) as Record<string, any>;
+const Hero = heroes[`../components/heroes/${ch.slug}.astro`]?.default;
+---
+<Base title={`${ch.n}. ${ch.title} · Forecast Lab`} description={ch.question} sidebar>
+  <div class="ch-shell" style={`--ch:${ch.accent}`}>
+    <aside class="ch-side" aria-label="Chapters">
+      <nav>
+        {parts.map((p) => (
+          <div class="side-part">
+            <div class="side-h">{p}</div>
+            {chapters.filter((c) => c.part === p).map((c) => (
+              <a href={href(c.slug)} class:list={['side-a', { on: c.slug === ch.slug }]} data-slug={c.slug} style={`--c:${c.accent}`}>
+                <span class="side-n">{c.n}</span><span>{c.short}</span><span class="side-ok" aria-hidden="true">✓</span>
+              </a>
+            ))}
+          </div>
+        ))}
+      </nav>
+    </aside>
+
+    <main id="main" class="ch-main">
+      <header class="hero">
+        <div class="hero-bg" aria-hidden="true"></div>
+        <div class:list={['hero-in', { 'with-art': !!Hero }]}>
+          <div class="hero-text">
+          <div class="hero-meta"><span class="hero-n">Chapter {ch.n}</span><span>{ch.part}{frontmatter.minutes && `, about ${frontmatter.minutes} minutes`}</span></div>
+          <h1>{ch.title}</h1>
+          <p class="hero-q"><span class="q-mark">Q</span>{ch.question}</p>
+          {frontmatter.build && (
+            <div class="hero-build">
+              <div class="eyebrow">You will build</div>
+              <ul>{frontmatter.build.map((b: string) => <li>{b}</li>)}</ul>
+            </div>
+          )}
+          {frontmatter.skills && <div class="hero-tags">{frontmatter.skills.map((s: string) => <span>{s}</span>)}</div>}
+          </div>
+          {Hero && <div class="hero-art" aria-hidden="true"><Hero /></div>}
+        </div>
+      </header>
+
+      <article class="prose ch-body">
+        <slot />
+      </article>
+
+      <nav class="pn prose" aria-label="Chapter navigation">
+        {prev ? <a class="pn-a" href={href(prev.slug)}><span class="eyebrow">Previous chapter</span><b>{prev.n}. {prev.title}</b></a> : <span />}
+        {next ? <a class="pn-a next" href={href(next.slug)}><span class="eyebrow">Next chapter</span><b>{next.n}. {next.title}</b></a> : <span />}
+      </nav>
+    </main>
+
+    {toc.length > 0 && (
+      <aside class="toc" aria-label="On this page">
+        <div class="eyebrow">On this page</div>
+        {toc.map((h: any) => <a href={`#${h.slug}`} data-id={h.slug}>{h.text}</a>)}
+      </aside>
+    )}
+  </div>
+  <script>
+    // progress checkmarks + mark this chapter visited
+    try {
+      const v = JSON.parse(localStorage.getItem('fl-visited') || '{}');
+      const cur = document.querySelector('.side-a.on') as HTMLElement | null;
+      if (cur?.dataset.slug) { v[cur.dataset.slug] = Date.now(); localStorage.setItem('fl-visited', JSON.stringify(v)); }
+      document.querySelectorAll<HTMLElement>('.side-a').forEach((a) => { if (v[a.dataset.slug!]) a.classList.add('seen'); });
+    } catch {}
+    // scroll-spy for TOC
+    const links = [...document.querySelectorAll<HTMLAnchorElement>('.toc a')];
+    const io = new IntersectionObserver((es) => {
+      es.forEach((e) => { if (e.isIntersecting) { links.forEach((l) => l.classList.toggle('on', l.dataset.id === e.target.id)); } });
+    }, { rootMargin: '-20% 0px -70% 0px' });
+    links.forEach((l) => { const t = document.getElementById(l.dataset.id!); if (t) io.observe(t); });
+  </script>
+  <style is:global>
+    .ch-shell { display: grid; grid-template-columns: 250px minmax(0, 1fr) 210px; gap: 0; }
+    @media (max-width: 1280px) { .ch-shell { grid-template-columns: 240px minmax(0, 1fr); } .toc { display: none; } }
+    @media (max-width: 1000px) { .ch-shell { grid-template-columns: minmax(0, 1fr); } .ch-side { display: none; } }
+    .ch-side { position: sticky; top: var(--header-h); height: calc(100vh - var(--header-h)); overflow: auto; padding: 1.4rem .8rem 2rem 1rem; border-right: 1px solid var(--border); scrollbar-width: thin; }
+    .side-part { margin-bottom: 1.1rem; }
+    .side-h { font-size: .8rem; font-weight: 650; color: var(--text-2); padding: 0 .55rem .35rem; }
+    .side-a { display: flex; align-items: center; gap: .6rem; padding: .36rem .55rem; border-radius: 8px; font-size: .85rem; color: var(--text-2); text-decoration: none !important; position: relative; }
+    .side-a:hover { background: var(--surface-2); color: var(--text); }
+    .side-a.on { background: color-mix(in srgb, var(--c) 14%, transparent); color: var(--text); font-weight: 600; }
+    .side-a.on::before { content: ''; position: absolute; left: -1rem; top: 6px; bottom: 6px; width: 3px; border-radius: 3px; background: var(--c); }
+    .side-n { font: 650 .76rem var(--font-ui); font-variant-numeric: tabular-nums; color: var(--c); width: 1.2rem; text-align: right; }
+    .side-ok { margin-left: auto; font-size: .7rem; color: var(--good); opacity: 0; }
+    .side-a.seen .side-ok { opacity: .8; }
+    .ch-main { min-width: 0; container-type: inline-size; }
+    .hero { position: relative; overflow: hidden; border-bottom: 1px solid var(--border); padding: 4.5rem 22px 3.2rem; }
+    .hero-bg { position: absolute; inset: 0; background:
+      radial-gradient(60% 80% at 15% 0%, color-mix(in srgb, var(--ch) 28%, transparent), transparent 70%),
+      radial-gradient(50% 70% at 95% 20%, rgba(34,211,238,.12), transparent 70%),
+      linear-gradient(180deg, transparent, var(--bg));
+      mask-image: linear-gradient(180deg, #000 60%, transparent); }
+    .hero-bg::after { content: ''; position: absolute; inset: 0; background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px); background-size: 44px 44px; opacity: .35; mask-image: radial-gradient(70% 90% at 30% 0%, #000, transparent); }
+    .hero-in { position: relative; max-width: var(--measure); margin: 0 auto; }
+    .hero-in.with-art { max-width: 1120px; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 2.5rem; align-items: center; }
+    @media (max-width: 1100px) { .hero-in.with-art { grid-template-columns: 1fr; max-width: var(--measure); } .hero-art { order: 1; min-height: 0; max-width: 420px; margin: 0 auto; } }
+    .hero-art { position: relative; min-height: 280px; display: grid; place-items: center; }
+    .hero-art svg { width: 100%; height: auto; overflow: visible; }
+    .hero h1 { margin: .5rem 0 1rem; }
+    .hero-meta { font-size: .8rem; color: var(--text-2); display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+    .hero-n { font-weight: 700; color: var(--bg); background: var(--ch); padding: .12rem .55rem; border-radius: 6px; }
+    .hero-meta { gap: .7rem !important; }
+    .dot { color: var(--muted); }
+    .hero-q { font-size: 1.28rem; line-height: 1.5; color: var(--text-2); display: flex; gap: .8rem; align-items: baseline; margin-bottom: 1.6rem; font-family: var(--font-display); font-style: italic; }
+    .q-mark { font: 800 .72rem var(--font-ui); font-style: normal; color: #fff; background: var(--ch); border-radius: 6px; padding: .18rem .45rem; transform: translateY(-3px); }
+    .hero-build { background: color-mix(in srgb, var(--surface) 75%, transparent); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.2rem .6rem; backdrop-filter: blur(6px); }
+    .hero-build ul { margin: .5rem 0 .4rem; padding-left: 1.1rem; }
+    .hero-build li { margin: .2rem 0; color: var(--text); }
+    .hero-build li::marker { color: var(--ch); }
+    .hero-tags { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: 1rem; }
+    .hero-tags span { font: 600 .72rem var(--font-mono); padding: .25rem .6rem; border-radius: 99px; border: 1px solid var(--border-strong); color: var(--text-2); background: var(--surface); }
+    .ch-body { padding-top: 2.5rem; }
+    .ch-body > h2 { position: relative; }
+    .ch-body > h2::before { content: ''; display: block; width: 40px; height: 3px; border-radius: 3px; background: var(--ch); margin-bottom: .9rem; }
+    .pn { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 4rem; }
+    .pn-a { display: grid; gap: .3rem; padding: 1rem 1.2rem; border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); text-decoration: none !important; background: var(--surface); transition: border-color .2s, transform .2s; }
+    .pn-a:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .pn-a.next { text-align: right; }
+    .toc { position: sticky; top: var(--header-h); height: calc(100vh - var(--header-h)); padding: 2.2rem 1rem; display: flex; flex-direction: column; gap: .15rem; font-size: .8rem; }
+    .toc .eyebrow { margin-bottom: .5rem; }
+    .toc a { color: var(--muted); padding: .25rem .6rem; border-left: 2px solid var(--border); text-decoration: none; }
+    .toc a:hover { color: var(--text); }
+    .toc a.on { color: var(--text); border-left-color: var(--ch); }
+  </style>
+</Base>

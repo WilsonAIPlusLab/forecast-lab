@@ -1,0 +1,33 @@
+#| **One series, many views.** `RSXFSN` is U.S. retail sales excluding food services, in millions of dollars, **not seasonally adjusted** (NSA), so every December spikes.
+retail = fred("RSXFSN", start=2015)
+
+#| **Differences** in the data's own units: `diff()` is $x_t - x_{t-1}$, the change in millions of dollars from the previous month. The first value becomes `NaN` because there is no previous month.
+d1 = retail.diff()
+print(d1["2026-01":])
+
+#| **Percent changes.** `shift(1)` is last month and `shift(12)` the same month a year earlier. Dividing by hand keeps the meaning explicit.
+mom = 100 * (retail / retail.shift(1) - 1)
+yoy = 100 * (retail / retail.shift(12) - 1)
+
+#| **Logs turn growth into differences.** $100 \times \Delta\log x_t$ is almost exactly the percent change for small moves and drifts away for big ones, such as December's holiday jump and January's drop.
+dlog = 100 * np.log(retail).diff()
+print(pd.DataFrame({"mom": mom, "dlog": dlog})["2025-11":"2026-04"].round(2))
+
+#| **Annualized rates** compound one month's growth over 12 months. Use **seasonally adjusted** data only, so we switch to `RSAFS` (retail and food services, SA).
+sa = fred("RSAFS", start=2015)
+ann = 100 * ((sa / sa.shift(1)) ** 12 - 1)
+
+#| **Index to 100**: divide by the 2019 average. Every value now reads as "percent of the 2019 level".
+idx = 100 * retail / retail["2019"].mean()
+
+#| **Side by side** for the last six months. MoM zigzags with the calendar; YoY is steadier.
+tab = pd.DataFrame({"Month": retail.index.strftime("%b %Y"), "Level ($M)": retail.values,
+                    "MoM %": mom.values, "YoY %": yoy.values, "100 x dlog": dlog.values,
+                    "Annualized % (SA)": ann.reindex(retail.index).values,
+                    "Index 2019=100": idx.values}).tail(6)
+print(tab.round(2).to_string(index=False))
+viz_table(tab, digits=1, title="Six months of retail sales, six ways to read them")
+
+#| **See the difference**: MoM growth of NSA data shows the calendar, YoY growth shows the trend.
+viz_ts(**{"Month over month": mom["2019":], "Year over year": yoy["2019":]}, ylab="% change",
+       title="For seasonal data, MoM shows the calendar; YoY shows the trend")

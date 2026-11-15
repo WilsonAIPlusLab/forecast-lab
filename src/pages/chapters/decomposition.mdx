@@ -1,0 +1,339 @@
+---
+layout: ../../layouts/Chapter.astro
+slug: decomposition
+minutes: 50
+build:
+  - A seasonal adjustment of U.S. retail sales with STL that lands within 1% of the Census Bureau's official X-13 numbers
+  - A seasonal-strength ranking of eight kinds of stores, and the COVID trap hiding in it
+  - A one-month "good or bad?" verdict that survives the December spike
+skills: [seasonal plot, subseries plot, decompose, stl, s.window, robust, seasonal adjustment, X-13ARIMA-SEATS, seasonal strength, tslm, diff]
+---
+import CodeLab from '../../components/CodeLab.svelte';
+import Callout from '../../components/Callout.astro';
+import KeyIdea from '../../components/KeyIdea.astro';
+import Predict from '../../components/Predict.svelte';
+import Term from '../../components/Term.astro';
+import InstructorKit from '../../components/InstructorKit.astro';
+import DecompScrolly from '../../components/ch02/DecompScrolly.svelte';
+import AddMultToggle from '../../components/ch02/AddMultToggle.svelte';
+import StlExplorer from '../../components/ch02/StlExplorer.svelte';
+import FingerprintGame from '../../components/ch02/FingerprintGame.svelte';
+import MonthVerdict from '../../components/ch02/MonthVerdict.svelte';
+import plotsR from '../../labs/ch02/seasonal_plots.R?raw';
+import plotsPy from '../../labs/ch02/seasonal_plots.py?raw';
+import stlR from '../../labs/ch02/stl.R?raw';
+import stlPy from '../../labs/ch02/stl.py?raw';
+import strengthR from '../../labs/ch02/strength.R?raw';
+import strengthPy from '../../labs/ch02/strength.py?raw';
+import detrendR from '../../labs/ch02/detrend.R?raw';
+import detrendPy from '../../labs/ch02/detrend.py?raw';
+import exR from '../../labs/ch02/exercise.R?raw';
+import exSolR from '../../labs/ch02/exercise_solution.R?raw';
+import exCheckR from '../../labs/ch02/exercise_check.R?raw';
+import exPy from '../../labs/ch02/exercise.py?raw';
+import exSolPy from '../../labs/ch02/exercise_solution.py?raw';
+import exCheckPy from '../../labs/ch02/exercise_check.py?raw';
+
+<p class="lede">It is mid-January. Your manager forwards a chart: U.S. retail sales jumped <strong>11.8%</strong> from November to December 2025, and the line shoots up like a rocket. "Should we raise our 2026 plan?" Before you answer, you need to know how much of that jump was growth and how much was simply December.</p>
+
+Every December looks like a boom, and every January looks like a bust. Shoppers buy gifts in December every single year. A forecaster's first job with monthly data is to separate the part of the movement that repeats with the calendar from the part that tells you something new. This chapter teaches you to do that, with the same ideas the Census Bureau uses to publish the official numbers.
+
+<Predict client:load
+  question="Retail sales (not seasonally adjusted) rose **11.8%** from November to December 2025. Once the normal December effect is removed, what do you expect the growth to be?"
+  options={['About +12%: December was a genuine boom', 'About +6%: half real, half seasonal', 'Between 0% and +3%: almost all of it was just December', 'About −5%: December was actually weak']}
+  answer={2}
+  explain="The Census Bureau's seasonally adjusted figure for this aggregate rose about **0.2%**, and the STL adjustment you will build in this chapter says about **2.1%**. A typical December sits about 12% above the underlying level and a typical November about 2% above it, so an ordinary November-to-December jump is already about 9.5%. Scroll on to see where the other 10 points went."
+/>
+
+## Pulling a series apart
+
+A monthly sales series is the product of three forces. Pull them apart and each one answers a different business question.
+
+- The <Term def="The long-run movement of the series once the calendar's ups and downs are smoothed away. Some textbooks call it the trend-cycle because it also contains slower business-cycle swings.">trend</Term>: is the business growing?
+- The <Term def="A pattern that repeats every year (or week, or day) because of the calendar: holidays, weather, school years, tax deadlines.">seasonal component</Term>: what does a normal month look like?
+- The <Term def="Whatever is left after removing trend and seasonality: one-off shocks, surprises and noise. Also called the irregular component.">remainder</Term>: what was unusual this month?
+
+Scroll through the story. The chart stays put while the series comes apart.
+
+<div class="breakout">
+<DecompScrolly client:load />
+</div>
+
+The biggest remainders in the story mark real events: the April 2020 lockdowns, and the spring of 2021, when the third round of federal stimulus payments began arriving within days of the American Rescue Plan becoming law.<sup>[10](#refs)</sup> The remainder is where a forecaster looks for news.
+
+<KeyIdea>Seasonal movement is not news. To judge a month, compare it with what that month normally looks like: remove the seasonal component, or compare with the same month a year earlier.</KeyIdea>
+
+<Callout type="math" title="Additive and multiplicative decompositions">
+Write $y_t$ for the data, $T_t$ for the trend, $S_t$ for the seasonal component and $R_t$ for the remainder.
+
+$$
+\text{Additive: } y_t = T_t + S_t + R_t \qquad\qquad \text{Multiplicative: } y_t = T_t \times S_t \times R_t
+$$
+
+In the additive form, $S_t$ is measured in the data's units ("December adds \$60 billion"). In the multiplicative form, $S_t$ is a factor around 1 ("December is 1.12 times the trend"). The **seasonally adjusted** series removes only the seasonal part: $y_t - S_t$ (additive) or $y_t / S_t$ (multiplicative). Taking logs turns the second form into the first:
+
+$$
+\log y_t = \log T_t + \log S_t + \log R_t
+$$
+
+That is why the scroll story runs STL on $\log y_t$ and reports the layers in percent.
+</Callout>
+
+## Three plots before any model
+
+Every analysis of a monthly series starts with three pictures. The first lab draws all three for retail sales, then runs the oldest decomposition method there is.
+
+1. A **time plot**: the series against time. It shows trend, seasonality, breaks and outliers at a glance.
+2. A <Term def="A chart with the months of the year on the x-axis and one line per year. Same shape every year = seasonality; lines stacked above each other = trend.">seasonal plot</Term>: one line per year, January to December. Same shape every year means seasonality. Lines stacked above each other mean trend.
+3. A <Term def="Also called a cycle plot: for each calendar month, a small line showing that month's value across the years, plus a bar for its average. It shows whether a month's effect is stable or changing.">seasonal subseries plot</Term>: all the Januaries together, all the Februaries together, and so on. It shows whether each month's effect is stable or drifting.
+
+<div class="breakout">
+<CodeLab client:load id="ch02-plots" title="Seasonal plots and a classical decomposition" r={plotsR} py={plotsPy} packages={['forecast']} pyPackages={['statsmodels']} goal="Draw a time plot, a seasonal plot and a subseries plot of retail sales, then split the series with decompose()." />
+</div>
+
+The seasonal figure says a typical December sits about **\$61.9 billion** above trend and a typical February about **\$58.8 billion** below it (2015 onward). December was the biggest month of every year in this sample. It was not always so: in 2008, May beat December. Stimulus payments began arriving in late April 2008,<sup>[9](#refs)</sup> and the financial crisis hit that year's holiday season.
+
+<Callout type="pitfall" title="Three weaknesses of classical decomposition">
+`decompose()` is easy to understand, but it has three flaws you can see in the lab output. It produces **no trend for the first and last six months**, which is exactly the recent data you care about. It forces the **seasonal pattern to be identical every year**. And a single shock such as April 2020 pulls the moving average down for a whole year around it. STL, below, fixes all three.
+</Callout>
+
+## Additive or multiplicative?
+
+E-commerce sales (electronic shopping and mail-order houses, NSA) grew almost sixfold between 2000 and 2019. Did December's boost grow with them?
+
+<Predict client:load
+  question="In December 2000, the holiday season added a few billion dollars to U.S. online sales. By 2018 online sales were about five times larger. What would you expect December's boost to be in 2018?"
+  options={['About the same number of dollars as in 2000', 'About the same percentage of sales as in 2000, so roughly five times as many dollars', 'Smaller, because online shopping became routine all year']}
+  answer={1}
+  explain="Seasonal effects in sales usually scale with the size of the business: the same share of customers shop for gifts, whatever the total. Toggle the explorer below between additive and multiplicative and watch the December remainders."
+/>
+
+<div class="breakout">
+<AddMultToggle client:load />
+</div>
+
+The additive model gives December the same **\$9.5 billion** in 2000 and in 2018. That is far too much for 2000 and far too little for 2018, so the December remainders slope from big negatives to big positives. The multiplicative model gives December a fixed **+39.1%**, which is about \$3.8 billion in 2000 and \$19.3 billion in 2018. The remainder's correlation with itself twelve months earlier falls from 0.79 to about 0.4: most of the seasonal pattern that was leaking into the remainder is gone.
+
+<Callout type="tip" title="The log rule of thumb">
+If the seasonal swings grow as the level grows, take logs first and use an additive method on $\log y$. Every method in this course (STL, ETS, ARIMA, regression) then works in percentages. Two caveats: logs need strictly positive data, and results come back in log units, so use `exp()` to return to dollars.
+</Callout>
+
+## STL: a decomposition that bends
+
+<Term def="Seasonal and Trend decomposition using Loess (Cleveland et al., 1990). It estimates trend and seasonal components with repeated local regressions and can down-weight outliers.">STL</Term> stands for *Seasonal and Trend decomposition using Loess*.<sup>[1](#refs)</sup> <Term def="Locally weighted regression: to estimate the value at one date, fit a small regression to nearby points only, with closer points weighted more.">Loess</Term> fits a small regression around each point, using only nearby observations, so STL's trend and seasonal pattern are both allowed to change slowly over time. Two windows control how slowly.
+
+- **`s.window`**, the seasonal window, is measured in *years*. Each month's seasonal effect is smoothed across that many Januaries (or Februaries…). Small values let the pattern change quickly. `"periodic"` freezes it.
+- **`t.window`**, the trend window, is measured in *months*. Larger values give a smoother trend. R picks a default from the period and `s.window`.
+- **`robust = TRUE`** runs STL repeatedly. After each pass it down-weights months with huge remainders, so a shock like COVID stays in the remainder instead of bending the trend and the seasonal pattern.
+
+The explorer runs the real algorithm in your browser. It is a line-by-line port of the code R's `stl()` calls, checked against R to eleven decimal places.
+
+<div class="breakout">
+<StlExplorer client:load />
+</div>
+
+Try these four settings and compare what you see with these numbers from R.
+
+| Setting | April 2020 in the remainder | December effect, 2025 | What happens |
+|---|---|---|---|
+| `s.window = 13`, robust | −18.9% | +11.6% | The lockdown stays in the remainder; December drifts down slowly |
+| `s.window = 13`, **not** robust | −14.9% | +11.7% | About a fifth of the collapse leaks into trend and seasonal |
+| `s.window = 7`, not robust | −13.6% | +11.0% | The April seasonal wobbles from −5.2% (2019) to −0.5% (2022): it is absorbing COVID |
+| `"periodic"`, robust | −19.2% | +14.4% | One fixed pattern. December's effect has shrunk since 2005, so December remainders slide from +1.3% (2005–09) to −3.1% (2021–25) |
+
+<Predict client:load kind="check"
+  question="You fit STL and notice that the December remainders trend steadily downward over the years. What should you change?"
+  options={['Make `s.window` smaller, so the seasonal pattern can change faster', 'Make `s.window` larger, so the seasonal pattern is more stable', 'Turn off `robust`', 'Make `t.window` larger']}
+  answer={0}
+  explain="A trend in one month's remainders means the true seasonal effect is changing faster than your seasonal window allows. A smaller `s.window` lets the seasonal component follow it. Don't overdo it: a very small window starts absorbing one-off shocks, as `s.window = 7` did with COVID."
+/>
+
+Now the real thing in code: fit STL, seasonally adjust, and compare your result with the Census Bureau's.
+
+<div class="breakout">
+<CodeLab client:load id="ch02-stl" title="Seasonally adjust retail sales with STL" r={stlR} py={stlPy} pyPackages={['statsmodels']} goal="Decompose log retail sales with robust STL, build a seasonally adjusted series and compare it with the official Census numbers." />
+</div>
+
+Your twenty-line adjustment differs from the official series by **0.81%** on average. The robust fit flagged 14 months as outliers: the 2008–09 crisis, the spring of 2020 and the stimulus-fueled spring of 2021, among others. The Python version gives the same numbers because it passes R's settings to `statsmodels`.
+
+## How the official numbers are made
+
+The **SA** and **NSA** labels on FRED series matter. <Term def="Not seasonally adjusted: the raw values, with all the calendar's ups and downs.">NSA</Term> data show the calendar's fingerprints. <Term def="Seasonally adjusted: the seasonal (and usually calendar) component has been estimated and removed, so consecutive months can be compared directly.">SA</Term> data have them removed, so you can compare one month with the next.
+
+- The **Census Bureau** adjusts retail sales with **X-13ARIMA-SEATS**, its own seasonal adjustment program. The adjustment covers seasonal variation and also **trading-day and holiday differences**, but not price changes.<sup>[3](#refs),[4](#refs)</sup>
+- The **Bureau of Labor Statistics** also uses X-13ARIMA-SEATS, for the CPI and for the payroll employment survey.<sup>[5](#refs),[6](#refs)</sup>
+- X-13 fits an ARIMA model (Chapter 6) to **extend the series with forecasts** before filtering. That reduces the end-point problem you saw with `decompose()`.<sup>[4](#refs)</sup>
+- Adjustment is **concurrent**: every new month re-estimates the factors, so recent seasonally adjusted values get revised.<sup>[3](#refs)</sup>
+- Some series are also **annualized**. `HOUST` (housing starts, SA) is a seasonally adjusted *annual rate*: the monthly pace multiplied by 12. `HOUSTNSA` is the raw monthly count. Divide `HOUST` by 12 before comparing the two.
+
+<Callout type="intuition" title="Calendar effects: the calendar is not the same every year">
+Seasonality is the effect of the *month*. Calendar effects are the extra wrinkles that come from the *particular year's* calendar.
+
+- **Length of month.** February has 28 days, about 8% fewer than the average month (28 ÷ 30.4 ≈ 0.92). Turn on *per day* in the fingerprint game below and much of February's dip disappears for restaurants and grocery stores.
+- **Trading days.** November 2025 had five Saturdays and five Sundays; December 2025 had four of each. For stores whose sales depend on the day of the week, the same month can be bigger or smaller depending on how its weekdays fall.
+- **Moving holidays.** Easter falls anywhere from March 22 to April 25, shifting spring spending between March and April. Census research finds elevated sales before Easter in many retail series.<sup>[7](#refs)</sup> Thanksgiving is the fourth Thursday of November (November 22–28). When it is late, as on November 27, 2025, Cyber Monday falls in December (December 1, 2025), and the holiday shopping season is shorter.
+
+X-13 models these effects with regression variables, alongside the seasonal pattern. STL does not, which is one reason our homemade adjustment differs from the official one in individual months.
+</Callout>
+
+<Callout type="pitfall" title="Three ways to get seasonal adjustment wrong">
+<ul>
+<li><strong>Mixing SA and NSA.</strong> Never compute growth from an NSA month to an SA month, or plot them as one series.</li>
+<li><strong>Adjusting twice.</strong> Running STL on an SA series finds almost nothing, and what it finds is noise.</li>
+<li><strong>Trusting the last few points too much.</strong> Every method is least certain at the end of the series, and official figures are revised as new data arrive.</li>
+</ul>
+</Callout>
+
+## Every store has a seasonal fingerprint
+
+Total retail sales mix very different businesses. Each one has its own calendar. Can you recognize a store from its year alone?
+
+<div class="breakout">
+<FingerprintGame client:load />
+</div>
+
+To compare seasonality across series, you need a number. Hyndman and Athanasopoulos define the <Term def="F_S = max(0, 1 − Var(R) / Var(S + R)). Close to 1 means the seasonal pattern dominates the remainder; close to 0 means little seasonality.">seasonal strength</Term> of a decomposition as<sup>[2](#refs)</sup>
+
+$$
+F_S = \max\left(0,\; 1 - \frac{\text{Var}(R_t)}{\text{Var}(S_t + R_t)}\right).
+$$
+
+If the remainder is tiny compared with the seasonal swings, $F_S$ is close to 1. If the remainder is as big as everything else, $F_S$ is close to 0.
+
+<Predict client:load
+  question="Before COVID, clothing stores had a seasonal strength of about **0.99**. What happens to it if you add 2020–2026 to the sample?"
+  options={['It barely changes: the seasonal pattern is the same', 'It rises: more years make the pattern clearer', 'It falls sharply, to about 0.5']}
+  answer={2}
+  explain="Clothing sales collapsed in spring 2020. Robust STL correctly put that collapse in the remainder, which inflates Var(R). $F_S$ is a ratio of variances, so one enormous shock swamps a perfectly regular pattern. Clothing falls from 0.989 to 0.498, restaurants from 0.912 to 0.289. Always ask which years a summary statistic covers."
+/>
+
+<div class="breakout">
+<CodeLab client:load id="ch02-strength" title="Rank store types by seasonal strength" r={strengthR} py={strengthPy} pyPackages={['statsmodels']} goal="Compute the seasonal strength and peak month of eight retail categories, before and after COVID, and rank them in a bar chart." />
+</div>
+
+Before COVID, every category scored at least 0.79, and clothing (0.989) and electronics (0.980) led the ranking. Gas stations came last at 0.798: their summer peak is real, but their sales also swing with gasoline prices, which tend to rise through spring and peak in summer while also moving with crude oil from month to month.<sup>[8](#refs)</sup> Building materials and restaurants peak in **May**, gas stations in **August**, everything else in **December**.
+
+<Callout type="business" title="Why a planner cares about seasonal strength">
+Seasonal strength tells you where calendar-based planning pays off. A clothing chain can staff and stock for December months in advance, because December is predictable. A gas station chain can't plan its revenue that way: prices, not the calendar, drive its sales. High seasonal strength also means a **seasonal naive** forecast (Chapter 3) will be hard to beat.
+</Callout>
+
+## Is this month good or bad?
+
+The question you will be asked most often in a business job is not "decompose this series" but "was last month good?" There are four common ways to answer, and they can disagree.
+
+<div class="breakout">
+<MonthVerdict client:load />
+</div>
+
+For December 2025, the raw change is +11.8%. A typical December over the previous five years rose 9.1% (the median), so December 2025 beat its seasonal norm by about 2.8 points. Sales were 3.4% above December 2024. The Census seasonally adjusted change was +0.2%. Three different questions, three different answers, all of them more honest than the headline.
+
+| Method | What it answers | Watch out for |
+|---|---|---|
+| Seasonally adjusted, month over month | Is the underlying pace speeding up right now? | Noisy; revised later; depends on the adjustment method |
+| Year over year (same month last year) | How do we compare with a year ago? | Lags turning points by months; distorted if last year was unusual (2021 vs 2020) |
+| Raw change vs the seasonal norm | Did this month beat a normal version of itself? | The "norm" depends on which years you average |
+
+### Removing trend and seasonality: two routes
+
+Some methods want a series with no trend and no seasonality. You can get one in two ways, and the next lab compares them.
+
+- **Regression on time** fits a deterministic trend plus month dummies (Chapter 4) and keeps the residuals.
+- **Differencing** subtracts the value 12 months earlier, leaving year-over-year growth. ARIMA models (Chapter 6) are built on this idea.
+
+<div class="breakout">
+<CodeLab client:load id="ch02-detrend" title="Detrend by regression or by differencing" r={detrendR} py={detrendPy} packages={['forecast']} pyPackages={['statsmodels']} goal="Remove trend and seasonality from log retail sales twice, by regression and by differencing, and compare what is left." />
+</div>
+
+From 2010 to 2019 the regression finds trend growth of 0.30% per month, about **3.7% per year**, and puts a typical December about 25 log points (roughly 28%) above January. The regression residuals stay above or below zero for years at a time (2010 averages −3.2%, 2014 +1.9%), because a straight line cannot follow a trend that bends. Chapter 6 shows when differencing is the better choice.
+
+## Your turn
+
+Was December 2025 a good month? Fill in the two blanks (`______`) and press **Run & check**.
+
+<div class="breakout">
+<CodeLab client:load id="ch02-ex1" exercise title="Exercise: seasonally adjust December 2025" r={exR} solution={exSolR} check={exCheckR} py={exPy} solutionPy={exSolPy} checkPy={exCheckPy} pyPackages={['statsmodels']}
+  goal="Remove the seasonal component from retail sales with STL, then compute the seasonally adjusted growth from November to December 2025 and compare it with the raw jump."
+  hints={['Seasonal adjustment on the log scale is the log data minus the seasonal component. That component is stored in the object `seasonal`.', 'Growth is (new value / old value) − 1. `last2` holds November and December, in that order, so December is `last2[2]` (Python: `sa["2025-11-01"]` is November).']} />
+</div>
+
+## Chapter checklist
+
+- **Plot first:** a time plot, a seasonal plot and a subseries plot show trend, seasonality and outliers before any model.
+- If seasonal swings grow with the level, the seasonality is **multiplicative**: take **logs** and use an additive method.
+- **Classical decomposition** is a good teaching tool but loses the ends, freezes the seasonal pattern and is hurt by outliers.
+- **STL** lets trend and seasonality change: `s.window` sets how fast the seasonal pattern moves, `t.window` how smooth the trend is, `robust = TRUE` keeps shocks in the remainder. Check the remainder for leftover pattern.
+- **Seasonally adjusted = data minus the seasonal component** (or divided by it). Official SA series come from X-13ARIMA-SEATS and also remove trading-day and holiday effects.
+- Judge a month against its seasonal norm, against the same month last year, or with SA data. **Never by the raw month-to-month change.**
+
+<InstructorKit
+  minutes={60}
+  data={['RSXFSN', 'RSAFS', 'RSFSDP', 'MRTSSM4541USN', 'MRTSSM4541USS', 'MRTSSM448USN', 'RSCCAS', 'HOUSTNSA', 'HOUST', 'TOTALNSA', 'TOTALSA']}
+  objectives={[
+    'Read a time plot, a seasonal plot and a seasonal subseries plot, and say what each one reveals.',
+    'Decide between additive and multiplicative seasonality, and explain why taking logs turns one into the other.',
+    'Decompose a monthly series with `decompose()` and `stl()`, and explain the role of `s.window`, `t.window` and `robust`.',
+    'Build a seasonally adjusted series and compare it with an official X-13ARIMA-SEATS series.',
+    'Compute and interpret the seasonal strength $F_S$, including how outliers distort it.',
+    'Judge whether a month was good or bad using SA data, year-over-year growth and a seasonal norm.'
+  ]}
+  discussion={[
+    'A news story says "retail sales jumped 12% in December". What two questions would you ask before repeating it?',
+    'Year-over-year growth needs no model. Why do economists still prefer seasonally adjusted month-over-month changes for spotting turning points?',
+    'Should a seasonal adjustment method treat April 2020 as an outlier or as a new seasonal pattern? What would go wrong in 2021 under each choice?'
+  ]}
+  misconceptions={[
+    '“Seasonally adjusted data have been smoothed.” Adjustment removes only the seasonal (and calendar) component; the remainder, with all its noise, stays in.',
+    '“A big December increase means strong sales.” Between 2019 and 2025, December rose about 8–14% over November every year (NSA), news or no news.',
+    '“A larger seasonal strength always means a more predictable business.” $F_S$ falls when a single shock inflates the remainder, even if the seasonal pattern is unchanged.',
+    '“STL and X-13 should give identical results.” They are different methods; X-13 also adjusts for trading days and holidays and extends the series with ARIMA forecasts.'
+  ]}
+>
+
+**Seasonal adjustment desk (25 minutes).** Split the class into four teams. Each team gets one NSA series and its official SA counterpart, and takes the role of a statistical agency.
+
+| Team | NSA series | Official SA series to compare with |
+|---|---|---|
+| Housing | `HOUSTNSA` | `HOUST / 12` (HOUST is an annual rate) |
+| E-commerce | `MRTSSM4541USN` | `MRTSSM4541USS` |
+| Clothing | `MRTSSM448USN` | `RSCCAS` |
+| Cars | `TOTALNSA` (thousands) | `TOTALSA * 1000 / 12` (millions, annual rate) |
+
+1. **Predict (3 min).** Which month will be the seasonal peak? How seasonal is the series, on a 0–1 scale?
+2. **Adjust (12 min).** Edit the STL lab: change the series ID, run `stl(log(x), s.window = 13, robust = TRUE)` from 2005, compute $F_S$, and compare the adjusted series with the official one.
+3. **Brief (10 min).** Each team reports the peak month, $F_S$, the average gap to the official series, and its verdict on December 2025 (seasonally adjusted, Nov → Dec).
+
+*Expected results* (STL, `s.window = 13`, robust, 2005 onward):
+
+| Team | Peak month (2025) | $F_S$ | Avg gap to official | Dec 2025 SA growth: ours / official / raw NSA |
+|---|---|---|---|---|
+| Housing | Jun | 0.676 | 1.71% | +1.3% / +4.5% / −1.5% |
+| E-commerce | Dec | 0.935 | 1.68% | +4.3% / +0.1% / +16.9% |
+| Clothing | Dec | 0.565 | 1.95% | −1.8% / −0.6% / +35.3% |
+| Cars | Mar | 0.600 | 2.36% | −0.6% / +1.5% / +14.8% |
+
+Use the disagreements in the last column to discuss end-point uncertainty and calendar effects: all four homemade adjustments are close on average (within about 2.4%), yet individual months can differ by several points. For clothing, ask why $F_S$ is so low for such an obviously seasonal business (answer: the 2020 collapse in the remainder; on 2010–2019 data it is 0.989).
+
+</InstructorKit>
+
+<div class="refs" id="refs">
+
+**References**
+
+1. Cleveland, R. B., Cleveland, W. S., McRae, J. E., & Terpenning, I. (1990). STL: A seasonal-trend decomposition procedure based on loess. *Journal of Official Statistics*, 6(1), 3–73.
+2. Hyndman, R. J., & Athanasopoulos, G. (2021). *Forecasting: Principles and Practice* (3rd ed.), ch. 3 (time series decomposition) and §4.3 (STL features, seasonal strength). [otexts.com/fpp3](https://otexts.com/fpp3/)
+3. U.S. Census Bureau. Monthly Retail Trade: adjustment factors and seasonal adjustment. [census.gov/retail/marts/www/adfactor.html](https://www.census.gov/retail/marts/www/adfactor.html)
+4. U.S. Census Bureau. *X-13ARIMA-SEATS Reference Manual* and program documentation. [census.gov/data/software/x13as.html](https://www.census.gov/data/software/x13as.html)
+5. U.S. Bureau of Labor Statistics. Seasonal adjustment in the CPI. [bls.gov/cpi/seasonal-adjustment](https://www.bls.gov/cpi/seasonal-adjustment/estimation-seasonal-effects.htm)
+6. U.S. Bureau of Labor Statistics. CES seasonal adjustment technical note. [bls.gov/web/empsit/cesseasadjtn.htm](https://www.bls.gov/web/empsit/cesseasadjtn.htm)
+7. Monsell, B. C. (2007). Issues in modeling and adjusting calendar effects in economic time series. U.S. Census Bureau research report. [census.gov](https://www.census.gov/content/dam/Census/library/working-papers/2007/adrm/ices2007bcm.pdf)
+8. U.S. Energy Information Administration. Gasoline explained: gasoline price fluctuations. [eia.gov](https://www.eia.gov/energyexplained/gasoline/price-fluctuations.php)
+9. Internal Revenue Service (2008). Economic stimulus payments on the way; some people will see direct deposit payments today (April 28, 2008). [irs.gov](https://www.irs.gov/pub/irs-news/ir-08-066.pdf)
+10. Internal Revenue Service (2021). IR-2021-54: IRS begins delivering third round of Economic Impact Payments (March 12, 2021). [irs.gov](https://www.irs.gov/newsroom/irs-begins-delivering-third-round-of-economic-impact-payments-to-americans)
+
+</div>
+
+<style>{`
+  .refs { font-size: .86rem; color: var(--text-2); margin-top: 3rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+  .ch-body table { margin: 1.4rem 0 2rem; font-size: .88rem; }
+  .ch-body td { vertical-align: top; }
+`}</style>

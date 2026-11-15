@@ -1,0 +1,53 @@
+---
+// Signature hero for Chapter 2: one seasonal wave comes apart into three stacked layers (trend, seasonal, remainder).
+const W = 520, H = 380, N = 96, SPLIT = 40;
+const season = [-6, -9, 1, -1, 4, 1, 2, 3, -3, 0, 2, 13];
+const trend = (t: number) => 0.42 * t + 6 * Math.sin(t / 30);
+const noise = (t: number) => 1.6 * Math.sin(t * 1.9) + 1.1 * Math.sin(t * 4.3 + 1) + (t === 63 ? -7 : 0);
+const x = (t: number) => 22 + (t / (N - 1)) * (W - 110);
+const pth = (pts: [number, number][]) => pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join('');
+const yData = (t: number) => 255 - (trend(t) + season[t % 12] + noise(t)) * 2.3;
+const left = Array.from({ length: SPLIT + 1 }, (_, t) => t);
+const right = Array.from({ length: N - SPLIT }, (_, i) => SPLIT + i);
+const dataPath = pth(left.map((t) => [x(t), yData(t)]));
+const rows = [
+  { k: 'trend', c: 'var(--c-s1)', f: (t: number) => 128 - trend(t) * 2.3 + 30, w: 3 },
+  { k: 'seasonal', c: 'var(--c-s3)', f: (t: number) => 236 - season[t % 12] * 2.6, w: 2.2 },
+  { k: 'remainder', c: 'var(--c-s2)', f: (t: number) => 326 - noise(t) * 3.2, w: 1.8 },
+];
+const y0 = yData(SPLIT);
+const layers = rows.map((r, i) => ({ ...r, d: pth(right.map((t) => [x(t), r.f(t)])), dy: (y0 - r.f(SPLIT)).toFixed(1), ly: r.f(N - 1), delay: 1.15 + i * 0.16 }));
+const sx = x(SPLIT);
+---
+<svg viewBox={`0 0 ${W} ${H}`} class="dh" role="img" aria-label="A seasonal time series splits into three layers: trend, seasonal pattern and remainder">
+  <line x1={sx} x2={sx} y1="34" y2={H - 20} class="split" />
+  <text x={sx - 8} y="46" text-anchor="end" class="lbl">One series</text>
+  <text x={sx + 8} y="46" class="lbl">Three layers</text>
+  <path d={dataPath} class="data" pathLength="1" />
+  <circle cx={sx} cy={y0} r="4.5" class="knot" />
+  {layers.map((l) => (
+    <g class="layer" style={`--dy:${l.dy}px; --d:${l.delay}s`}>
+      <path d={l.d} fill="none" stroke={l.c} stroke-width={l.w} stroke-linejoin="round" stroke-linecap="round" />
+    </g>
+  ))}
+  {layers.map((l, i) => (
+    <text x={W - 82} y={l.ly + (i === 0 ? -6 : 4)} class="nm" fill={l.c} style={`--d:${l.delay + 0.55}s`}>{l.k}</text>
+  ))}
+  <text x={W - 82} y={H - 10} class="eq" style="--d:2.6s">T + S + R</text>
+</svg>
+<style>
+  .dh { max-width: 560px; }
+  .lbl { font: 600 12px var(--font-ui); fill: var(--muted); }
+  .split { stroke: var(--border-strong); stroke-dasharray: 3 4; }
+  .data { fill: none; stroke: var(--c-history); stroke-width: 2.4; stroke-linejoin: round; stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw 1.1s cubic-bezier(.65,0,.35,1) forwards; }
+  .knot { fill: var(--ch, var(--c-s3)); opacity: 0; animation: fade .3s 1s forwards; }
+  .layer { opacity: 0; transform: translateY(var(--dy)) scaleY(.2); transform-box: fill-box; transform-origin: left center; animation: peel .9s var(--d) cubic-bezier(.05,.7,.1,1) forwards; }
+  .nm { font: 650 13px var(--font-ui); opacity: 0; animation: fade .4s var(--d) forwards; }
+  .eq { font: 600 12px var(--font-ui); fill: var(--muted); opacity: 0; animation: fade .4s var(--d) forwards; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  @keyframes fade { to { opacity: 1; } }
+  @keyframes peel { 0% { opacity: 0; } 25% { opacity: 1; } 100% { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    .data, .knot, .layer, .nm, .eq { animation: none; opacity: 1; stroke-dashoffset: 0; transform: none; }
+  }
+</style>

@@ -1,0 +1,145 @@
+---
+import Base from '../layouts/Base.astro';
+import HomeFan from '../components/home/HomeFan.svelte';
+import { chapters, parts } from '../lib/chapters';
+import { sparkPath, chapterSeries } from '../lib/spark';
+import fs from 'node:fs';
+import path from 'node:path';
+const nSeries = Object.keys(JSON.parse(fs.readFileSync(path.join(process.cwd(), 'public', 'data', 'manifest.json'), 'utf8'))).length;
+const nWords = ['Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen', 'Twenty'];
+const nChapters = nWords[chapters.length] ?? String(chapters.length);
+const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
+const href = (s: string) => `${base}chapters/${s}/`;
+const cards = chapters.map((c) => ({ ...c, spark: sparkPath(chapterSeries[c.slug].id, chapterSeries[c.slug]), sid: chapterSeries[c.slug].id }));
+const partBlurb: Record<string, string> = {
+  Foundations: 'What a forecast is, where data comes from, and how to tell a good forecast from a lucky one.',
+  'Classic Toolkit': 'The three model families behind most professional forecasts: regression, exponential smoothing and ARIMA.',
+  'Economic Signals': 'Indicators, recession odds, feedback between variables, and turning uncertainty into decisions.',
+  'Machine Learning & Big Data': 'Trees, forests, gradient boosting with explanations, and forecasting from many series at once.',
+  'Ship It': 'Put it all together into a forecast a manager can act on.',
+};
+---
+<Base title="Forecast Lab: economic & business forecasting you can run">
+  <main id="main" class="home">
+    <section class="h-hero">
+      <div class="h-bg" aria-hidden="true"></div>
+      <div class="h-in">
+        <div class="h-copy">
+          <p class="h-kick">ECON 3371 · Economic &amp; Business Forecasting</p>
+          <h1>Learn forecasting by forecasting.</h1>
+          <p class="h-lede">{nChapters} chapters, from your first forecast to machine learning, nowcasting and a forecast you can ship. Every idea comes with real U.S. data, code you can edit and run in this browser, in R or Python, and a step-through mode that explains every line.</p>
+          <div class="h-cta">
+            <a class="btn btn-primary" href={href('first-forecast')}>Make your first forecast</a>
+            <a class="btn" href={`${base}chapters/`}>See all chapters</a>
+          </div>
+          <ul class="h-facts">
+            <li><b>0</b> installs: R and Python run in your browser</li>
+            <li><b>{nSeries}</b> real economic data series, bundled (all but one from FRED®)</li>
+            <li><b>{chapters.length}</b> chapters, each with an instructor kit</li>
+          </ul>
+        </div>
+        <div class="h-demo">
+          <HomeFan client:load />
+        </div>
+      </div>
+    </section>
+
+    <section class="how">
+      <h2>How every chapter works</h2>
+      <ol class="how-list">
+        <li><span class="how-n">1</span><div><b>Start from a real question.</b> "Is this December spike real growth?" "What is the chance of a recession next year?"</div></li>
+        <li><span class="how-n">2</span><div><b>Play with it.</b> Interactive figures on real data respond as you drag. Predict first, then see.</div></li>
+        <li><span class="how-n">3</span><div><b>Run the code.</b> Edit R or Python in the page. <em>Step through</em> explains each line and shows every object it creates.</div></li>
+        <li><span class="how-n">4</span><div><b>Ship a result.</b> Each chapter ends with something you could show an employer: a scorecard, a fan chart, a dashboard.</div></li>
+      </ol>
+    </section>
+
+    <section class="map" aria-label="Course map">
+      {parts.map((p) => (
+        <div class="part">
+          <div class="part-h">
+            <h2>{p}</h2>
+            <p>{partBlurb[p]}</p>
+          </div>
+          <div class="cards">
+            {cards.filter((c) => c.part === p).map((c) => (
+              <a class="card" href={href(c.slug)} style={`--c:${c.accent}`} data-slug={c.slug}>
+                <div class="card-top"><span class="card-n">{c.n}</span><span class="card-done" aria-label="visited">✓</span></div>
+                <div class="card-t">{c.title}</div>
+                <div class="card-q">{c.question}</div>
+                <svg class="card-spark" viewBox="0 0 160 40" preserveAspectRatio="none" aria-hidden="true"><path d={c.spark} /></svg>
+                <div class="card-src">{c.sid}</div>
+              </a>
+            ))}
+          </div>
+        </div>
+      ))}
+    </section>
+
+    <section class="inst">
+      <div class="inst-in">
+        <h2>For instructors</h2>
+        <p class="inst-lede">Built to be the only site you need to teach an undergraduate forecasting course.</p>
+        <div class="inst-grid">
+          <div><h3>Ready to teach</h3><p>Every chapter ends with learning objectives, discussion prompts, common misconceptions and an in-class activity with verified expected results.</p></div>
+          <div><h3>Slides in one click</h3><p>Hover any chart for PNG and SVG downloads. Explorables are live and can be projected directly in class.</p></div>
+          <div><h3>R and Python, side by side</h3><p>The main labs come in both languages with matching results. Students' edits are saved in their own browser.</p></div>
+          <div><h3>Nothing to install</h3><p>R (webR) and Python (Pyodide) run as WebAssembly in the browser. The data are bundled with the site, so labs keep working offline after the first load.</p></div>
+          <div><h3>Auto-checked exercises</h3><p>Exercises check students' answers and explain what the right answer teaches, with hints that unlock one at a time.</p></div>
+          <div><h3>Current methods</h3><p>Benchmarks and cross-validation, ETS, ARIMA, VAR, conformal intervals, random forests, gradient boosting with SHAP, and nowcasting.</p></div>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script>
+    try {
+      const v = JSON.parse(localStorage.getItem('fl-visited') || '{}');
+      document.querySelectorAll<HTMLElement>('.card').forEach((c) => { if (v[c.dataset.slug!]) c.classList.add('seen'); });
+    } catch {}
+  </script>
+  <style>
+    .home { overflow-x: clip; }
+    .h-hero { position: relative; padding: 4.5rem 1.5rem 4rem; border-bottom: 1px solid var(--border); }
+    .h-bg { position: absolute; inset: 0; background: radial-gradient(50% 60% at 75% 30%, rgba(124,92,255,.16), transparent 70%), radial-gradient(40% 50% at 10% 10%, rgba(34,211,238,.08), transparent 70%); pointer-events: none; }
+    .h-in { position: relative; max-width: 1280px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); gap: 3rem; align-items: center; }
+    @media (max-width: 1050px) { .h-in { grid-template-columns: 1fr; } }
+    .h-kick { font-size: .9rem; font-weight: 600; color: var(--accent-2); margin-bottom: .6rem; }
+    .h-copy h1 { margin: 0 0 1.1rem; font-size: clamp(2.6rem, 5.5vw, 4.4rem); line-height: 1.02; letter-spacing: -.035em; font-variation-settings: 'opsz' 144, 'SOFT' 50; }
+    .h-lede { font-size: 1.18rem; color: var(--text-2); line-height: 1.6; max-width: 34rem; }
+    .h-cta { display: flex; gap: .7rem; flex-wrap: wrap; margin: 1.6rem 0 1.8rem; }
+    .h-cta .btn { padding: .8rem 1.25rem; font-size: .95rem; }
+    .h-facts { list-style: none; padding: 0; margin: 0; display: grid; gap: .35rem; font-size: .92rem; color: var(--text-2); }
+    .h-facts b { display: inline-block; min-width: 2.2rem; color: var(--text); font-variant-numeric: tabular-nums; }
+    .how { max-width: 1180px; margin: 4.5rem auto 0; padding: 0 1.5rem; }
+    .how h2 { margin-top: 0; }
+    .how-list { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.2rem; }
+    .how-list li { display: flex; gap: .9rem; align-items: flex-start; color: var(--text-2); font-size: .97rem; }
+    .how-list b { color: var(--text); display: block; margin-bottom: .2rem; }
+    .how-n { flex-shrink: 0; width: 2rem; height: 2rem; border-radius: 50%; display: grid; place-items: center; font-weight: 700; border: 1.5px solid var(--border-strong); color: var(--accent-text); }
+    .map { max-width: 1180px; margin: 3rem auto 0; padding: 0 1.5rem; }
+    .part { margin-top: 3.2rem; }
+    .part-h { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 2rem; align-items: baseline; border-bottom: 1px solid var(--border); padding-bottom: .8rem; margin-bottom: 1.2rem; }
+    @media (max-width: 760px) { .part-h { grid-template-columns: 1fr; gap: .2rem; } }
+    .part-h h2 { margin: 0; font-size: 1.6rem; }
+    .part-h p { margin: 0; color: var(--muted); }
+    .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(255px, 1fr)); gap: 1rem; }
+    .card { position: relative; display: flex; flex-direction: column; gap: .35rem; padding: 1rem 1.1rem .8rem; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); color: var(--text); text-decoration: none !important; transition: border-color .2s; overflow: hidden; }
+    .card:hover { border-color: var(--c); }
+    .card-top { display: flex; justify-content: space-between; align-items: center; }
+    .card-n { font-weight: 700; font-size: .85rem; color: var(--bg); background: var(--c); border-radius: 6px; padding: .05rem .5rem; font-variant-numeric: tabular-nums; }
+    .card-done { color: var(--good); opacity: 0; font-size: .85rem; }
+    .card.seen .card-done { opacity: 1; }
+    .card-t { font-weight: 650; font-size: 1.02rem; line-height: 1.3; }
+    .card-q { color: var(--muted); font-size: .86rem; line-height: 1.45; flex: 1; }
+    .card-spark { width: 100%; height: 40px; margin-top: .4rem; }
+    .card-spark path { fill: none; stroke: var(--c); stroke-width: 1.4; vector-effect: non-scaling-stroke; opacity: .85; }
+    .card-src { font-size: .7rem; color: var(--muted); text-align: right; }
+    .inst { margin-top: 5rem; background: var(--bg-2); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 3.5rem 1.5rem; }
+    .inst-in { max-width: 1180px; margin: 0 auto; }
+    .inst h2 { margin: 0 0 .3rem; }
+    .inst-lede { color: var(--text-2); margin-bottom: 1.8rem; }
+    .inst-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.6rem 2.2rem; }
+    .inst-grid h3 { margin: 0 0 .35rem; font-size: 1.02rem; }
+    .inst-grid p { margin: 0; color: var(--text-2); font-size: .95rem; }
+  </style>
+</Base>

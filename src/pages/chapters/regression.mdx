@@ -1,0 +1,353 @@
+---
+layout: ../../layouts/Chapter.astro
+slug: regression
+minutes: 55
+build:
+  - A driver model of U.S. car sales, with honest (Newey–West) standard errors, read the way an analyst reads it
+  - Side-by-side scenario forecasts ("gas hits $5", "squeeze") with prediction intervals
+  - A model-selection table (CV, AIC, BIC, adjusted R², test error) that shows why in-sample fit is not forecast accuracy
+skills: [lm, tslm, coeftest, NeweyWest, season, fourier, "predict(newdata)", CV, VIF, ex-ante vs ex-post]
+---
+import CodeLab from '../../components/CodeLab.svelte';
+import Callout from '../../components/Callout.astro';
+import KeyIdea from '../../components/KeyIdea.astro';
+import Predict from '../../components/Predict.svelte';
+import Term from '../../components/Term.astro';
+import InstructorKit from '../../components/InstructorKit.astro';
+import LeastSquares from '../../components/ch04/LeastSquares.svelte';
+import DummyExplorer from '../../components/ch04/DummyExplorer.svelte';
+import ScenarioDashboard from '../../components/ch04/ScenarioDashboard.svelte';
+import OverfitMachine from '../../components/ch04/OverfitMachine.svelte';
+import driversR from '../../labs/ch04/drivers.R?raw';
+import driversPy from '../../labs/ch04/drivers.py?raw';
+import seasonalR from '../../labs/ch04/seasonal.R?raw';
+import seasonalPy from '../../labs/ch04/seasonal.py?raw';
+import exanteR from '../../labs/ch04/exante.R?raw';
+import exantePy from '../../labs/ch04/exante.py?raw';
+import scenR from '../../labs/ch04/scenarios.R?raw';
+import scenPy from '../../labs/ch04/scenarios.py?raw';
+import selR from '../../labs/ch04/selection.R?raw';
+import selPy from '../../labs/ch04/selection.py?raw';
+import exR from '../../labs/ch04/exercise.R?raw';
+import exSolR from '../../labs/ch04/exercise_solution.R?raw';
+import exCheckR from '../../labs/ch04/exercise_check.R?raw';
+import exPy from '../../labs/ch04/exercise.py?raw';
+import exSolPy from '../../labs/ch04/exercise_solution.py?raw';
+import exCheckPy from '../../labs/ch04/exercise_check.py?raw';
+
+<p class="lede">In January 2026 a gallon of regular gasoline cost <strong>\$2.81</strong> on average. By May it cost <strong>\$4.48</strong>. Suppose you plan production for a carmaker. Your boss asks two questions: <em>how much do gas prices, jobs and interest rates actually move our sales?</em> And: <em>what happens if gas hits \$5?</em> Benchmarks from Chapter 3 cannot answer either question, because they only look at sales. To answer them you need a model that links sales to its <strong>drivers</strong>. That model is regression.</p>
+
+The gas prices above are monthly averages of the weekly U.S. regular-gasoline price (FRED series GASREGW). In this chapter you will fit a driver model of U.S. car sales, read every number in its output, run scenarios with honest uncertainty, and learn the three traps that make regression forecasts look better on paper than they are in practice.
+
+<KeyIdea>A regression tells you how demand has <em>moved with</em> its drivers. It becomes a forecast only when you supply the drivers' future values, and those are uncertain too.</KeyIdea>
+
+## A line of best fit, by hand
+
+Start with one driver. Below, each dot is one month: the 30-year mortgage rate on the horizontal axis and U.S. housing starts (new homes begun, in thousands at a seasonally adjusted annual rate) on the vertical axis. Your job is to draw the line that fits best.
+
+What does "best" mean? For each month, the vertical gap between the dot and your line is a <Term def="The difference between an actual value and the value the line predicts: actual minus fitted. Positive when the dot is above the line.">residual</Term>. Square each residual and add them up. **Ordinary least squares (OLS)** picks the line with the smallest possible sum. In the chart, every residual is drawn as a real square, so you can *see* the quantity being minimized.
+
+<div class="breakout">
+<LeastSquares client:load />
+</div>
+
+The line starts flat at the average, which is the Chapter 3 "mean" benchmark. Tilting it shrinks the squares; the snap button finds the minimum. For 1993–2007 the least-squares slope is about **−165**: in months when the mortgage rate was one percentage point higher, housing starts ran about 165,000 units (annual rate) lower. The line explains 37% of the variation (R² = 0.37).
+
+<Predict client:load
+  question="Now put all the data, 1993 to 2026, in one regression. Which way will the least-squares line slope?"
+  options={['Down, more steeply than in 1993–2007', 'Down, but less steeply', 'Flat', 'Up: higher mortgage rates go with **more** housing starts']}
+  answer={3}
+  explain="Switch the explorer to **All, 1993–2026**. The slope turns **positive** (about +94). Between 2007 and 2012 the housing bust drove starts to record lows while mortgage rates *fell*; the low rates did not cause the bust, they were partly a response to it. A one-driver regression cannot tell the difference. It reports association in the sample you give it, nothing more. This is **omitted-variable bias**, and it is why we add more drivers next."
+/>
+
+<Callout type="math" title="The least-squares formulas">
+For one driver, the fitted line is $\hat y_t = b_0 + b_1 x_t$. Minimizing $\sum_t (y_t - b_0 - b_1 x_t)^2$ gives
+
+$$
+b_1 = \frac{\sum_t (x_t - \bar x)(y_t - \bar y)}{\sum_t (x_t - \bar x)^2}, \qquad b_0 = \bar y - b_1 \bar x .
+$$
+
+So the line always passes through the point of means $(\bar x, \bar y)$: rotating the flat "mean" line about that point is exactly what you did above. With $k$ drivers, stack them in a matrix $X$ (with a column of 1s) and the solution is $b = (X'X)^{-1}X'y$. R's `lm()` computes this with a QR decomposition, which is more accurate than inverting $X'X$.
+
+R² compares your squares with the squares around the mean: $R^2 = 1 - \frac{\sum e_t^2}{\sum (y_t - \bar y)^2}$. In the hero chart at the top of the page, it is one minus the ratio of the two bars.
+</Callout>
+
+## Reading a regression like an analyst
+
+Now the real question: car sales. The demand series is **light vehicle sales** (cars and light trucks), in millions of units at a seasonally adjusted annual rate (FRED: TOTALSA). The three drivers are the gas price, the unemployment rate and the 30-year mortgage rate, which stands in for what households pay to borrow. We also add one <Term def="A variable that is 1 when a condition holds and 0 otherwise. In a regression its coefficient measures a level shift.">dummy variable</Term> for the 2021–2022 semiconductor shortage. Automakers could not get enough chips: a Federal Reserve study estimates the U.S. production shortfall at more than 2 million vehicles over those two years.<sup>[5](#refs)</sup> Dealers had empty lots no matter what gas or rates did.
+
+Press **Step through** and read each note.
+
+<div class="breakout">
+<CodeLab client:load id="ch04-drivers" title="What drives U.S. car sales?" r={driversR} py={driversPy}
+  packages={['lmtest', 'sandwich']} pyPackages={['statsmodels']}
+  goal="Fit a driver model of vehicle sales, interpret every coefficient, and report Newey–West standard errors." />
+</div>
+
+Here is what the output says, in words you could put in a memo (full sample, January 1993 to October 2026). The October 2025 unemployment rate was never collected because of the federal government shutdown, so `fred()` fills that one month by linear interpolation and says so in a note.<sup>[6](#refs)</sup>
+
+| Term | Estimate | What it means |
+|---|---|---|
+| Gas price | −0.48 | Each \$1 per gallon goes with about 480,000 fewer cars a year, holding jobs and rates fixed |
+| Unemployment rate | −0.90 | Each extra point of unemployment goes with about 900,000 fewer cars a year |
+| Mortgage rate | −0.48 | Each extra point of interest goes with about 480,000 fewer cars a year |
+| Chip shortage (2021–22) | −2.43 | Sales ran 2.4 million below what the drivers predict |
+| R² | 0.58 | The model explains 58% of the variation in monthly sales around their average (51% without the dummy) |
+
+<Callout type="pitfall" title="&quot;Holding fixed&quot; is not &quot;causes&quot;">
+Each slope is a <em>partial association</em>: the gap in sales between two months that differ in one driver but match on the others. That is useful for forecasting and scenarios. It is not proof that gas prices <em>cause</em> the gap: 2008 had expensive gas <strong>and</strong> a financial crisis, and some of the crisis may be loading onto the gas coefficient. The gas price here is also nominal (not adjusted for inflation), so \$4 meant more in 2008 than in 2026.
+</Callout>
+
+### Logs: from units to percentages
+
+Managers think in percentages. Logs translate coefficients into them. The last step of the lab refits the model with `log(veh)`:
+
+| Model | Form | Read the slope $b$ as | Our estimate |
+|---|---|---|---|
+| level–level | $y = a + b\,x$ | $y$ changes by $b$ units when $x$ rises by 1 unit | gas: −0.48 mn cars per \$1 |
+| log–log | $\log y = a + b \log x$ | **elasticity**: $y$ changes by $b$% when $x$ rises by 1% | gas: −0.067, so 10% pricier gas goes with 0.67% fewer sales |
+| log–level | $\log y = a + b\,x$ | **semi-elasticity**: $y$ changes by about $100b$% when $x$ rises by 1 unit | unemployment: −0.063, so about 6% fewer sales per point |
+| level–log | $y = a + b \log x$ | $y$ changes by $b/100$ units when $x$ rises by 1% | (not used here) |
+
+<Predict client:load kind="check"
+  question="In the log–log model the gas coefficient is −0.067. Gas rises from $4.00 to $5.00. By roughly how much does the model expect sales to change?"
+  options={['−0.067%', '−1.7%', '−6.7%', '−0.067 million cars']}
+  answer={1}
+  explain="$4 to $5 is a 25% increase. An elasticity of −0.067 means −0.067% per 1%, so about 25 × −0.067 ≈ **−1.7%**. (Computed exactly, 1.25 raised to the power −0.067 is about 0.985: a fall of about 1.5%.) On 16 million cars that is roughly 240,000 to 270,000 cars a year, noticeably less than the level model's 480,000 per dollar. Two reasonable functional forms give different answers: a reason to report a range, not a single number."
+/>
+
+### Standard errors you can defend
+
+`summary()` reports a <Term def="An estimate of how much a coefficient would vary across repeated samples. Small relative to the coefficient means it is precisely estimated.">standard error</Term> for each slope, and the <Term def="The coefficient divided by its standard error. Roughly, |t| above 2 means the coefficient is statistically different from zero at the 5% level.">t-statistic</Term> = estimate ÷ standard error. Those formulas assume each month's error is unrelated to the next. The residual chart in the lab shows they are not: when the model under-predicts one month, it keeps under-predicting for months. With autocorrelated errors the usual standard errors are too small, and you will "find" significance that isn't there.
+
+The fix used across economics is **Newey–West** (heteroskedasticity- and autocorrelation-consistent, HAC) standard errors:<sup>[4](#refs)</sup> `coeftest(m1, vcov. = NeweyWest(m1))`. In our model they are two to five times larger than the textbook ones. Gas, unemployment and mortgage rates remain clearly significant. The chip dummy's p-value rises to about 0.08: 24 consecutive months are really one episode, not 24 independent pieces of evidence. (That uses R's automatic lag choice. The Python tab uses a fixed 12-month window and finds the dummy significant, which tells you the evidence for it is fragile.)
+
+<Callout type="intuition" title="Why a great fit is not a great forecast">
+R² measures how well the line fits the data it was <em>estimated on</em>. A forecast is judged on data the model has never seen. You will see below that adding variables never lowers R², often while making forecasts worse. Treat R² as a description of the past, never as a forecast score.
+</Callout>
+
+## Dummy variables: teaching a regression the calendar
+
+Many business series are reported **not seasonally adjusted** (NSA): every December, retail sales jump. A regression can learn the calendar with **seasonal dummies**: one 0/1 variable per month except a baseline month. Each dummy's coefficient shifts the intercept for its month. Add a **trend** (1, 2, 3, … counting months) and a one-month **pulse dummy** for April 2020, when stores closed, and you have a surprisingly strong forecasting model.
+
+<div class="breakout">
+<DummyExplorer client:load />
+</div>
+
+Try the terms one at a time on retail sales (January 2012 to the latest month, fitted to log sales). Trend alone explains 87% of the variation in log sales (R² = 0.872). Adding monthly dummies raises that to 0.952 and cuts the typical miss from about 7.6% to 4.8%. The April 2020 pulse adds a little more (0.960): it lets one extraordinary month be an outlier without bending the trend and seasonal estimates toward it. For housing starts the seasonal pattern is the opposite shape: low in winter, high from April to October.
+
+<Callout type="pitfall" title="The dummy variable trap">
+With an intercept in the model, use <strong>11</strong> monthly dummies, not 12. The 12 dummies always add up to 1, which is exactly the intercept column, so the computer cannot separate them (perfect multicollinearity). R's `tslm(y ~ season)` and Python's `C(month)` drop the first month for you. The same rule applies to any category: for <em>k</em> groups, use <em>k</em> − 1 dummies.
+</Callout>
+
+`tslm()` from the **forecast** package builds `trend` and `season` for you. The lab below holds out January 2024 onward, so you can put the regression on the Chapter 3 scorecard.
+
+<div class="breakout">
+<CodeLab client:load id="ch04-seasonal" title="Trend + seasonal dummies with tslm()" r={seasonalR} py={seasonalPy}
+  packages={['forecast']} pyPackages={['statsmodels']}
+  goal="Fit retail sales with a trend, monthly dummies and a COVID pulse; forecast 2024 onward and score it against seasonal naive." />
+</div>
+
+The result is worth a pause. December runs about **25%** above January, and February is about 2% *below* it (fewer shopping days). April 2020 came in about 24% below what trend and season predict. On the 2024-onward test period the regression's MAE is about \$13.0 billion against \$27.0 billion for seasonal naive (MASE 0.56 against 1.17): calendar terms alone cut the benchmark's error by more than half. The R tab also compares **Fourier terms**: pairs of sine and cosine waves (`fourier(train, K)`) that describe the seasonal shape with fewer coefficients. Retail's December spike is so sharp that it needs the full set (K = 6), which is identical to the 11 dummies. For smooth seasonal patterns, or weekly data with 52 "seasons", a small K saves many coefficients.
+
+<Callout type="tip" title="Make it yours">
+In the seasonal lab, change `"RSXFSN"` to `"HOUSTNSA"` (housing starts, NSA). Then look at the Breusch–Godfrey test at the end: its tiny p-value says the residuals come in long runs. A straight trend cannot follow a housing cycle. Chapter 7 handles this properly with regression with ARIMA errors.
+</Callout>
+
+## The forecasting trap: you need tomorrow's drivers
+
+Here is the catch that separates regression *analysis* from regression *forecasting*. The car-sales model says sales depend on this month's gas price, unemployment and mortgage rate. To forecast next year's sales you need next year's gas prices, unemployment and mortgage rates. Nobody has those.
+
+- An **ex-post** forecast plugs in the drivers' actual values after they are known. It tests whether the *relationship* held up, but no one could have made it at the time.
+- An **ex-ante** forecast uses only what was known at the forecast date: forecasts of the drivers (or scenarios). This is the only kind you can hand your boss.
+- Some predictors are **known in advance** and avoid the problem: trend, calendar dummies, holidays, planned price changes, or a driver that leads sales by several months (Chapter 7).
+
+<Predict client:load
+  question="Fit the car-sales model on data through December 2023 and forecast January 2024 to October 2026. Which forecast has the lowest error?"
+  options={['Ex-post: the model with the drivers\' true future values', 'Ex-ante: the model with each driver held at its December 2023 value', 'The naive benchmark: sales stay at the December 2023 level']}
+  answer={2}
+  explain="Naive wins on MAE (0.42 million against 0.48 for ex-ante and 0.54 for ex-post), and ex-ante beats ex-post. Knowing the true future drivers made the regression *worse*: unemployment drifted up from 3.8% to above 4%, gas jumped in 2026, and the model expected sales to fall. Sales held up, so the ex-post forecast ran too low in 2025 and 2026. A good in-sample fit (R² 0.58) is no guarantee of forecast value. Run the lab to see it."
+/>
+
+<div class="breakout">
+<CodeLab client:load id="ch04-exante" title="Ex-ante vs ex-post: an honest test" r={exanteR} py={exantePy}
+  pyPackages={['statsmodels']} packages={['forecast']}
+  goal="Compare an ex-post forecast, an ex-ante forecast and the naive benchmark on 2024–2026 car sales." />
+</div>
+
+| Test period Jan 2024 – Oct 2026 | ME | MAE | RMSE |
+|---|---|---|---|
+| Ex-post (true drivers) | 0.17 | 0.54 | 0.69 |
+| Ex-ante (drivers held flat) | −0.20 | 0.48 | 0.58 |
+| Naive benchmark | 0.18 | 0.42 | 0.58 |
+
+<KeyIdea>Judge a driver model by its <strong>ex-ante</strong> accuracy against a benchmark. If you cannot forecast the drivers better than the series itself, a driver model's real value is explanation and scenarios, not point forecasts.</KeyIdea>
+
+## What if gas hits \$5? Scenario forecasting
+
+This is where regression earns its keep. You do not need to predict gas prices; you ask **what if**. Set a path for each driver and the regression turns it into a sales forecast. This is **scenario forecasting**. It turns a debate about the future into a set of explicit, comparable assumptions.
+
+<div class="breakout">
+<ScenarioDashboard client:load />
+</div>
+
+Three things to notice:
+
+1. **The gap between scenarios is just slope × change.** Gas rising from \$4.31 (October 2026) to \$5.00 lowers the forecast by 0.48 × 0.69 ≈ **0.33 million** cars a year once the rise is complete. The bars in the panel show each driver's contribution.
+2. **Even a known scenario is uncertain.** If gas, unemployment and rates follow your path exactly, the 95% band after 12 months is still about **5.1 million** cars wide. That is the regression's own error.
+3. **Unknown drivers double the band.** Once the drivers can also surprise you (the light band replays real historical month-to-month moves in all three at once), the 12-month band is about **10.6 million** cars wide, and almost all of the extra width is on the downside: history includes recession-sized jumps in unemployment, such as April 2020. The textbook interval from `predict()` leaves this out, so it understates real uncertainty.
+
+<div class="breakout">
+<CodeLab client:load id="ch04-scen" title="Scenario forecasts with forecast(fit, newdata)" r={scenR} py={scenPy}
+  packages={['forecast']} pyPackages={['statsmodels']}
+  goal="Forecast car sales for 12 months under three driver scenarios and plot them side by side with prediction intervals." />
+</div>
+
+In the lab's baseline, with every driver frozen at its October 2026 value, the model forecasts **15.7 million** cars a year. "Gas hits \$5" gives 15.3 million by the end of the year. "Squeeze" (gas at \$5, unemployment drifting up to 5.5%, mortgage rates at 8%) ends the year at 13.8 million, 1.2 million below baseline on average over the year. Notice also that the baseline sits *below* October's actual 16.0 million: a static regression forecast jumps straight to its fitted line and ignores the fact that sales have been running above it. Dynamic regression (Chapter 7) fixes that.
+
+<Callout type="business" title="How to present scenarios">
+Give each scenario a name and a one-line story ("Squeeze: \$5 gas, a softening job market, 8% mortgages"). Show the scenarios on one chart, report the gap from baseline in units the audience uses (cars, dollars, jobs), and always show the band. Make sure each scenario is internally consistent: rates rarely fall while unemployment stays low and gas soars.
+</Callout>
+
+## Choosing a model without fooling yourself
+
+Adding a predictor never lowers R², even when the predictor is pure noise, because OLS can always use a new column to shave a little off the squares. A model that fits noise is **overfit**: it describes the past in detail and forecasts the future badly. Watch it happen.
+
+<div class="breakout">
+<OverfitMachine client:load />
+</div>
+
+As the trend's degree rises from 1 to 8, in-sample R² climbs from 0.887 to 0.946. The 2019 test error tells a different story: 11.6 thousand starts with a straight line, a minimum of 9.2 with a parabola, then 31 at degree 5 and 180 at degree 8. High-degree polynomials bend wildly at the edge of the data, which is exactly where forecasts live.
+
+<Predict client:load kind="check"
+  question="You add a 10-year Treasury yield to a model that already has the mortgage rate (correlation 0.97). The two VIFs jump above 20. What happens to the **forecasts**?"
+  options={['They become useless', 'They barely change', 'They improve a lot', 'R cannot fit the model']}
+  answer={1}
+  explain="Collinearity makes the model unable to split credit between two near-identical drivers, so their *coefficients* swing (the mortgage slope doubles and the yield gets the 'wrong', positive sign). But their combined effect is estimated well, so fitted values barely move: they correlate 0.99 with the simpler model's. Collinearity hurts interpretation much more than prediction, as long as the two drivers keep moving together in the future."
+/>
+
+To choose among candidate models, use a criterion that **penalizes complexity**:
+
+- **Adjusted R²** charges a small price for each coefficient. It is the weakest penalty.
+- **AIC** and **AICc** (AIC corrected for small samples) estimate how well the model would predict new data from the same process. Lower is better.
+- **BIC** charges more per coefficient than AIC and prefers smaller models. Lower is better.
+- **Cross-validation (CV)**: `CV()` in **forecast** reports leave-one-out CV, the average squared error when each month is predicted by a model fitted without it.
+- **A time-ordered test set** (Chapter 3) is the most honest, because it respects the arrow of time.
+
+<div class="breakout">
+<CodeLab client:load id="ch04-select" title="Model selection: CV, AIC, BIC, adjusted R² and a real test" r={selR} py={selPy}
+  packages={['forecast']} pyPackages={['statsmodels']}
+  goal="Score six candidate car-sales models with CV(), add a 2024–26 test error, and check multicollinearity with VIF." />
+</div>
+
+| Model | CV | AIC | BIC | Adj. R² | Test RMSE, 2024–26 |
+|---|---|---|---|---|---|
+| un | 2.252 | 331.0 | 343.0 | 0.425 | 0.775 |
+| gas + un | 2.199 | 321.4 | 337.5 | 0.440 | **0.631** |
+| gas + un + mr | 1.940 | 270.5 | 290.5 | 0.507 | 0.929 |
+| gas + un + mr + chip | 1.670 | 207.5 | 231.5 | 0.579 | 0.689 |
+| + 10-yr yield | **1.654** | **200.7** | **228.7** | **0.587** | 0.703 |
+| + 10-yr yield + trend | 1.662 | 202.7 | 234.7 | 0.586 | 0.928 |
+
+All four in-sample criteria pick the five-driver model with the collinear 10-year yield. The time-ordered test picks the two-driver model. And none of them beats the naive benchmark's 0.58 from the previous lab. Report this honestly: the in-sample criteria tell you which model describes 1993–2026 best; the test tells you which one forecast 2024–26 best; they are different questions.
+
+<Callout type="math" title="The criteria in formulas">
+With $T$ observations, $k$ predictors (not counting the intercept) and $\text{SSE} = \sum e_t^2$:
+
+$$
+\bar R^2 = 1 - (1 - R^2)\frac{T - 1}{T - k - 1}, \qquad
+\text{AIC} = T \log\left(\frac{\text{SSE}}{T}\right) + 2(k + 2),
+$$
+
+$$
+\text{AIC}_c = \text{AIC} + \frac{2(k+2)(k+3)}{T - k - 3}, \qquad
+\text{BIC} = T \log\left(\frac{\text{SSE}}{T}\right) + (k + 2)\log T .
+$$
+
+Leave-one-out CV for OLS needs no refitting: $\text{CV} = \frac{1}{T}\sum_t \left(\frac{e_t}{1 - h_t}\right)^2$, where $h_t$ is the leverage of observation $t$ (the diagonal of the hat matrix). These are the formulas `CV()` uses (Hyndman & Athanasopoulos, ch. 7).<sup>[2](#refs)</sup> The **variance inflation factor** of driver $j$ is $\text{VIF}_j = 1/(1 - R_j^2)$, where $R_j^2$ comes from regressing driver $j$ on all the other drivers.
+</Callout>
+
+<Callout type="pitfall" title="Three ways regression forecasts fool you">
+<ul>
+<li><strong>Ex-post flattery.</strong> Testing with the drivers' true future values hides the hardest part of the job.</li>
+<li><strong>In-sample flattery.</strong> R², t-statistics and even AIC are computed on the data used for fitting. Only out-of-sample tests measure forecasting skill.</li>
+<li><strong>Autocorrelated residuals.</strong> In time series they are the norm. They make standard errors and prediction intervals too narrow. Use Newey–West for inference now, and dynamic regression (Chapter 7) for forecasting.</li>
+</ul>
+</Callout>
+
+## Your turn
+
+Your boss asks: *"What if mortgage rates fall to 5%?"* Fill in the two blanks (`______`) and press **Run & check**.
+
+<div class="breakout">
+<CodeLab client:load id="ch04-ex1" exercise title="Exercise: a mortgage-rate scenario" r={exR} solution={exSolR} check={exCheckR}
+  py={exPy} solutionPy={exSolPy} checkPy={exCheckPy} pyPackages={['statsmodels']}
+  goal="Predict car sales with every driver at today's value except the mortgage rate, which falls to 5%. Report the gap from today's forecast."
+  hints={['The first blank is the new mortgage rate: a number.', 'The second blank is the name of the data frame that holds the low-rate scenario. The gap is low-rate minus today.']} />
+</div>
+
+## Chapter checklist
+
+- OLS draws the line that minimizes the **sum of squared residuals**. Read each slope as a change in $y$ per unit of $x$, **holding the other drivers fixed**: an association, not proof of cause.
+- Use **logs** to get elasticities (log–log) and semi-elasticities (log–level).
+- In time series, residuals are usually autocorrelated: report **Newey–West** standard errors with `coeftest()`.
+- **Dummies** capture seasons (k − 1 of them) and one-off events (pulse or level-shift dummies); `tslm()` builds `trend` and `season` for you; **Fourier** terms are a compact alternative.
+- A driver model needs **future drivers**. Judge it by **ex-ante** accuracy against a benchmark; use it for **scenarios** with intervals, and remember those intervals leave out driver uncertainty.
+- Choose models with **AIC, BIC, CV or a time-ordered test**, not R². **Multicollinearity** (VIF above about 10) muddles coefficients but barely changes predictions.
+
+<InstructorKit
+  minutes={80}
+  data={['TOTALSA', 'GASREGW', 'UNRATE', 'MORTGAGE30US', 'GS10', 'HOUST', 'HOUSTNSA', 'RSXFSN']}
+  objectives={[
+    'Explain OLS as minimizing the sum of squared residuals, and interpret level, log–log and log–level coefficients in business language.',
+    'Report and interpret R², standard errors and t-statistics, and replace them with Newey–West standard errors when residuals are autocorrelated (`coeftest`, `NeweyWest`).',
+    'Build seasonal, trend, pulse and event dummies (and Fourier terms) with `tslm()`, avoiding the dummy variable trap.',
+    'Distinguish **ex-ante** from **ex-post** forecasts and evaluate a driver model against a benchmark.',
+    'Produce scenario forecasts with `forecast(fit, newdata = …)` and explain why their intervals understate total uncertainty.',
+    'Select models with adjusted R², AIC/AICc, BIC, `CV()` and a time-ordered test set; diagnose multicollinearity with VIF.'
+  ]}
+  discussion={[
+    'Over 1993–2026, housing starts and mortgage rates are **positively** related. Does that mean higher rates boost construction? What omitted variable could explain it?',
+    'The ex-post forecast lost to the ex-ante one in 2024–26. Is the regression useless? What is it good for, if not point forecasts?',
+    'Your CFO wants "the" forecast for next year. How would you present a baseline and two scenarios on one slide, and what would you say about the bands?'
+  ]}
+  misconceptions={[
+    '“A high R² means a good forecasting model.” In-sample fit never falls when you add terms; only out-of-sample error measures forecasting skill.',
+    '“A significant coefficient proves causation.” Regression measures partial association; omitted drivers (like the 2008 crisis) can load onto included ones.',
+    '“Multicollinearity ruins a forecasting model.” It destabilizes individual coefficients, but fitted values and forecasts barely change if the drivers keep moving together.',
+    '“Prediction intervals from predict() cover all the uncertainty.” They assume the driver path is known and the errors are independent.'
+  ]}
+>
+
+**Scenario war-room (30 minutes).** Teams of three play the planning team of a carmaker.
+
+1. **Predict (5 min).** Each team writes down how many fewer cars a year it expects if gas goes to \$5 and how sure it is.
+2. **Model (10 min).** Run the drivers lab and the scenario lab. Each team designs one *named, internally consistent* scenario of its own in the scenario dashboard and in code (change the `squeeze` data frame).
+3. **Brief (10 min).** Each team presents a 60-second brief: baseline, their scenario, the gap from baseline by driver, and the band.
+4. **Debrief (5 min).** Reveal the ex-ante vs ex-post result and ask whether the scenarios should change any decisions.
+
+*Expected results:* the fitted model is sales = 24.98 − 0.48 gas − 0.90 unemployment − 0.48 mortgage rate − 2.43 chip (R² 0.58). With every driver at its October 2026 value, the baseline is 15.68 million; gas at \$5 gives 15.35 million (−0.33 once the rise is complete); the class "squeeze" scenario averages 14.45 million over the year and ends at 13.76 million. The 95% interval is about ±2.6 million. Compare the teams' guesses with −0.33 million; if they guessed larger, discuss why, and stress that the estimate is an association, not a controlled experiment. In the ex-ante test, naive (MAE 0.42) beats ex-ante (0.48) and ex-post (0.54).
+
+**Variations.** (a) Restrict the drivers lab to 1993–2019 and compare coefficients (structural stability). (b) Re-run with `log(veh)` and report elasticities. (c) Instructors who use `jtools` can show `summ(m1, robust = "HAC")` as an alternative summary; `car::vif()` reproduces the VIFs in the selection lab (21.9 and 23.8).
+
+</InstructorKit>
+
+<div class="refs" id="refs">
+
+**References**
+
+1. Stock, J. H., & Watson, M. W. (2019). *Introduction to Econometrics* (4th ed.). Pearson. Chapters 4–7 (OLS, inference, multiple regression) and 15–16 (time-series regression, HAC standard errors).
+2. Hyndman, R. J., & Athanasopoulos, G. (2021). *Forecasting: Principles and Practice* (3rd ed.), ch. 7: Time series regression models. [otexts.com/fpp3/regression.html](https://otexts.com/fpp3/regression.html)
+3. Studenmund, A. H. (2017). *Using Econometrics: A Practical Guide* (7th ed.). Pearson. Chapters on dummy variables, multicollinearity and specification choice.
+4. Newey, W. K., & West, K. D. (1987). A simple, positive semi-definite, heteroskedasticity and autocorrelation consistent covariance matrix. *Econometrica*, 55(3), 703–708.
+5. Hamins-Puertolas, A., & Tito, M. D. (2026). When the chips went down: Motor vehicle production and the 2021–2022 semiconductor shortages. *FEDS Notes*, Board of Governors of the Federal Reserve System, September 28, 2026. [federalreserve.gov](https://www.federalreserve.gov/econres/notes/feds-notes/when-the-chips-went-down-motor-vehicle-production-and-the-2021-2022-semiconductor-shortages-20260928.html)
+6. Missing October 2025 unemployment rate: the household survey for October 2025 could not be conducted during the federal government shutdown, and BLS cancelled that part of the release. NBC News, "October jobs report canceled and November release delayed, BLS says" (November 2025). [nbcnews.com](https://www.nbcnews.com/news/amp/rcna244828)
+7. Data: FRED, Federal Reserve Bank of St. Louis: TOTALSA, GASREGW, UNRATE, MORTGAGE30US (Freddie Mac), GS10, HOUST, HOUSTNSA, RSXFSN.
+
+</div>
+
+<style>{`
+  .refs { font-size: .86rem; color: var(--text-2); margin-top: 3rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+  .ch-body table { margin: 1.4rem 0 2rem; font-size: .88rem; }
+  .ch-body td { vertical-align: top; font-variant-numeric: tabular-nums; }
+`}</style>

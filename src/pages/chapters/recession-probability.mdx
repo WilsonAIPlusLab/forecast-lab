@@ -1,0 +1,383 @@
+---
+layout: ../../layouts/Chapter.astro
+slug: recession-probability
+minutes: 55
+build:
+  - A recession-probability tracker in the style of the New York Fed's yield-curve model, with NBER recessions shaded
+  - A forecast scorecard for yes/no events (confusion matrix, ROC curve and AUC, Brier score, calibration table) built by hand
+  - An honest out-of-sample test that shows when a famous model breaks, and a cost-based rule for when to sound the alarm
+skills: [glm, binomial(link = "logit"), probit, predict(type = "response"), odds ratio, confusion matrix, ROC, AUC, Brier score, calibration]
+---
+import CodeLab from '../../components/CodeLab.svelte';
+import Callout from '../../components/Callout.astro';
+import KeyIdea from '../../components/KeyIdea.astro';
+import Predict from '../../components/Predict.svelte';
+import Term from '../../components/Term.astro';
+import InstructorKit from '../../components/InstructorKit.astro';
+import SCurveExplorer from '../../components/ch08/SCurveExplorer.svelte';
+import RecessionRadar from '../../components/ch08/RecessionRadar.svelte';
+import ThresholdGame from '../../components/ch08/ThresholdGame.svelte';
+import Calibration from '../../components/ch08/Calibration.svelte';
+import setupR from '../../labs/ch08/setup.R?raw';
+import setupPy from '../../labs/ch08/setup.py?raw';
+import targetR from '../../labs/ch08/target.R?raw';
+import targetPy from '../../labs/ch08/target.py?raw';
+import logitR from '../../labs/ch08/logit.R?raw';
+import logitPy from '../../labs/ch08/logit.py?raw';
+import timelineR from '../../labs/ch08/timeline.R?raw';
+import timelinePy from '../../labs/ch08/timeline.py?raw';
+import scoringR from '../../labs/ch08/scoring.R?raw';
+import scoringPy from '../../labs/ch08/scoring.py?raw';
+import oosR from '../../labs/ch08/oos.R?raw';
+import oosPy from '../../labs/ch08/oos.py?raw';
+import predR from '../../labs/ch08/predictors.R?raw';
+import predPy from '../../labs/ch08/predictors.py?raw';
+import exR from '../../labs/ch08/exercise.R?raw';
+import exSolR from '../../labs/ch08/exercise_solution.R?raw';
+import exCheckR from '../../labs/ch08/exercise_check.R?raw';
+import exPy from '../../labs/ch08/exercise.py?raw';
+import exSolPy from '../../labs/ch08/exercise_solution.py?raw';
+import exCheckPy from '../../labs/ch08/exercise_check.py?raw';
+
+<p class="lede">You run planning at a manufacturer. Next year's budget depends on one question: <strong>will there be a recession?</strong> Nobody can answer yes or no with confidence. But you can attach a <em>probability</em> to it, check how good past probabilities were, and decide in advance how high that probability must be before you cut hiring.</p>
+
+In May 2023 the gap between the 10-year Treasury yield and the 3-month bill rate fell to **−1.57 percentage points**, its lowest monthly reading since 1981. That gap, the *yield-curve spread*, had turned negative ahead of every U.S. recession since 1969 except one (before 1990 it only flattened to about +0.1). Many forecasters expected a downturn. Yet through the latest data in this chapter (October 2026), the NBER has not declared one. In this chapter you build the famous model behind those warnings, learn to score probability forecasts properly, and find out exactly how much that two-year false alarm cost it.
+
+<KeyIdea>A recession forecast should be a probability, not a yes or no. Judge it by how well it ranks months (AUC) and whether its probabilities mean what they say (Brier score, calibration), on data it has never seen.</KeyIdea>
+
+## A forecast for a yes-or-no event
+
+So far every target in this course has been a number: sales, jobs, inflation. Many business questions are instead <Term def="An outcome with only two possible values, coded 1 (the event happens) and 0 (it does not).">binary outcomes</Term>. Will this customer default? Will the shipment arrive late? Will the economy be in recession a year from now?
+
+For a binary outcome, the useful forecast is a probability between 0 and 1. A model that says "30% chance" is not wrong when the event fails to happen; it would be wrong if events it called 30% happened 90% of the time. That idea, called <Term def="A probability forecast is calibrated when events it gives probability p happen about a fraction p of the time.">calibration</Term>, will matter a lot by the end of the chapter.
+
+Our event is a U.S. recession. The official referee is the <Term def="The National Bureau of Economic Research's Business Cycle Dating Committee. It dates U.S. business-cycle peaks and troughs after the fact.">NBER</Term> dating committee, which defines a recession as a significant decline in economic activity that is spread across the economy and lasts more than a few months.<sup>[1](#refs)</sup> FRED turns its dates into a monthly indicator, `USREC`: 1 in every recession month, 0 otherwise.
+
+Our predictor is the <Term def="The 10-year Treasury yield minus the 3-month Treasury bill rate, in percentage points. Positive = normal upward-sloping yield curve; negative = inverted curve.">term spread</Term>: the 10-year Treasury yield (`GS10`) minus the 3-month bill rate (`TB3MS`), both monthly averages in percent. When short rates rise above long rates, the yield curve is <Term def="A yield curve on which short-term interest rates are higher than long-term ones, so the term spread is negative.">inverted</Term>.
+
+<Callout type="intuition" title="Why would bond yields predict recessions?">
+Two stories fit together. First, a long-term yield roughly reflects the short rates that investors expect over the coming years. If markets expect the Fed to cut rates, usually because they expect the economy to weaken, long yields fall below short ones. Second, an inverted curve often means monetary policy is tight right now: the Fed has pushed short rates up to fight inflation, and tight money slows the economy with a lag of a year or so.<sup>[2](#refs)</sup> Neither story is a law of nature, which is why we test the relationship rather than assume it.
+</Callout>
+
+## Build the target: a recession 12 months from now
+
+The question in the chapter title is about the future, so the target has to look forward. We follow the New York Fed: for each month *t*, the target is **whether month *t* + 12 is a recession month**.<sup>[3](#refs)</sup> In code, that means shifting `USREC` back by 12 months, so that each row pairs *this* month's spread with the economy's state *a year later*. The last 12 rows have no answer yet, and those are exactly the months we want to forecast.
+
+<Callout type="pitfall" title="The referee announces the score late">
+The NBER dates turning points only once it is confident, often many months later. It announced the December 2007 peak on December 1, 2008, and the July 1990 peak in April 1991. The fastest call in recent history, the February 2020 peak, came on June 8, 2020.<sup>[4](#refs)</sup> Two consequences for you:
+<ul>
+<li>The most recent zeros in `USREC` are <strong>provisional</strong>. If the NBER later declares a recession that started in 2026, the last few targets in this chapter flip from 0 to 1.</li>
+<li>A real-time forecaster never knows the latest outcomes. When you backtest, use only outcomes that would have been known, or accept that your test is a little too kind.</li>
+</ul>
+</Callout>
+
+The first lab builds the target and tries the simplest possible model: an ordinary regression of the 0/1 target on the spread. This is called the <Term def="An ordinary least-squares regression whose dependent variable is 0 or 1. Its fitted values are read as probabilities.">linear probability model</Term> (LPM).
+
+<Predict client:load
+  question="You fit a straight line through 0/1 data: the higher the spread, the lower the recession probability. What does that line predict when the curve is very steep, say a spread of +4 points?"
+  options={['A small positive probability, like 2%', 'Exactly 0%', 'A negative probability', 'It depends on the sample size']}
+  answer={2}
+  explain="A straight line has no floor. Our LPM is 0.247 − 0.093 × spread, which crosses zero at a spread of about 2.7 points. Steeper than that, it predicts a <strong>negative</strong> chance of recession: in 145 of the 814 months since 1959."
+/>
+
+<div class="breakout">
+<CodeLab client:load id="ch08-target" title="Build the forward-looking target and fit a linear probability model" r={targetR} py={targetPy} pyPackages={['statsmodels']}
+  goal="Construct 'recession 12 months ahead' from USREC, check it by eye, and see the linear probability model predict impossible probabilities." />
+</div>
+
+The LPM never goes above 1 here (its highest fitted value is 0.49), but it goes below 0 in 145 months, as low as −0.16. A probability of −16% is meaningless, and the straight line also says each extra point of spread has the same effect whether the curve is deeply inverted or very steep. We need a curve that bends.
+
+## From a straight line to an S-curve
+
+The <Term def="A regression for a 0/1 outcome in which the probability is the logistic function of a linear index: p = 1 / (1 + e^-(a + b·x)). It always lies between 0 and 1.">logit</Term> model passes a straight-line index $a + b \cdot \text{spread}$ through an S-shaped function that squeezes any number into the range 0 to 1. Instead of least squares, it is fitted by <Term def="Choosing the parameters that make the observed data most probable. For 0/1 data the log-likelihood adds log(p) for every 1 and log(1 − p) for every 0.">maximum likelihood</Term>: the best curve is the one that gives high probabilities to months that were followed by recession and low probabilities to months that were not.
+
+Try it yourself before the computer does it.
+
+<div class="breakout">
+<SCurveExplorer client:load />
+</div>
+
+Three things to notice:
+
+- **The curve slopes down.** A steeper yield curve means a lower chance of recession a year later. If you make the curve flat (steepness 0), it predicts the same probability for every month, and the log-likelihood is at its worst.
+- **The fitted curve crosses 50% at a spread of about −1.1 points.** Even a mildly inverted curve gives "only" 20 to 40%. Recessions are rare (about 12% of months since 1959 were followed by one 12 months later), so the model needs strong evidence before it calls one likely.
+- **Most dots overlap.** Plenty of months with a negative spread were *not* followed by recession 12 months later. The spread is informative, not decisive.
+
+<Callout type="math" title="Logit, probit and the likelihood">
+The logit model says
+
+$$
+P(y_{t+12} = 1 \mid s_t) = \frac{1}{1 + e^{-(a + b\,s_t)}}
+\quad\Longleftrightarrow\quad
+\log\frac{p}{1-p} = a + b\,s_t ,
+$$
+
+so the coefficient $b$ is the change in the **log-odds** for a one-point change in the spread $s_t$. The **probit** model replaces the logistic curve with the standard normal cumulative distribution, $p = \Phi(a + b\,s_t)$. The two curves have almost the same shape; logit coefficients are typically about 1.6 to 1.8 times probit ones.
+
+Both are fitted by maximizing the log-likelihood
+
+$$
+\ell(a,b) = \sum_t \Big[ y_t \log p_t + (1 - y_t) \log (1 - p_t) \Big].
+$$
+
+There is no closed-form solution. `glm()` uses iteratively reweighted least squares, which is Newton's method for this problem. The explorer above runs the same algorithm in your browser.
+</Callout>
+
+### Fit it with `glm()` and read the coefficients
+
+In R, a logit is one line: `glm(y ~ x, family = binomial(link = "logit"))`. Change `"logit"` to `"probit"` for a probit.
+
+<div class="breakout">
+<CodeLab client:load id="ch08-logit" title="Logit and probit with glm(): coefficients, odds and predicted probabilities" r={logitR} py={logitPy} setup={setupR} pySetup={setupPy} pyPackages={['statsmodels']}
+  goal="Estimate the yield-curve recession model as a logit and a probit, and translate the coefficients into odds ratios, probabilities and marginal effects." />
+</div>
+
+How to read the output (logit, fitted on January 1959 to October 2025):
+
+| Quantity | Value | Plain English |
+|---|---|---|
+| Slope $b$ | −1.014 | Each extra point of spread lowers the log-odds of recession a year later by about 1 |
+| <Term def="exp(b): the factor by which the odds p/(1 − p) are multiplied when the predictor rises by one unit.">Odds ratio</Term> $e^b$ | 0.363 | Each extra point of spread multiplies the odds by 0.36, cutting them by about 64% |
+| P(recession) at spread −1, 0, +1, +2 | 47%, 24%, 10%, 4% | The same one-point change matters much more near the middle of the S |
+| <Term def="The change in the predicted probability for a small change in a predictor, evaluated at a chosen value of that predictor. For a logit it equals b·p·(1 − p).">Marginal effect</Term> at spread 0 | −18.7 pp | Near a flat curve, one more point of spread lowers the probability by about 19 percentage points |
+| Marginal effect at spread +2 | −4.0 pp | With a steep curve, the probability is already low and barely moves |
+
+The probit gives nearly the same probabilities (45%, 25%, 11% and 4% at the same spreads) and a very similar log-likelihood (−237.0 against −238.6 for the logit). In practice the choice between logit and probit rarely matters. Logit coefficients are easier to explain as odds; the New York Fed's model happens to be a probit.
+
+<Predict client:load kind="check"
+  question="A colleague reads the slope −1.01 and says: 'A one-point rise in the spread lowers the recession probability by 1.01, that is, by 101 percentage points.' What is wrong?"
+  options={[
+    'Nothing, that is the definition of a slope',
+    'The slope is on the log-odds scale; the effect on the probability depends on where you start',
+    'The slope must be divided by 100 because the spread is in percent',
+    'Logit slopes cannot be interpreted at all'
+  ]}
+  answer={1}
+  explain="In a logit the coefficient moves the <strong>log-odds</strong>, not the probability. Translate it either as an odds ratio (e<sup>−1.01</sup> = 0.36) or as a marginal effect at a chosen spread: about −19 percentage points near a flat curve, but only −4 with a steep one."
+/>
+
+## The yield-curve recession model
+
+This model has a pedigree. Arturo Estrella and Gikas Hardouvelis showed in 1991 that the slope of the yield curve predicts U.S. output growth and NBER recessions.<sup>[2](#refs)</sup> Estrella and Frederic Mishkin then compared many financial indicators and found that beyond about two quarters ahead, the yield-curve slope was the best single predictor of recessions, and out of sample it usually did better alone than combined with other variables.<sup>[5](#refs)</sup>
+
+The Federal Reserve Bank of New York publishes a monthly recession probability based on this work.<sup>[3](#refs)</sup> Its recipe:
+
+- **Predictor:** the 10-year Treasury yield minus the 3-month Treasury bill rate, monthly averages. The New York Fed converts the bill rate to a *bond-equivalent* basis; FRED's `TB3MS` is on a discount basis, so our spread differs slightly.<sup>[6](#refs)</sup>
+- **Target:** whether the economy is in recession **12 months later**, the same target you just built.
+- **Model:** a probit estimated on January 1959 to December 2009, with intercept −0.5333 and slope −0.6330.
+
+Its November 5, 2026 update put the October 2026 spread at 0.98 points and the probability of recession in October 2027 at **12.4%**.<sup>[3](#refs)</sup>
+
+Now look at the whole history. Each forecast is drawn at the month it is *about*, so a good model's peaks should land on the grey recession bars.
+
+<Predict client:load
+  question="Consider a model fitted only on data up to 1999. In May 2023 the spread was −1.57 points. What probability did that model give to a recession in May 2024?"
+  options={['About 20%', 'About 40%', 'About 60%', 'About 80%']}
+  answer={3}
+  explain="About <strong>80%</strong>. The 1999 model has an even steeper slope than the full-sample one, because inversions before 2000 were followed by recessions so reliably. Every one of its 21 forecasts above 50% made after 1999 was issued between December 2022 and September 2024, and none was followed by a recession. Find that episode in the radar below."
+/>
+
+<div class="breakout">
+<RecessionRadar client:load />
+</div>
+
+What the radar shows, with the model frozen at the end of 1999 and a 30% threshold:
+
+- **2001 and 2008: right direction, imperfect timing.** The spread inverted in 2000 and again in 2006–07, and probabilities rose to about 44 to 49%. But the spread's warning comes early and fades: by 2008 the Fed was cutting rates, the curve was steep again, and the model's probabilities had dropped right when the recession months arrived. Out of sample, it flagged only 9 of the 28 recession months.
+- **2020: a lucky call?** The curve briefly inverted in mid-2019 and the model rose to about 42% for mid-2020. A recession did come, but it was caused by a pandemic that no bond market predicted. Count it as a hit in the scoring, but not as proof.
+- **2023–24: the long false alarm.** From November 2022 to November 2024 the spread was negative for 25 straight months, the longest run since 1959 in this data. The model's probability passed 50% for 21 of them. As of October 2026, no recession has been declared for the months those forecasts covered. In total, 39 of 282 calm months were flagged at the 30% threshold.
+
+Switch to **Fitted on all data** and the 2023 peak drops from 80% to 61%: once the model has seen the false alarm, it learns to trust inversions a little less. Only the real-time version shows what a forecaster would actually have said.
+
+<div class="breakout">
+<CodeLab client:load id="ch08-timeline" title="A recession-probability tracker, New York Fed style" r={timelineR} py={timelinePy} setup={setupR} pySetup={setupPy} pyPackages={['statsmodels', 'scipy']}
+  goal="Fit the model on every month with a known outcome, forecast the next 12 months, plot the probability against NBER recessions, and compare it with the New York Fed's published coefficients." />
+</div>
+
+Our logit gives a **9.7%** chance that October 2027 is a recession month. The New York Fed's coefficients applied to our spread give 11.2%, and its own published figure is 12.4%. The gap between those two is entirely the spread measure (0.98 points on the New York Fed's bond-equivalent basis, 1.08 on ours); the rest of the gap to our 9.7% comes from logit versus probit and the different estimation sample. All three tell the same story: with the curve back to a normal upward slope, the yield curve is no longer warning of recession.
+
+<Callout type="pitfall" title="Has the curve stopped working?">
+Nobody knows yet, and you should be wary of confident answers in either direction. In the middle of the 2023–24 episode, economists were already warning that the nominal spread "could be less informative than it has been in the past", for example because long-run and short-run inflation expectations had diverged unusually.<sup>[7](#refs)</sup> Others have argued that a near-term forward spread, built from expected short rates over the next 18 months, is a cleaner signal than the 10-year minus 3-month spread.<sup>[8](#refs)</sup> And the NBER lag means the final verdict on 2024–26 is not in. What you *can* say precisely is how much the episode hurt the model's track record. That is the next two sections.
+</Callout>
+
+## From probability to decision: pick a threshold
+
+A probability is not yet an action. Your CFO wants to know: **do we freeze hiring or not?** To turn a probability into a yes/no warning you choose a <Term def="The probability above which a forecast is treated as a 'yes' (here: warn of recession).">threshold</Term>. Each choice produces a <Term def="A 2×2 table counting hits, misses, false alarms and correct quiet calls for a given threshold.">confusion matrix</Term>:
+
+| | Recession followed | No recession followed |
+|---|---|---|
+| **Warned** | Hit (true positive) | False alarm (false positive) |
+| **No warning** | Miss (false negative) | Correct quiet call (true negative) |
+
+Two rates summarize it. The <Term def="Hits ÷ all months followed by recession. Also called the true positive rate, sensitivity or recall.">hit rate</Term> is the share of pre-recession months you flagged. The <Term def="False alarms ÷ all months not followed by recession. Also called the false positive rate.">false alarm rate</Term> is the share of calm months you flagged by mistake.
+
+The natural first guess, a 50% threshold, is a poor choice for rare events. In sample, only 21 of 802 months ever reached 50%, so the model flagged just **7 of 95** pre-recession months (a 7% hit rate). Lowering the threshold to 20% catches 56% of them, at the price of flagging 14% of calm months.
+
+<div class="breakout">
+<ThresholdGame client:load />
+</div>
+
+The <Term def="Receiver operating characteristic curve: hit rate plotted against false alarm rate for every possible threshold.">ROC curve</Term> on the left shows every threshold at once. Sliding the threshold only moves you *along* the curve; a better model shifts the whole curve toward the top-left corner. The cost chart on the right is where the business decision lives: if a missed recession costs your firm five times as much as a false alarm, the cheapest in-sample threshold is about **14%**. At that setting the model catches 74 of 95 pre-recession months and raises false alarms in a quarter of calm ones.
+
+<Callout type="math" title="Why the best threshold is 1 / (1 + k)">
+Suppose a false alarm costs 1 and a missed recession costs $k$. If you warn, your expected cost is $(1-p) \cdot 1$. If you stay quiet, it is $p \cdot k$. Warning is cheaper when $(1-p) \lt p\,k$, that is, when
+
+$$
+p \gt \frac{1}{1+k}.
+$$
+
+With $k = 5$, warn above $1/6 \approx 17\%$. This rule assumes the probabilities are well calibrated. The data-driven optimum in the threshold game (about 14% in sample, 16% out of sample) is close but not identical, because the model's probabilities are not perfectly calibrated.
+</Callout>
+
+<Callout type="business" title="Who should choose the threshold?">
+Not the analyst alone. The threshold encodes a value judgment about the cost of errors. A bank deciding whether to raise loan-loss reserves, a retailer deciding on holiday inventory and a central bank deciding on policy face very different costs. Your job is to deliver a well-calibrated probability **and** to show decision makers the trade-off, ideally as a chart like the threshold game above. Report the probability itself, not just "recession: yes".
+</Callout>
+
+## Scoring the probabilities themselves
+
+The confusion matrix depends on one threshold. Two scores judge the whole set of probabilities instead.
+
+The <Term def="Area under the ROC curve. It equals the probability that a randomly chosen positive case gets a higher forecast than a randomly chosen negative case. 0.5 = coin flip, 1 = perfect ranking.">AUC</Term> (area under the ROC curve) measures **ranking**: the chance that a randomly chosen pre-recession month gets a higher probability than a randomly chosen calm month. In sample, the yield-curve logit scores **0.820**. A coin flip scores 0.5.
+
+The <Term def="Mean squared difference between the forecast probability and the 0/1 outcome. Lower is better; 0 is perfect.">Brier score</Term> measures **accuracy and calibration together**: the average of $(p_t - y_t)^2$. It was proposed by the meteorologist Glenn Brier in 1950 for weather forecasts.<sup>[9](#refs)</sup> On its own the number is hard to read, so compare it with <Term def="A constant forecast equal to the historical frequency of the event (here: the share of months followed by recession).">climatology</Term>, a forecast that always says the base rate. In sample, the logit's Brier score is **0.091** against **0.104** for climatology. The <Term def="1 − (Brier of the model ÷ Brier of the benchmark). Positive = better than the benchmark.">Brier skill score</Term> is therefore 1 − 0.091 / 0.104 ≈ **13%**: the model removes about an eighth of the benchmark's squared error.
+
+<div class="breakout">
+<Calibration client:load />
+</div>
+
+In sample, the forecasts below 20% are well calibrated: months given about 15% were followed by recession 16% of the time. Above 40% the model is **overconfident**. The 32 months it scored between 40% and 60% (average 49%) were followed by recession only 25% of the time. Now press **Out of sample** and watch the Brier skill score turn negative.
+
+<div class="breakout">
+<CodeLab client:load id="ch08-scoring" title="Confusion matrix, ROC, AUC, Brier score and calibration, by hand" r={scoringR} py={scoringPy} setup={setupR} pySetup={setupPy} pyPackages={['statsmodels', 'scikit-learn']}
+  goal="Score the yield-curve logit with the full toolkit for probability forecasts, using only base R (and check the AUC against scikit-learn in Python)." />
+</div>
+
+## The honest test: out of sample
+
+Everything so far was scored on the same months the model was fitted to. As Chapter 3 insisted, that flatters any model. So freeze the model at the end of 1999 and forecast 2000 onward, a period with three recessions and one long inversion that the model has never seen. (The last training rows, dated 1999, have targets in 2000, so no test outcome leaks into the fit. A strict real-time forecaster would also have lacked those 2000 outcomes, so the test is still slightly kind to the model.)
+
+<Predict client:load
+  question="On the Brier score, does the 1999 yield-curve model beat a constant forecast of the base rate over the test period January 2000 to October 2025?"
+  options={[
+    'Yes, comfortably, in every sub-period',
+    'Yes through 2019, but over the full period it does worse than the constant',
+    'No, it never beats the constant',
+    'The Brier score cannot be computed out of sample'
+  ]}
+  answer={1}
+  explain="Through 2019 the model clearly wins (Brier 0.084 against 0.103). Add the forecasts made since 2020, which include the 2022–24 warnings, and it loses: 0.102 against 0.084. Its AUC also falls, from 0.84 to 0.73."
+/>
+
+<div class="breakout">
+<CodeLab client:load id="ch08-oos" title="Out-of-sample test: a model frozen in 1999" r={oosR} py={oosPy} setup={setupR} pySetup={setupPy} pyPackages={['statsmodels', 'scikit-learn']}
+  goal="Train through 1999, forecast every month since, and score the forecasts against a constant base-rate benchmark over two test windows." />
+</div>
+
+| Test window | Months | AUC | Brier, model | Brier, climatology |
+|---|---|---|---|---|
+| Jan 2000 – Dec 2019 | 240 | 0.839 | **0.084** | 0.103 |
+| Jan 2000 – Oct 2025 | 310 | 0.734 | 0.102 | **0.084** |
+
+Two lessons:
+
+1. **A model can rank well and still lose to a constant.** Even over the full period the AUC is 0.73, well above a coin flip. But the Brier score punishes confident mistakes hard: a forecast of 80% for a month with no recession adds $0.8^2 = 0.64$ to the squared error, about eight times the climatology forecast's average (0.084). The largest squared errors came from forecasts made in 2007 and 2008, which missed the timing of the Great Recession, and from those made in 2023 and 2024, the long false alarm.
+2. **The verdict depends on the window.** Through 2019 the yield curve looked like a superb indicator; six more years of data reversed the Brier comparison. Always say which period your accuracy numbers come from.
+
+## Can other indicators help?
+
+The yield curve is only one signal. Three others are popular: the <Term def="Moody's Baa corporate bond yield minus the 10-year Treasury yield (FRED: BAA10Y). It widens when investors fear defaults.">credit spread</Term> (`BAA10Y`), initial jobless claims (`ICSA`, seasonally adjusted, the subject of Chapter 7) and University of Michigan consumer sentiment (`UMCSENT`, not seasonally adjusted). Adding them to a logit is easy: `glm(y ~ spread + baa + claims, ...)`. Whether they *help* is an out-of-sample question. Because the credit spread starts in 1986, this test trains on 1986–2005 and evaluates on 2006 onward, and it asks the question at two horizons.
+
+<div class="breakout">
+<CodeLab client:load id="ch08-predictors" title="Do credit spreads, claims or sentiment add anything?" r={predR} py={predPy} setup={setupR} pySetup={setupPy} pyPackages={['statsmodels', 'scikit-learn']}
+  goal="Compare out-of-sample AUC for five predictor sets at 3- and 12-month horizons." />
+</div>
+
+| Predictors | AUC, 3 months ahead | AUC, 12 months ahead |
+|---|---|---|
+| Spread only | 0.320 | 0.643 |
+| + credit spread | 0.747 | 0.639 |
+| + jobless claims | **0.845** | 0.642 |
+| + sentiment | 0.633 | 0.644 |
+| All four | 0.806 | **0.648** |
+
+The horizon decides everything. **Three months ahead**, the spread alone does worse than a coin flip, because the curve usually re-steepens just before and during recessions as the Fed cuts rates. Jobless claims, which jump as soon as layoffs start, lift the AUC to 0.85. **Twelve months ahead**, none of the extra predictors moves the AUC by more than 0.005. That is the same pattern Estrella and Mishkin reported: other indicators help at short horizons, while the yield curve dominates further out.<sup>[5](#refs)</sup> Note also that this test window is small (two recessions in the test set), so treat differences in the third decimal as noise.
+
+<Callout type="tip" title="Make it yours">
+In the predictors lab, replace `ahead3` and `ahead12` with a 6-month-ahead target (`c(z$rec[-(1:6)], rep(NA, 6))`). At which horizon does the spread overtake claims? Then try `T10Y2Y` (10-year minus 2-year) in place of `GS10 - TB3MS`, loaded with `fred("T10Y2Y", to = "month")`.
+</Callout>
+
+## Your turn
+
+The New York Fed's target asks whether the economy is in recession in month *t* + 12. A more natural-sounding question is whether **any** of the next 12 months is a recession month. Build that target, fit the logit, and compare the two AUCs.
+
+<div class="breakout">
+<CodeLab client:load id="ch08-ex1" exercise title="Exercise: a 'within 12 months' target" r={exR} solution={exSolR} check={exCheckR} py={exPy} solutionPy={exSolPy} checkPy={exCheckPy} setup={setupR} pySetup={setupPy} pyPackages={['statsmodels', 'scikit-learn']}
+  goal="Build 'any recession in the next 12 months' from USREC, fit a logit on the spread, and compute its in-sample AUC."
+  hints={['The window runs from month i + 1 to month i + 12, so the first blank is how many months ahead the window ends.', 'A 0/1 target needs `family = binomial` in `glm()` (in Python: `smf.logit`).']} />
+</div>
+
+## Chapter checklist
+
+- A binary forecast should be a **probability**. Build the target carefully: here, `USREC` shifted 12 months ahead, with the last 12 rows unknown and the latest zeros provisional because of the NBER's dating lag.
+- The **linear probability model** can predict probabilities below 0 or above 1. **Logit** and **probit** (`glm(..., family = binomial(link = "logit"/"probit"))`) stay between 0 and 1 and give almost identical probabilities.
+- Read a logit slope as an **odds ratio** ($e^b$) or as a **marginal effect at a chosen value** ($b\,p(1-p)$), never as a direct change in probability.
+- A **threshold** turns probabilities into warnings. For rare events, 50% is usually far too high; the cost-minimizing threshold is about $1/(1+k)$ when a miss costs $k$ times a false alarm.
+- Score probability forecasts with **AUC** (ranking), the **Brier score** against a climatology benchmark, and a **calibration** table.
+- Test **out of sample**. The yield-curve model beat a constant through 2019 but lost to it once the 2022–24 false alarm entered the test window.
+- Extra predictors help at **short horizons** (jobless claims, 3 months ahead) but barely at **12 months**, where the spread dominates.
+
+<InstructorKit
+  minutes={75}
+  data={['GS10', 'TB3MS', 'USREC', 'BAA10Y', 'ICSA', 'UMCSENT']}
+  objectives={[
+    'Construct a forward-looking binary target from the NBER recession indicator and explain why its latest values are provisional.',
+    'Explain why the linear probability model is unsuitable for 0/1 targets, and estimate logit and probit models with `glm()`.',
+    'Interpret logit coefficients as odds ratios and as marginal effects at a chosen value, and compute predicted probabilities.',
+    'Turn probabilities into decisions with a threshold, using a confusion matrix and a cost ratio.',
+    'Evaluate probability forecasts with ROC/AUC, the Brier score against climatology, and a calibration table, in and out of sample.'
+  ]}
+  discussion={[
+    'The yield curve was inverted for 25 months in 2022–24 and, as of the data here, no recession followed. Is the model broken, unlucky, or not yet proven wrong? What evidence would change your mind?',
+    'A bank says: "Our recession model has an AUC of 0.95." What three questions would you ask before using it?',
+    'Who in a company should choose the warning threshold, and how would you present the trade-off to them?'
+  ]}
+  misconceptions={[
+    '“A 30% forecast was wrong because no recession happened.” A single outcome cannot refute a probability; only calibration over many forecasts can.',
+    '“The logit slope is the change in probability.” It is the change in log-odds; the probability effect depends on where you are on the S-curve.',
+    '“Use a 50% threshold.” For rare events this catches almost nothing (7 of 95 pre-recession months here). The right threshold depends on the cost of each error.',
+    '“A high AUC means the probabilities are trustworthy.” AUC only measures ranking; a model can rank well and still be badly calibrated, as the out-of-sample Brier score shows.'
+  ]}
+>
+
+**Recession call desk (30 minutes).** Teams of three play the role of an economics desk advising a company's board.
+
+1. **Predict (5 min).** Before running anything, each team writes down the probability they would have given in May 2023 for a recession by May 2024, and the threshold at which they would advise the board to freeze hiring.
+2. **Model (10 min).** Run the timeline lab and the out-of-sample lab. Record the 1999-frozen model's probability for May 2024 and the full-sample model's.
+3. **Decide (10 min).** In the threshold game, set the cost ratio the team believes fits their company (a retailer, a bank, a hospital) and read off the cheapest threshold. Would they have frozen hiring in 2023?
+4. **Brief (5 min).** One slide: today's probability, the threshold, the decision, and one sentence on how much to trust the model.
+
+*Expected results:* the frozen 1999 model gives about **80%** for May 2024; the full-sample logit about **61%**. With a cost ratio of 5, the cheapest threshold is about 14% in sample and 16% out of sample, so every team using the model would have warned in 2023, a false alarm as of the latest data. Through 2019 the model beats climatology on the Brier score (0.084 against 0.103); through October 2025 it loses (0.102 against 0.084). The latest reading is 9.7% for October 2027 (12.4% in the New York Fed's own published version). Use the gap between teams' gut probabilities and the model to discuss overconfidence.
+
+</InstructorKit>
+
+<div class="refs" id="refs">
+
+**References**
+
+1. National Bureau of Economic Research. Business Cycle Dating. [nber.org/research/business-cycle-dating](https://www.nber.org/research/business-cycle-dating)
+2. Estrella, A., & Hardouvelis, G. A. (1991). The term structure as a predictor of real economic activity. *Journal of Finance*, 46(2), 555–576. See also Estrella, A. (2005). *The Yield Curve as a Leading Indicator: Frequently Asked Questions*. Federal Reserve Bank of New York.
+3. Federal Reserve Bank of New York. The Yield Curve as a Leading Indicator: probability of US recession predicted by Treasury spread (updated November 5, 2026). [newyorkfed.org](https://www.newyorkfed.org/research/capital_markets/ycfaq)
+4. National Bureau of Economic Research. Business Cycle Dating Committee announcements. [nber.org](https://www.nber.org/research/business-cycle-dating/business-cycle-dating-committee-announcements)
+5. Estrella, A., & Mishkin, F. S. (1998). Predicting U.S. recessions: Financial variables as leading indicators. *Review of Economics and Statistics*, 80(1), 45–61. See also Estrella, A., & Mishkin, F. S. (1996). The yield curve as a predictor of U.S. recessions. *Current Issues in Economics and Finance*, 2(7). Federal Reserve Bank of New York.
+6. Estrella, A., & Trubin, M. R. (2006). The yield curve as a leading indicator: Some practical issues. *Current Issues in Economics and Finance*, 12(5). Federal Reserve Bank of New York.
+7. Neely, C. J. (2023, September 7). What is the probability of a recession? The message from yield spreads. *On the Economy*, Federal Reserve Bank of St. Louis.
+8. Engstrom, E. C., & Sharpe, S. A. (2019). The near-term forward yield spread as a leading indicator: A less distorted mirror. *Financial Analysts Journal*, 75(4), 37–49.
+9. Brier, G. W. (1950). Verification of forecasts expressed in terms of probability. *Monthly Weather Review*, 78(1), 1–3.
+
+</div>
+
+<style>{`
+  .refs { font-size: .86rem; color: var(--text-2); margin-top: 3rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+  .ch-body table { margin: 1.4rem 0 2rem; font-size: .88rem; }
+  .ch-body td { vertical-align: top; }
+`}</style>

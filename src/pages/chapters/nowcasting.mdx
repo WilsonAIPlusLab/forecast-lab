@@ -1,0 +1,373 @@
+---
+layout: ../../layouts/Chapter.astro
+slug: nowcasting
+minutes: 55
+build:
+  - A live nowcast of this month's payroll change from weekly jobless claims, with an honest real-time evaluation
+  - A one-line "economic activity" index extracted from 20 indicators with principal components
+  - Reconciled forecasts for 13 retail series that add up, scored at every level of the hierarchy
+skills: [bridge equation, ragged edge, prcomp, scree plot, diffusion index, GDPNow, bottom-up, top-down, reconciliation, MinT, sapply]
+---
+import CodeLab from '../../components/CodeLab.svelte';
+import Callout from '../../components/Callout.astro';
+import KeyIdea from '../../components/KeyIdea.astro';
+import Predict from '../../components/Predict.svelte';
+import Term from '../../components/Term.astro';
+import InstructorKit from '../../components/InstructorKit.astro';
+import RaggedEdge from '../../components/ch13/RaggedEdge.svelte';
+import FactorWall from '../../components/ch13/FactorWall.svelte';
+import HierarchyMachine from '../../components/ch13/HierarchyMachine.svelte';
+import GDPNowTrack from '../../components/ch13/GDPNowTrack.svelte';
+import bridgeR from '../../labs/ch13/bridge.R?raw';
+import bridgePy from '../../labs/ch13/bridge.py?raw';
+import factorR from '../../labs/ch13/factor.R?raw';
+import factorPy from '../../labs/ch13/factor.py?raw';
+import diffR from '../../labs/ch13/diffusion.R?raw';
+import diffPy from '../../labs/ch13/diffusion.py?raw';
+import hierR from '../../labs/ch13/hierarchy.R?raw';
+import hierPy from '../../labs/ch13/hierarchy.py?raw';
+import gdpR from '../../labs/ch13/gdpnow.R?raw';
+import gdpPy from '../../labs/ch13/gdpnow.py?raw';
+import exR from '../../labs/ch13/exercise.R?raw';
+import exSolR from '../../labs/ch13/exercise_solution.R?raw';
+import exCheckR from '../../labs/ch13/exercise_check.R?raw';
+import exPy from '../../labs/ch13/exercise.py?raw';
+import exSolPy from '../../labs/ch13/exercise_solution.py?raw';
+import exCheckPy from '../../labs/ch13/exercise_check.py?raw';
+
+<p class="lede">It is mid-November 2026. Your company must decide this week whether to keep hiring through the holidays. The official November jobs report won't arrive until <strong>December 4</strong>. The first estimate of fourth-quarter GDP won't arrive until around the end of January. But the Labor Department published fresh jobless claims on Thursday, and it will do so again next Thursday. <strong>What is the economy doing this month, before the data are out?</strong></p>
+
+Forecasting the present sounds like a contradiction. It isn't. Official statistics arrive weeks or months after the period they describe, and each one arrives on its own day. <Term def="Estimating the current (or just-finished) period's value of a slowly published statistic, such as GDP or payrolls, from faster data that are already available. A blend of 'now' and 'forecast'.">Nowcasting</Term> fills that gap with faster, noisier data. Central banks, investment banks and large retailers all run nowcasts. This chapter shows you how they work, what "big data" really changes in forecasting, and where the gains are smaller than the hype.
+
+<KeyIdea>A nowcast is only as good as what it knows <em>on the day you make it</em>. Track exactly which data exist on that date, and judge the model only with information that was really available.</KeyIdea>
+
+## Three kinds of "big"
+
+"Big data" in forecasting usually means one of three problems. Each needs a different tool.
+
+| The problem | Example | Why ordinary regression struggles | Tool in this chapter |
+|---|---|---|---|
+| **Many predictors** (*p* large relative to *n*) | 20 or 200 monthly indicators, but only ~400 months of history | Too many coefficients to estimate. The fit chases noise. | Principal components and factor models |
+| **Many series** | 13 retail categories, or 30,000 store × product series | You can't hand-build 30,000 models. Their forecasts must add up. | Loops over lists, hierarchical reconciliation |
+| **High frequency, mixed timing** | Weekly claims, daily spreads, monthly payrolls, quarterly GDP | Series arrive on different days and at different frequencies | Bridge equations, the release calendar |
+
+## The release calendar and the ragged edge
+
+Every statistic has a release schedule. These are the ones that matter most for U.S. nowcasting:
+
+| Statistic | Agency | Frequency | When it comes out |
+|---|---|---|---|
+| Initial jobless claims (`ICSA`) | Labor Department (DOL) | Weekly | Thursdays at 8:30 a.m. ET (Wednesday in Thanksgiving week), for the week ending the previous Saturday<sup>[1](#refs)</sup> |
+| Nonfarm payrolls (`PAYEMS`) | Bureau of Labor Statistics (BLS) | Monthly | Usually the first Friday of the next month, for the pay period that includes the 12th<sup>[2](#refs)</sup> |
+| Retail sales (`RSAFS`) | Census Bureau | Monthly | About ten business days after the month ends<sup>[3](#refs)</sup> |
+| Real GDP growth (`A191RL1Q225SBEA`) | Bureau of Economic Analysis (BEA) | Quarterly | Advance estimate near the end of the month after the quarter ends, then a second and third estimate a month apart<sup>[4](#refs)</sup> |
+
+Line them up on any given day, and the newest observation of each series falls in a different month. Claims are current to last Saturday. Payrolls are current to last month. GDP is current to last quarter. This uneven end of the dataset is called the <Term def="The uneven end of a dataset at any moment: because series are published on different schedules, the latest available observation falls in a different period for each one.">ragged edge</Term>, and every nowcasting model must handle it.
+
+<Callout type="pitfall" title="When the calendar breaks: the 2025 shutdown">
+The federal government shut down from October 1 to November 12, 2025, for 43 days. During a lapse in funding, BLS doesn't collect data. It never published an October 2025 CPI, and the October unemployment rate was never measured.<sup>[5](#refs)</sup> You can see the hole in the bundled data: `UNRATE.csv` and `CPIAUCSL.csv` have a blank for 2025-10. The national claims report stopped too, but the Labor Department kept posting state-level claims files. Private economists added them up each week, and those estimates became one of the few timely signals.<sup>[24](#refs)</sup> When official data stop, nowcasts become more valuable.
+</Callout>
+
+## Nowcasting with a bridge equation
+
+The simplest nowcasting tool is a <Term def="A regression that links a low-frequency target (monthly or quarterly) to high-frequency indicators aggregated to the same frequency. It 'bridges' the frequencies, and it is re-run as each new high-frequency print arrives.">bridge equation</Term>. It has three steps:
+
+1. **Aggregate** the fast indicator to the target's frequency. For example, average the weekly claims in each month.
+2. **Regress** the target on the aggregated indicator, using past months.
+3. **Update** the nowcast each time a new weekly print arrives, using the partial-month average.
+
+Our target is the monthly change in payrolls (thousands of jobs, SA). The predictors are last month's change and the change in average weekly claims from last month. Before you play with it, make a prediction about the most famous month in the data.
+
+<Predict client:load
+  question="In the week ending March 21, 2020, initial claims jumped to about **2.9 million** (seasonally adjusted, as revised), roughly ten times the week before. The next week they doubled again. What did the **March 2020** jobs report, released April 3, show?"
+  options={['A loss of about 7 million jobs', 'A loss of about 700,000 jobs', 'A small gain', 'A loss of about 20 million jobs']}
+  answer={1}
+  explain="BLS first reported a loss of **701,000** jobs (revised data now show about 1.4 million). The payroll survey measures the pay period that includes **March 12**, before most shutdowns began, and BLS said so in the release. The 20-million collapse showed up in **April**. A bridge model that blindly averages all of March's claims gets this badly wrong. Try it below."
+/>
+
+<div class="breakout">
+<RaggedEdge client:load />
+</div>
+
+Play each month and watch the nowcast move:
+
+- **Oct 2026 (calm).** The nowcast barely moves, from about +77,000 to +91,000 jobs as five weeks of claims arrive. The actual change was +165,000. In calm times claims hardly move, so they carry little news about payrolls.
+- **Sep 2008 (Lehman).** Claims climbed through the month, and the nowcast slid from −159,000 to −257,000. BLS's first estimate, published October 3, 2008, was **−159,000**.<sup>[6](#refs)</sup> Today's revised data say **−451,000**. Here the claims-based nowcast was closer to the eventual truth than the first official number.
+- **Mar 2020 (COVID).** The nowcast collapses to about −6.1 million after the last two weeks, far outside its own 90% band. The actual was −1.4 million. The model's error was not bad luck. It was a timing mismatch between what claims measure (the whole month) and what the payroll survey measures (the pay period including the 12th).
+- **Nov 2026 (live).** Only one week of claims exists so far. The nowcast is about +144,000 jobs, with a 90% band of roughly ±215,000. The answer arrives on December 4.
+
+Notice how little the band narrows: from about ±222,000 with no claims to about ±210,000 with a full month. That is an honest result. Weekly claims are a **turning-point** indicator. They shine when layoffs surge and add little when the labor market is steady.
+
+<Callout type="math" title="The bridge equation, written out">
+Let $y_t$ be the payroll change in month $t$ and $c_{t,k}$ the average of the first $k$ weekly claims prints whose week ends in month $t$. With $k$ weeks known, the nowcast comes from
+
+$$
+y_t = \alpha_k + \phi_k\, y_{t-1} + \beta_k \left(c_{t,k} - \bar c_{t-1}\right) + \varepsilon_{t,k},
+$$
+
+where $\bar c_{t-1}$ is last month's full average. There is one regression for each $k = 0, 1, \dots, K$. With $k = 0$ it is a plain AR(1) on payroll changes. The 90% band is $\hat y_t \pm 1.645\,\hat\sigma_k$. Fancier systems, such as mixed-data sampling (MIDAS) regressions and dynamic factor models with a Kalman filter, handle many indicators and the ragged edge in one model.<sup>[7](#refs)</sup> The bridge equation is the transparent ancestor of both.
+</Callout>
+
+Now build it yourself. The lab aggregates the weekly file to months, fits the bridge, nowcasts November 2026 from the single week available, and then runs the honest test: re-fit using only past data and nowcast each month as it would have happened.
+
+<div class="breakout">
+<CodeLab client:load id="ch13-bridge" title="Bridge equation: nowcast payrolls from weekly claims" r={bridgeR} py={bridgePy} pyPackages={['statsmodels']}
+  goal="Aggregate weekly claims to months, nowcast November 2026 payrolls with a prediction interval, and test whether claims really help." />
+</div>
+
+The verdict in numbers: over 2023–2026 the bridge model's mean absolute miss is about 95,000 jobs, the same as the AR benchmark's. Over 2008–2009 it is 132,000 against 153,000, about 14% better. The model nowcasts November 2026 at **+140,000** jobs, with a 90% prediction interval from −71,000 to +350,000. (The explorable shows +144,000 because it uses a regression built for exactly one week of claims.)
+
+<Callout type="pitfall" title="Real-time data are not today's data">
+Two shortcuts in this lab make the evaluation look better than real life:
+<ul>
+<li>We use <strong>today's revised</strong> payrolls and claims. On the day of a nowcast, you would have had first prints and older seasonal factors.</li>
+<li>Researchers who care about this use <em>real-time vintages</em>: what was published on each date. The St. Louis Fed's ALFRED database stores them.</li>
+</ul>
+A model that looks great on revised data can disappoint in real time. Say which kind of data you used.
+</Callout>
+
+## Real nowcasts: GDPNow and the New York Fed
+
+Two public nowcasts of U.S. GDP growth are watched by markets every week:
+
+- **GDPNow** (Federal Reserve Bank of Atlanta, public since 2014, with a track record reconstructed back to 2011) builds GDP up from its components. It forecasts consumer spending, investment, government and net exports with bridge equations and related models, and updates as each source release arrives.<sup>[8](#refs)</sup> The Atlanta Fed stresses that it is not an official forecast and involves no judgment.<sup>[9](#refs)</sup>
+- **The New York Fed Staff Nowcast** (launched 2016) is a <Term def="A model in which many observed series are driven by a few unobserved common factors that evolve over time. The Kalman filter updates the factors as each new data point arrives, so it handles the ragged edge naturally.">dynamic factor model</Term>. It reads dozens of indicators, extracts their common movements, and updates the GDP estimate with each release.<sup>[10](#refs)</sup>
+
+How good are they? The bundled `GDPNOW` series holds GDPNow's **final** nowcast for each quarter, made just before BEA's advance estimate. The bundled real GDP growth series (`A191RL1Q225SBEA`) is the **latest vintage**: the advance estimate plus every revision since. Those are different targets, and that difference matters.
+
+<Predict client:load
+  question="Across 59 quarters from 2011 to 2026 (leaving out the two wildest COVID quarters), how far was GDPNow's final nowcast from real GDP growth *as revised today*, on average?"
+  options={['About 0.3 percentage points', 'About 0.8 points', 'About 1.3 points', 'About 3 points']}
+  answer={2}
+  explain="About **1.3 points** (annualized). The Atlanta Fed reports **0.76** against the *advance* estimate, which is what GDPNow is actually trying to hit. The difference is mostly revisions: BEA finds that real GDP growth moves by **1.21 points** on average between the advance and latest estimates. The target itself moves."
+/>
+
+Against the advance estimate, the Atlanta Fed reports an average absolute miss of 0.76 points and a root mean squared miss of 1.15 points for its final nowcasts from 2011 Q3 to 2026 Q3.<sup>[9](#refs)</sup> BEA's own revision study finds that real GDP growth moves by 1.21 points on average between the advance and the latest estimate (1999–2022).<sup>[22](#refs)</sup> Keep both numbers in mind as you explore.
+
+<div class="breakout">
+<GDPNowTrack client:load />
+</div>
+
+Two quarters tell the whole story. In **2015 Q1**, GDPNow's final nowcast was 0.1%, and BEA's advance estimate was 0.2%.<sup>[11](#refs)</sup> That is a near-perfect nowcast. Later revisions raised the quarter to 3.6%, so against today's data it looks like a 3.5-point miss. In **2025 Q1**, a surge of gold imports distorted the trade data. The bundled series shows GDPNow at −2.7%. The Atlanta Fed added a gold-adjusted model during that quarter, which gave a less negative reading.<sup>[12](#refs)</sup> BEA's advance estimate was −0.3%.<sup>[13](#refs)</sup>
+
+<div class="breakout">
+<CodeLab client:load id="ch13-gdpnow" title="Evaluate GDPNow honestly" r={gdpR} py={gdpPy}
+  goal="Score GDPNow's final nowcasts against revised GDP, compare with a naive benchmark, and explain why the answer depends on which vintage you score against." />
+</div>
+
+<Callout type="business" title="How professionals use a nowcast">
+Nobody treats a nowcast as the truth. Traders use it to judge whether the official number will surprise. Policymakers use it to see the economy weeks earlier. Analysts read the <em>changes</em>: which release moved the nowcast, and by how much. GDPNow publishes this "news" decomposition after every update. A nowcast is a tool for being less surprised, not for being right to the decimal.
+</Callout>
+
+## Many series, one factor
+
+GDPNow and the New York Fed read dozens of indicators. You can't put 200 predictors into a regression with 400 observations and expect stable coefficients. The way out is an old observation: economic series move together. Jobs, output, spending and housing tend to rise in expansions and fall in recessions. If most of that shared movement comes from one or two hidden <Term def="An unobserved variable that drives the co-movement of many observed series. In macroeconomics the first factor usually looks like overall economic activity.">factors</Term>, you can estimate the factors and forecast with them instead.
+
+The standard estimator is <Term def="A method that finds the weighted averages of standardized variables that capture the most variance. The first principal component is the single weighted average that explains the most shared variation.">principal components</Term> (PCA). Below are 20 bundled monthly indicators, each turned into a monthly growth rate or change and standardized. Look at the wall first. Can you see the recessions?
+
+<div class="breakout">
+<FactorWall client:load />
+</div>
+
+One component explains **36%** of the variation across all 20 series. The second explains 11%, and the rest trail off. That pattern in the **scree plot** says the panel really does have one dominant common factor. Its 3-month average plunges in 2001, 2008–09 and 2020, and it sat at **0.12** in September 2026: close to average growth.
+
+**What surprised you?** Uncheck "Clip outliers". The first component jumps to **49%** and the 2020 plunge dwarfs everything else. In spring 2020 some series sit up to 19 standard deviations from normal. Principal components minimize squared distances, so a single extreme month can hijack the whole analysis. Clipping 68 of the 8,100 values (47 of them in 2020) at ±4 standard deviations keeps the factor about the business cycle, not about one spring.
+
+<Callout type="math" title="Principal components in four lines">
+Stack the standardized panel into a $T \times N$ matrix $Z$ (months × series). Its correlation matrix is $R = Z'Z/(T-1)$. PCA finds the eigenvectors $w_1, w_2, \dots$ of $R$, sorted by eigenvalue $\lambda_1 \ge \lambda_2 \ge \dots$:
+
+$$
+f_{1t} = \sum_{j=1}^{N} w_{1j}\, z_{jt}, \qquad \text{share}_1 = \frac{\lambda_1}{\sum_j \lambda_j}.
+$$
+
+The weights $w_1$ are the **loadings**, and $f_1$ is the first factor. The sign of $w_1$ is arbitrary, so we flip it to make payrolls load positively. Stock and Watson showed that with many series, the principal components consistently estimate the true factors, even when each series is noisy.<sup>[14](#refs)</sup>
+</Callout>
+
+<div class="breakout">
+<CodeLab client:load id="ch13-factor" title="Extract an activity factor from 20 indicators" r={factorR} py={factorPy} pyPackages={['scikit-learn']}
+  goal="Build a 20-series panel with one function and lapply, run prcomp, read the scree plot and loadings, and chart the factor against recessions." />
+</div>
+
+<Callout type="business" title="You've seen this index before">
+The Chicago Fed National Activity Index (CFNAI) is this idea at scale: a weighted average of <strong>85</strong> monthly indicators, scaled to mean 0 and standard deviation 1. The Chicago Fed watches its 3-month average (CFNAI-MA3). After an expansion, a reading below −0.70 has historically signaled a rising chance of recession.<sup>[15](#refs)</sup> Our 20-series version is a home-made cousin.
+</Callout>
+
+## Forecasting with factors: the diffusion index
+
+A factor is useful for more than charts. Stock and Watson's <Term def="A forecasting regression that adds a few estimated factors from a large panel to a small benchmark model, such as an autoregression. Named for the way it 'diffuses' information from many series into a few predictors.">diffusion index</Term> forecast adds the first few factors to a benchmark autoregression:<sup>[16](#refs)</sup>
+
+$$
+y_{t+1} = \alpha + \phi_1 y_t + \phi_2 y_{t-1} + \gamma_1 \hat f_{1t} + \gamma_2 \hat f_{2t} + \varepsilon_{t+1}.
+$$
+
+The honest test re-estimates the factors **at every forecast origin**, using only data available then. The lab does exactly that for next month's industrial production growth, with 179 forecast origins from January 2005 to November 2019 (so the forecasts cover February 2005 to December 2019).
+
+<div class="breakout">
+<CodeLab client:load id="ch13-diffusion" title="Diffusion-index forecast vs an AR benchmark" r={diffR} py={diffPy} packages={['forecast']} pyPackages={['scipy']}
+  goal="Forecast industrial production one month ahead with and without factors, re-estimating everything in real time, and test whether the gain is real." />
+</div>
+
+The factors cut the RMSE by about **5%** over 2005–2019 (0.667 vs 0.704 percentage points) and by **15%** during the 2008–09 recession. The Diebold–Mariano p-value is **0.18**, so this sample alone can't rule out luck. That is a typical result. Big panels often help a little, and they help most when the economy turns.
+
+<Predict client:load kind="check"
+  question="A colleague adds 200 more indicators to the panel and reports that the in-sample R² of the diffusion-index regression rose from 0.20 to 0.35. What should you ask first?"
+  options={['Which indicators were added?', 'Was the out-of-sample error, with factors re-estimated at each origin, lower than the AR benchmark?', 'Did the first factor explain more variance?', 'Is R² adjusted for the number of series?']}
+  answer={1}
+  explain="In-sample fit always improves when you add information, and a factor estimated on the full sample secretly uses the future. Only a real-time, out-of-sample comparison with a benchmark tells you whether the forecast got better."
+/>
+
+## Many series that must add up
+
+The second "big" problem is not many predictors but many **targets**. A retailer forecasts every product in every store. The sum of those forecasts should equal the company forecast that finance uses, or two departments will plan for two different futures. Series that sum to totals form a <Term def="A collection of time series where some are sums of others, such as stores within regions within a country, or categories within total sales.">hierarchy</Term>. Forecasts that respect the sums are called <Term def="Forecasts in which every aggregate equals the sum of its components, just as the actual data do.">coherent</Term>.
+
+U.S. retail sales form a real hierarchy. Total retail and food services (`RSAFS`) = motor vehicles & parts (`RSMVPD`) + everything else (`RSFSXMV`). Everything else splits into nine published categories plus "Other" (grocery, sporting goods and miscellaneous stores, computed as the remainder).
+
+<div class="breakout">
+<HierarchyMachine client:load />
+</div>
+
+| Method | How it works | Strength | Weakness |
+|---|---|---|---|
+| **Bottom-up** | Forecast the bottom series, add them up | Keeps detail; nothing is lost | Bottom series are noisy |
+| **Top-down** | Forecast the total, split by historical shares | Total is smooth and easy to forecast | Misses shifts in the mix (e.g. the move to online) |
+| **OLS reconciliation** | Adjust all forecasts by the smallest equal-weighted amount that makes them add up | Uses every level | Treats a \$700 billion total and an \$8 billion category as equally noisy |
+| **WLS / MinT** | Same, but weighted by how noisy each series' forecasts are | Often the most accurate in published comparisons<sup>[23](#refs)</sup> | Needs good estimates of the error variances |
+
+In the code lab below (ETS base forecasts, 12 test months from October 2025 to September 2026), **bottom-up** gave the most accurate total, with a MAPE of 1.87% against 2.66% for the total's own model. **Top-down** did worst one level down (ex-autos MAPE 3.26%), and it missed the shift to online shopping: its nonstore MAPE was 5.59%, against 1.16% for the series' own model. **OLS** reconciliation hurt small categories such as electronics (MAPE 4.60% → 6.35%), because it spread the total's large errors evenly. The explorable uses a simpler damped-Holt model and finds the same ranking for the total.
+
+<Callout type="math" title="Reconciliation and MinT in one formula">
+Collect all 13 base forecasts in $\hat y$ and the 11 bottom-level series in $b$. The summing matrix $S$ (13 × 11) maps bottom to all: $y = Sb$. Any reconciliation method takes the form
+
+$$
+\tilde y = S G \hat y, \qquad G = (S' W^{-1} S)^{-1} S' W^{-1}.
+$$
+
+With $W = I$ this is OLS. With $W = \text{diag}(S\mathbf 1)$ (each node weighted by how many bottom series it contains) it is structural WLS. **MinT** (minimum trace) sets $W$ to the estimated covariance matrix of the base forecast errors. Wickramasuriya, Athanasopoulos and Hyndman proved that this choice minimizes the total forecast-error variance among all unbiased reconciliations of this form.<sup>[17](#refs)</sup> Bottom-up is $G = [\,0 \mid I\,]$, which simply ignores the upper-level forecasts.
+</Callout>
+
+<div class="breakout">
+<CodeLab client:load id="ch13-hier" title="Forecast a hierarchy: bottom-up, top-down and reconciliation" r={hierR} py={hierPy} packages={['forecast']} pyPackages={['statsmodels']}
+  goal="Fit ETS to 13 retail series in one loop, make the forecasts coherent four ways, and score each method at every level." />
+</div>
+
+<Callout type="tip" title="Going further">
+In R, the `fable` package's `reconcile(min_trace(...))` and the older `hts` package implement MinT for hierarchies with thousands of series. In Python, use `hierarchicalforecast` from Nixtla. The matrix algebra is the same as in the lab.
+</Callout>
+
+## Alternative data: Google searches, card swipes, satellites
+
+Official data are slow because they come from careful surveys. Private "exhaust" data are fast because they are by-products of everyday activity:
+
+- **Search data.** Choi and Varian added Google Trends search volumes to simple seasonal autoregressions and improved nowcasts of auto sales, initial unemployment claims, travel and consumer confidence.<sup>[18](#refs)</sup> People search for "unemployment benefits" before they file.
+- **Card spending.** During COVID, Chetty and coauthors built a public tracker from anonymized card transactions and other private data. It showed spending falling in close to real time, weeks before the official monthly statistics.<sup>[19](#refs)</sup>
+- **Satellites.** Night-light intensity seen from space tracks GDP growth. It is especially useful in countries where official statistics are weak.<sup>[20](#refs)</sup>
+
+<Callout type="pitfall" title="The parable of Google Flu Trends">
+Google Flu Trends estimated flu cases from searches and was celebrated in 2009. In the 2012–13 season it roughly doubled the CDC's estimate of doctor visits for flu-like illness.<sup>[21](#refs)</sup> The causes were overfitting to search terms that happened to correlate with winter, and changes to Google's own search engine. Alternative data need the same discipline as any other data: out-of-sample tests against a benchmark, and suspicion when the data-generating process can change under you.
+</Callout>
+
+## Working at scale
+
+Most of "big data" forecasting is plain good engineering:
+
+- **Write one function, apply it to a list.** The factor lab transforms 20 series with one `lapply()` call. The hierarchy lab fits 13 models with one `sapply()`. The same code works for 30,000 series. In Python, use dictionary comprehensions or `groupby().apply()`.
+- **Vectorize.** Operate on whole columns at once, not element by element. Matrix algebra did all of reconciliation in two lines.
+- **Use the right storage.** When data stop fitting comfortably in memory, R's `data.table`, `arrow`, and `duckdb` (an in-process SQL database) handle hundreds of millions of rows on a laptop. In Python, use `polars` or `duckdb`.
+- **Parallelize the loop, not the model.** Forecasting many series is "embarrassingly parallel": each series is independent. `future.apply` in R and `joblib` in Python spread the loop across cores.
+
+## Your turn
+
+Forecast the two halves of U.S. retail sales and add them up. Fill in the two blanks and press **Run & check**.
+
+<div class="breakout">
+<CodeLab client:load id="ch13-ex1" exercise title="Exercise: bottom-up beats direct?" r={exR} solution={exSolR} check={exCheckR} py={exPy} solutionPy={exSolPy} checkPy={exCheckPy} packages={['forecast']} pyPackages={['statsmodels']}
+  goal="Forecast motor vehicles and everything else separately, add them into a bottom-up total, and compare its error with a forecast of the total itself."
+  hints={['`forecast()` returns an object; its point forecasts live in the `$mean` element (Python: forecast from `train`).', 'Adding two columns row by row is `rowSums()` in R and `.sum(axis=1)` in pandas.']} />
+</div>
+
+## Chapter checklist
+
+- "Big" means three things: **many predictors**, **many series**, and **mixed frequencies**. Each has its own tool.
+- Know the **release calendar**. Every nowcast lives on the **ragged edge**, and every evaluation must use only data available on the nowcast date.
+- A **bridge equation** aggregates fast data to the target frequency and is re-run as each print arrives. Claims help most at **turning points**.
+- **Principal components** compress many indicators into a few factors. Read the **scree plot**, standardize first, and tame outliers.
+- **Diffusion-index** forecasts usually beat an AR benchmark modestly. Re-estimate factors in real time.
+- Forecasts of a **hierarchy** must be **coherent**: bottom-up, top-down or reconciliation (OLS, WLS, MinT). The best method can differ by level.
+- Always ask **which vintage** a forecast is scored against. Revisions are part of the "error".
+
+<InstructorKit
+  minutes={75}
+  data={['ICSA', 'PAYEMS', 'GDPNOW', 'A191RL1Q225SBEA', 'RSAFS', 'RSFSXMV', 'RSMVPD', 'INDPRO', 'USREC']}
+  objectives={[
+    'Explain the **ragged edge** and read a release calendar (claims, payrolls, retail sales, GDP).',
+    'Build and update a **bridge equation** that nowcasts monthly payrolls from weekly claims, and evaluate it in pseudo real time.',
+    'Extract a common factor from 20 indicators with `prcomp`, interpret the scree plot and loadings, and explain why outliers must be handled.',
+    'Compare a **diffusion-index** forecast with an AR benchmark and interpret a modest, non-significant gain honestly.',
+    'Produce **coherent** forecasts for a hierarchy with bottom-up, top-down and OLS/WLS reconciliation, and describe what MinT adds.',
+    'Distinguish nowcast error from **data revisions** when evaluating GDPNow.'
+  ]}
+  discussion={[
+    'March 2020: claims exploded, but the March jobs report showed a far smaller loss. Was the bridge model "wrong", or was it answering a different question from the survey?',
+    'GDPNow missed 2015 Q1 by 3.5 points against today\'s data, but by 0.1 points against the advance estimate. Which number should a trading desk care about? Which should a historian care about?',
+    'Your CFO wants store-level forecasts that add up to the corporate budget. Which reconciliation method would you propose, and what would you need to estimate MinT?'
+  ]}
+  misconceptions={[
+    '"More data always means better forecasts." More predictors raise in-sample fit; out-of-sample gains are usually modest and need real-time testing.',
+    '"The nowcast was 3 points off, so the model is bad." Part of the miss is revision to the target itself.',
+    '"PCA finds the economically meaningful factor." It finds the direction of maximum variance. With outliers or a lopsided panel, that can be something else, such as April 2020.',
+    '"Bottom-up is always best." It won for the total in our test; top-down or MinT can win when bottom series are very noisy.'
+  ]}
+>
+
+**Nowcasting desk (30 minutes).** Teams of three each take one month in the ragged-edge explorable.
+
+1. **Predict (5 min).** Before pressing Play, each team writes its nowcast for the payroll change and a 90% range.
+2. **Play (10 min).** Step through the month day by day. Record the nowcast after each Thursday's claims print. Note when it moves most.
+3. **Debrief (15 min).** Each team reports its path and the miss on jobs report day.
+
+*Expected results (from the explorable's model):*
+- **October 2026:** the nowcast drifts from about +77k to +91k as five weeks arrive; actual +165k.
+- **September 2008:** −159k → −257k; actual (revised) −451k, first print −159k.
+- **March 2020:** about +230k with no claims or one week, +157k after two weeks, then −2.2 million and −6.1 million after the last two weeks; actual −1.4 million (first print −701k).
+- **November 2026:** +144k after one week, band about ±215k; the answer arrives December 4, 2026. Ask students to post their nowcast and check it in class after the release.
+
+**Follow-up (20 minutes).** Run the hierarchy lab. Ask: *which method would you ship if finance only cares about the total, and which if store managers care about their own category?* Expected: bottom-up for the total (MAPE 1.87%); base or bottom-up for the categories (average 3.52%); OLS hurts small categories (average 4.00%).
+
+</InstructorKit>
+
+<div class="refs" id="refs">
+
+**References**
+
+1. U.S. Department of Labor, Employment and Training Administration. *Unemployment Insurance Weekly Claims* (weekly news release). [dol.gov/newsroom/releases/eta](https://www.dol.gov/newsroom/releases/eta)
+2. U.S. Bureau of Labor Statistics. *Schedule of releases for the Employment Situation*, and CES technical notes. [bls.gov/schedule/news_release/empsit.htm](https://www.bls.gov/schedule/news_release/empsit.htm)
+3. U.S. Census Bureau. *Monthly Retail Trade: About the surveys*. [census.gov/retail/marts/about_the_surveys.html](https://www.census.gov/retail/marts/about_the_surveys.html)
+4. U.S. Bureau of Economic Analysis. *GDP release schedule and revision information*. [bea.gov/news/schedule](https://www.bea.gov/news/schedule)
+5. U.S. Bureau of Labor Statistics (2025). *Revised release dates following the 2025 lapse in appropriations*. [bls.gov/bls/2025-lapse-revised-release-dates.htm](https://www.bls.gov/bls/2025-lapse-revised-release-dates.htm)
+6. U.S. Bureau of Labor Statistics. *The Employment Situation: September 2008* (Oct. 3, 2008) and *March 2020* (Apr. 3, 2020). [empsit_10032008.pdf](https://www.bls.gov/news.release/archives/empsit_10032008.pdf), [empsit_04032020.pdf](https://www.bls.gov/news.release/archives/empsit_04032020.pdf)
+7. Giannone, D., Reichlin, L., & Small, D. (2008). Nowcasting: The real-time informational content of macroeconomic data. *Journal of Monetary Economics*, 55(4), 665–676.
+8. Higgins, P. (2014). GDPNow: A model for GDP "nowcasting". Federal Reserve Bank of Atlanta Working Paper 2014-7.
+9. Federal Reserve Bank of Atlanta. *GDPNow: Frequently asked questions*. [atlantafed.org/cqer/research/gdpnow](https://www.atlantafed.org/cqer/research/gdpnow)
+10. Bok, B., Caratelli, D., Giannone, D., Sbordone, A. M., & Tambalotti, A. (2018). Macroeconomic nowcasting and forecasting with big data. *Annual Review of Economics*, 10, 615–643.
+11. U.S. Bureau of Economic Analysis (2015). *Gross Domestic Product: First Quarter 2015 (Advance Estimate)*, Apr. 29, 2015.
+12. Federal Reserve Bank of Atlanta (2025). The switch: Changing conditions behind new GDPNow model. *Policy Hub: Macroblog*, Apr. 23, 2025.
+13. U.S. Bureau of Economic Analysis (2025). *Gross Domestic Product, 1st Quarter 2025 (Advance Estimate)*, Apr. 30, 2025.
+14. Stock, J. H., & Watson, M. W. (2002). Forecasting using principal components from a large number of predictors. *Journal of the American Statistical Association*, 97(460), 1167–1179.
+15. Federal Reserve Bank of Chicago. *Chicago Fed National Activity Index (CFNAI): Background*. [chicagofed.org/cfnai](https://www.chicagofed.org/cfnai)
+16. Stock, J. H., & Watson, M. W. (2002). Macroeconomic forecasting using diffusion indexes. *Journal of Business & Economic Statistics*, 20(2), 147–162.
+17. Wickramasuriya, S. L., Athanasopoulos, G., & Hyndman, R. J. (2019). Optimal forecast reconciliation for hierarchical and grouped time series through trace minimization. *Journal of the American Statistical Association*, 114(526), 804–819. See also Hyndman, R. J., Ahmed, R. A., Athanasopoulos, G., & Shang, H. L. (2011). Optimal combination forecasts for hierarchical time series. *Computational Statistics & Data Analysis*, 55(9), 2579–2589.
+18. Choi, H., & Varian, H. (2012). Predicting the present with Google Trends. *Economic Record*, 88(s1), 2–9.
+19. Chetty, R., Friedman, J. N., Stepner, M., & the Opportunity Insights Team (2024). The economic impacts of COVID-19: Evidence from a new public database built using private sector data. *Quarterly Journal of Economics*, 139(2), 829–889.
+20. Henderson, J. V., Storeygard, A., & Weil, D. N. (2012). Measuring economic growth from outer space. *American Economic Review*, 102(2), 994–1028.
+21. Lazer, D., Kennedy, R., King, G., & Vespignani, A. (2014). The parable of Google Flu: Traps in big data analysis. *Science*, 343(6176), 1203–1205.
+22. Fixler, D. J., de Francisco, E., & Schaaf, I. (2024). Revisions to GDP, GDI, and their major components. *Survey of Current Business*, August 2024. [apps.bea.gov/scb](https://apps.bea.gov/scb/issues/2024/08-august/0824-revisions-to-gdp-gdi.htm)
+23. Hyndman, R. J., & Athanasopoulos, G. (2021). *Forecasting: Principles and Practice* (3rd ed.), ch. 11. [otexts.com/fpp3](https://otexts.com/fpp3/)
+24. Bloomberg News (Oct. 17, 2025). US initial jobless claims fell last week, state data suggest. See also Reuters coverage of Haver Analytics estimates during the shutdown.
+
+</div>
+
+<style>{`
+  .refs { font-size: .86rem; color: var(--text-2); margin-top: 3rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+  .ch-body table { margin: 1.4rem 0 2rem; font-size: .88rem; }
+  .ch-body td { vertical-align: top; }
+`}</style>

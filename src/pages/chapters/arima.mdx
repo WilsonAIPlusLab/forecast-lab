@@ -1,0 +1,362 @@
+---
+layout: ../../layouts/Chapter.astro
+slug: arima
+minutes: 55
+build:
+  - A 12-month core PCE inflation outlook with 80% and 95% fan bands, converted exactly from a model of log prices
+  - An inflation scorecard from rolling-origin evaluation, where ARIMA, ETS and a 12-month benchmark compete on the same errors
+  - A unit-root verdict table (ADF, KPSS, ndiffs) and a residual check (Ljung–Box) you can defend in a meeting
+skills: [stationarity, random walk, diff, adf.test, kpss.test, ndiffs, nsdiffs, acf, pacf, Arima, auto.arima, checkresiduals, Box.test]
+---
+import CodeLab from '../../components/CodeLab.svelte';
+import Callout from '../../components/Callout.astro';
+import KeyIdea from '../../components/KeyIdea.astro';
+import Predict from '../../components/Predict.svelte';
+import Term from '../../components/Term.astro';
+import InstructorKit from '../../components/InstructorKit.astro';
+import PersistenceDial from '../../components/ch06/PersistenceDial.svelte';
+import SpotRandomWalk from '../../components/ch06/SpotRandomWalk.svelte';
+import DifferencingMachine from '../../components/ch06/DifferencingMachine.svelte';
+import SignatureGallery from '../../components/ch06/SignatureGallery.svelte';
+import simR from '../../labs/ch06/simulate.R?raw';
+import simPy from '../../labs/ch06/simulate.py?raw';
+import acfR from '../../labs/ch06/acf.R?raw';
+import acfPy from '../../labs/ch06/acf.py?raw';
+import fitR from '../../labs/ch06/fit.R?raw';
+import fitPy from '../../labs/ch06/fit.py?raw';
+import outR from '../../labs/ch06/outlook.R?raw';
+import outPy from '../../labs/ch06/outlook.py?raw';
+import exR from '../../labs/ch06/exercise.R?raw';
+import exSolR from '../../labs/ch06/exercise_solution.R?raw';
+import exCheckR from '../../labs/ch06/exercise_check.R?raw';
+
+<p class="lede">In September 2026, core PCE prices, the Federal Reserve's preferred inflation gauge, were up 3.1% from a year earlier. The Fed's target is 2%. Your manager asks a simple question: <strong>where will inflation be a year from now?</strong> Before you can answer, you have to decide something deeper. When inflation is pushed away from its usual level, does it come back on its own, or does it stay wherever the last shock left it?</p>
+
+That question has a name: **stationarity**. It decides whether your forecast drifts back toward a long-run average or stays flat at today's value. It decides whether your forecast intervals level off or widen forever. This chapter turns it into something you can see, test and model, and ends with a 12-month inflation outlook you could hand to a manager.
+
+## Shocks that fade, shocks that stick
+
+Start with the simplest model of persistence, the <Term def="An autoregressive model of order 1: today's value equals a fraction φ of yesterday's value plus a new random shock.">AR(1)</Term>:
+
+$$
+y_t = \phi\, y_{t-1} + \varepsilon_t
+$$
+
+Here $y_t$ is how far the series sits from its long-run mean, and $\varepsilon_t$ is a fresh, unpredictable shock each month, called <Term def="A sequence of independent random shocks with mean zero and constant variance. Nothing about its past helps predict its future.">white noise</Term>. The single number φ (phi) controls everything. Imagine inflation has just been pushed 4 points above its normal level. Drag the dial and watch 40 possible futures unfold.
+
+<Predict client:load
+  question="Set φ = 1, a **random walk**. Compared with 12 months ahead, how wide is the 95% forecast band 48 months ahead?"
+  options={['About the same width', 'About twice as wide', 'About four times as wide', 'Infinitely wide']}
+  answer={1}
+  explain="With φ = 1 every shock is permanent, so the forecast variance after h months is h times the shock variance, and the band's width grows like √h. Four times the horizon gives √4 = 2 times the width. Check it on the dial: the band is ±1.96√12 ≈ ±6.8 around the forecast at month 12 and ±1.96√48 ≈ ±13.6 at month 48 (hover the chart to read the band edges)."
+/>
+
+<div class="breakout">
+<PersistenceDial client:load />
+</div>
+
+Three regimes appear as you turn the dial:
+
+- **φ below 1 (stationary).** The paths are pulled back toward the mean. Half of any shock is gone after log(0.5)/log(φ) months, its <Term def="The number of periods until half of a shock's effect has died out. For an AR(1), log(0.5)/log(φ).">half-life</Term>. The forecast band widens for a while and then **levels off** at the long-run range.
+- **φ = 1 (a random walk, or <Term def="A series with a unit root: shocks are permanent, so it has no fixed mean to return to. A random walk is the simplest example.">unit root</Term>).** Nothing pulls the paths back. Each shock is added to all the ones before, and the band grows **without limit**. The best forecast is simply today's value.
+- **φ above 1 (explosive).** Shocks are amplified. That is how bubbles look, and few economic series behave like this for long.
+
+<KeyIdea>A stationary series forgets its shocks; a random walk remembers every one. That single difference decides whether a forecast returns to an average or stays put, and whether its intervals level off or keep widening.</KeyIdea>
+
+Formally, a series is <Term def="A series whose mean, variance and autocorrelations do not change over time. It fluctuates around a fixed level and keeps returning to it.">stationary</Term> if its mean and variance stay constant over time, and the correlation between $y_t$ and $y_{t-k}$ depends only on the gap $k$, not on the date. White noise and an AR(1) with $|\phi| < 1$ are stationary. A random walk is not: its variance grows with time.
+
+<Callout type="math" title="Why the AR(1) band levels off and the random walk's does not">
+Substitute the AR(1) into itself $h$ times:
+
+$$
+y_{T+h} = \phi^h y_T + \varepsilon_{T+h} + \phi\,\varepsilon_{T+h-1} + \dots + \phi^{h-1}\varepsilon_{T+1}.
+$$
+
+The forecast made at time $T$ is the expected value, $\hat y_{T+h} = \phi^h y_T$, which shrinks toward the mean (zero) when $|\phi|<1$. The forecast error is the sum of the future shocks, so its variance is
+
+$$
+\operatorname{Var}(y_{T+h} - \hat y_{T+h}) = \sigma^2 \left(1 + \phi^2 + \phi^4 + \dots + \phi^{2(h-1)}\right) \;\longrightarrow\; \frac{\sigma^2}{1-\phi^2} \quad (h \to \infty).
+$$
+
+The geometric sum converges when $|\phi| < 1$: that limit is the long-run range on the dial. When $\phi = 1$ every term equals 1, the variance is $h\sigma^2$, and the 95% band is $\pm 1.96\,\sigma\sqrt{h}$: it never stops growing. A **random walk with drift** adds a constant, $y_t = c + y_{t-1} + \varepsilon_t$, so the forecast is a straight line with slope $c$, wrapped in the same widening band.
+</Callout>
+
+## Two kinds of trend
+
+Most economic series in levels go up over time: prices, GDP, payrolls. A trend can arise in two very different ways.
+
+| | Deterministic trend | Stochastic trend |
+|---|---|---|
+| Model | $y_t = a + bt + u_t$, with $u_t$ stationary | $y_t = b + y_{t-1} + \varepsilon_t$ (random walk with drift) |
+| After a shock | The series returns to the trend line | The trend line itself moves, permanently |
+| Forecast intervals | Bounded width around the line | Widen like $\sqrt h$ |
+| Fix | Regress on time and model the residuals (**detrending**) | Model the changes (**differencing**) |
+
+The two can look nearly identical in a chart. They imply very different forecasts, though: after a recession, does output return to its old trend path, or has the path been permanently lowered? Nelson and Plosser (1982) famously found that most long U.S. macroeconomic series behave more like the stochastic kind.<sup>[5](#refs)</sup> That is why differencing, not detrending, is the default in this chapter.
+
+<Callout type="pitfall" title="Trending series make fake relationships">
+Regress one random walk on another, completely unrelated one, and you will often find a "highly significant" slope and a large R². This is <Term def="A regression between unrelated nonstationary series that looks statistically significant only because both trend.">spurious regression</Term>, and it is the main reason econometricians test for unit roots before running regressions on time series. Chapter 7 returns to it.
+</Callout>
+
+## Spot the random walk
+
+Your eyes are the first test of stationarity. Try them on four mystery series before any statistics.
+
+<div class="breakout">
+<SpotRandomWalk client:load />
+</div>
+
+The game uses two formal tests, and the most important fact about them is that **their null hypotheses are opposite**:
+
+| Test | R function | Null hypothesis | A small p-value (< 0.05) means… |
+|---|---|---|---|
+| Augmented Dickey–Fuller (ADF) | `adf.test()` | The series has a unit root | Evidence of stationarity |
+| KPSS | `kpss.test()` | The series is stationary | Evidence of a unit root |
+
+Because the nulls are opposite, use the tests together. When ADF rejects and KPSS does not, both point to stationary. When KPSS rejects and ADF does not, both point to a unit root. When they disagree, the data cannot settle the question, and you need judgment. The function `ndiffs()` from the forecast package automates the common recipe: it applies KPSS, differences, and repeats until the test stops rejecting, then tells you how many differences it took.
+
+<Callout type="pitfall" title="ADF has low power near φ = 1">
+Failing to reject a unit root is not proof of one. In 1,000 simulations of an AR(1) with φ = 0.9, which is stationary, the ADF test at the 5% level correctly rejected the unit root only **19%** of the time with 120 months of data, **51%** with 240 months and **84%** with 360 months. Ten years of monthly data is often not enough to tell "very persistent" from "permanent". (The simulation code is in the Instructor kit below.)
+</Callout>
+
+Now run the tests yourself on four laboratory series where you know the truth.
+
+<div class="breakout">
+<CodeLab client:load id="ch06-sim" title="Simulate four series and test them for unit roots" r={simR} py={simPy} packages={['forecast', 'tseries']} pyPackages={['statsmodels']}
+  goal="Simulate white noise, an AR(1) and two random walks; produce a verdict table from ADF, KPSS and ndiffs()." />
+</div>
+
+With seed 2026, the R lab gives the textbook picture. For both random walks, ADF cannot reject a unit root (p = 0.38 and 0.32) and KPSS rejects stationarity (p ≈ 0.01), so `ndiffs()` asks for one difference. For white noise and the AR(1), both tests point to stationary and `ndiffs()` returns 0. Differencing the random walk once gives back its white-noise shocks, and the tests then agree it is stationary.
+
+## The cure: differencing
+
+If a series has a unit root, model its changes instead. The first <Term def="The change from one period to the next, y(t) − y(t−1). In R: diff(y).">difference</Term> $\Delta y_t = y_t - y_{t-1}$ turns a random walk into white noise and a log price level into an inflation rate. Seasonal data may also need a <Term def="The change from the same season a year earlier, y(t) − y(t−12) for monthly data. In R: diff(y, lag = 12).">seasonal difference</Term>, $y_t - y_{t-12}$, which removes a seasonal pattern that repeats but drifts. Try both on real data, and watch the autocorrelation function (ACF) on the right. It shows the correlation between the series and its own past at each lag.
+
+<div class="breakout">
+<DifferencingMachine client:load />
+</div>
+
+Three patterns are worth memorizing from the machine:
+
+- **Slow, straight-line decay in the ACF** (log core PCE prices: 0.99 at lag 1, still 0.87 at lag 12): a trend is still there. Difference.
+- **Spikes at 12, 24, 36** (retail sales, not seasonally adjusted): seasonality. Take a seasonal difference.
+- **A big negative spike at lag 1 right after you differenced**: you may have gone one difference too far. The unemployment rate, differenced twice, has a lag-1 autocorrelation of −0.57. <Term def="Differencing a series more times than needed. It adds an artificial negative autocorrelation and makes forecasts and intervals worse.">Over-differencing</Term> adds noise and widens intervals for no benefit.
+
+<Predict client:load kind="check"
+  question="You difference a series once. Its ACF now drops to zero after lag 1, but the lag-1 value is **−0.48**. What is the most likely reading?"
+  options={['The series still has a unit root; difference again', 'The differenced series has an MA(1) pattern, which may mean it was over-differenced', 'The series is white noise', 'The series needs a seasonal difference']}
+  answer={1}
+  explain="A single negative spike at lag 1 is the fingerprint of an MA(1) with a negative coefficient. Differencing a series that was already stationary produces exactly that, so check whether the original series was stationary. Sometimes the MA(1) is genuine: inflation's changes look like this, as you will see in the next lab."
+/>
+
+The same steps in code, on core PCE prices. Watch for the moment the ACF of *changes in inflation* snaps into a clean shape.
+
+<div class="breakout">
+<CodeLab client:load id="ch06-acf" title="Read the ACF and PACF of real inflation data" r={acfR} py={acfPy} packages={['forecast']} pyPackages={['statsmodels']}
+  goal="Plot the ACF of log prices, inflation and changes in inflation, and identify a candidate model from their shapes." />
+</div>
+
+<Callout type="pitfall" title="A real-data quirk: the missing October 2025 CPI">
+The federal government shutdown of October 1 to November 12, 2025 stopped CPI data collection, and the Bureau of Labor Statistics never published the October 2025 index for most CPI series, including all-items and core CPI. It also said it will not publish 12-month changes for October 2026 where October 2025 is missing.<sup>[9](#refs)</sup> The bundled `CPIAUCSL` and `CPILFESL` files have a blank for that month. `fred()` fills a short gap like this by linear interpolation and prints a note, so your code runs, but the October 2025 value is the course's estimate, not an official number, and any monthly or 12-month change that touches it inherits that guess. That is why this chapter uses core PCE prices, which have no gap in the bundled data. If you use CPI, either stop at September 2025 with `fred("CPIAUCSL", end = c(2025, 9))` or say in your memo that one month was interpolated.
+</Callout>
+
+## Fingerprints: the ACF and PACF
+
+Differencing gives you a stationary series. Next you need to describe its short-run dynamics, and two plots do most of the work. The **ACF** at lag $k$ is the correlation between $y_t$ and $y_{t-k}$. The <Term def="Partial autocorrelation: the correlation between y(t) and y(t−k) after removing the effect of the lags in between. It equals the last coefficient in a regression of y(t) on its first k lags.">PACF</Term> at lag $k$ is the same correlation *after controlling for* the lags in between, so it answers "does lag $k$ add anything new?". Each family of models leaves a distinctive fingerprint in the pair.
+
+Two building blocks are new here. An **AR(p)** model regresses today on the last $p$ values. An <Term def="Moving-average model of order q: today's value is a weighted sum of the current and last q random shocks. Its memory lasts exactly q periods.">MA(q)</Term> model builds today from the last $q$ *shocks*, so its memory lasts exactly $q$ periods. An **ARMA(p, q)** mixes both.
+
+<div class="breakout">
+<SignatureGallery client:load />
+</div>
+
+| Model | ACF | PACF |
+|---|---|---|
+| AR(p) | Tails off (smoothly or in damped waves) | **Cuts off after lag p** |
+| MA(q) | **Cuts off after lag q** | Tails off |
+| ARMA(p, q) | Tails off after lag q | Tails off after lag p |
+
+This is the heart of the <Term def="The model-building approach of Box and Jenkins (1970): make the series stationary, identify candidate ARMA orders from the ACF and PACF, estimate, check the residuals, then forecast.">Box–Jenkins method</Term>: make the series stationary, match its ACF and PACF to a fingerprint, estimate a few candidates, check the residuals, then forecast.<sup>[1](#refs)</sup> In practice the sample fingerprints are noisy (the open circles in the gallery), so treat them as a way to shortlist two or three candidates, not to pick one.
+
+<Predict client:load kind="check"
+  question="The sample ACF of a stationary series has significant spikes at lags 1 and 2 and nothing after. The PACF decays gradually. Which model fits the fingerprint?"
+  options={['AR(2)', 'MA(2)', 'ARMA(1,1)', 'White noise']}
+  answer={1}
+  explain="An ACF that cuts off after lag q is the MA(q) signature, and a tailing PACF confirms it. An AR(2) would show the opposite: a PACF that cuts off after lag 2."
+/>
+
+<Callout type="math" title="Where the fingerprints come from">
+For an **AR(1)**, $\rho_k = \phi^k$: geometric decay. Its PACF is $\phi$ at lag 1 and exactly 0 after, because once you know $y_{t-1}$, older values add nothing.
+
+For an **MA(1)**, $y_t = \varepsilon_t + \theta\varepsilon_{t-1}$, so $y_t$ and $y_{t-1}$ share one shock and $y_t$ and $y_{t-2}$ share none: $\rho_1 = \theta/(1+\theta^2)$ and $\rho_k = 0$ for $k \ge 2$.
+
+In general, any stationary ARMA can be written as $y_t = \sum_{j\ge0} \psi_j \varepsilon_{t-j}$, and then $\rho_k = \sum_j \psi_j\psi_{j+k} / \sum_j \psi_j^2$. That is exactly how the gallery computes its theoretical lollipops; its PACF comes from the Durbin–Levinson recursion, the same algorithm R's `ARMAacf(..., pacf = TRUE)` uses. An AR(2) is stationary only inside the triangle $\phi_1 + \phi_2 < 1$, $\phi_2 - \phi_1 < 1$, $|\phi_2| < 1$.
+</Callout>
+
+## ARIMA(p, d, q), decoded
+
+Put the pieces together and you have the <Term def="AutoRegressive Integrated Moving Average model. 'Integrated' means it is fitted to a series differenced d times.">ARIMA</Term> family. Each letter is one decision you have already practiced:
+
+| Letter | Meaning | How you choose it |
+|---|---|---|
+| **p** | number of AR terms (lags of the series) | PACF cut-off, then AICc |
+| **d** | number of differences | unit-root tests, `ndiffs()` |
+| **q** | number of MA terms (lags of the shocks) | ACF cut-off, then AICc |
+
+So ARIMA(0,1,1) means "difference once, then fit an MA(1)". Seasonal data add a second set in capitals: **ARIMA(p,d,q)(P,D,Q)[m]**, where P, D and Q are the same ideas at the seasonal lag $m$ (12 for monthly data). In Chapter 0, `auto.arima()` chose ARIMA(2,0,2)(0,1,1)[12] with drift for log retail sales since 2012: no regular difference but one seasonal difference (D = 1), two AR and two MA terms, one *seasonal* MA term at lag 12, and a drift for the upward trend.
+
+`auto.arima()` makes these choices for you, using the Hyndman–Khandakar algorithm.<sup>[4](#refs)</sup> It chooses d with repeated KPSS tests, chooses D with a measure of seasonal strength, then searches over p, q, P and Q by AICc, stepping from a simple starting model to its neighbours. It is fast and usually sensible, but it cannot know things you know: that a pandemic distorted two years of data, or that the Fed is committed to a target.
+
+<Callout type="math" title="Backshift notation in one line">
+Write $B y_t = y_{t-1}$. A difference is $(1-B)y_t$ and a seasonal difference is $(1-B^{12})y_t$. Then ARIMA(p,d,q) is
+
+$$
+(1 - \phi_1 B - \dots - \phi_p B^p)\,(1-B)^d\, y_t = c + (1 + \theta_1 B + \dots + \theta_q B^q)\,\varepsilon_t .
+$$
+
+A unit root is literally a root of the AR polynomial at $B = 1$: factor out $(1-B)$ and you have one more difference. The seasonal model multiplies in $(1-\Phi_1B^{12}-\dots)(1-B^{12})^D$ on the left and $(1+\Theta_1B^{12}+\dots)$ on the right.
+</Callout>
+
+Now fit two models to monthly core PCE inflation by hand, let `auto.arima()` have a go, and check the residuals.
+
+<div class="breakout">
+<CodeLab client:load id="ch06-fit" title="Fit ARIMA by hand, compare with auto.arima, check the residuals" r={fitR} py={fitPy} packages={['forecast']} pyPackages={['statsmodels']}
+  goal="Estimate an ARIMA(0,1,1) and an ARMA(1,1) for inflation, compare them with auto.arima(), and run the Ljung–Box test on the residuals." />
+</div>
+
+What the lab shows, with data from January 2000 to September 2026:
+
+- The ACF fingerprint pointed to **ARIMA(0,1,1)**, and `auto.arima()` agrees exactly. Its estimated θ is −0.82. In plain words, the forecast is a weighted average of past inflation that puts 18% weight on the newest month and lets older months fade gradually. That is simple exponential smoothing from Chapter 5, written as an ARIMA.
+- The stationary alternative, **ARMA(1,1) with a mean**, estimates φ = 0.96 and a mean of 2.2%. A half-life of about **18 months** means it, too, sees inflation as very persistent, but not permanent.
+- The tests cannot referee. On inflation since 2000, ADF just rejects a unit root (p = 0.049) while KPSS rejects stationarity (p ≤ 0.01). `ndiffs()` says d = 1 using KPSS, and d = 0 using ADF.
+- The residuals pass the <Term def="A test of whether a group of autocorrelations is jointly zero. Applied to residuals, its null is 'no autocorrelation left', so a large p-value is good news.">Ljung–Box test</Term> (p = 0.27, 24 lags): only 1 of 36 residual autocorrelations falls outside the band, about what chance alone produces.
+
+<Callout type="pitfall" title="Never compare AICc across different d">
+`auto.arima()` uses AICc to choose p and q **after** fixing d. Differencing changes the data the likelihood is computed on, so an ARIMA(0,1,1) and an ARMA(1,1) for the same series are not on the same AICc scale. To compare models with different d, compare their **out-of-sample forecasts**, which is exactly what the next section does.
+</Callout>
+
+<Callout type="business" title="Analyst judgment versus auto.arima">
+The two models fit history about equally well, but they disagree about the future. The IMA model says inflation stays wherever it is now, forever. The ARMA model says it drifts back to its 26-year average. The second view is also a statement about policy credibility: it assumes the central bank keeps pulling inflation back toward a stable anchor. Stock and Watson (2007) found that U.S. inflation is well described by an IMA(1,1), equivalently a random-walk trend plus short-lived noise, whose parameters shift over time.<sup>[6](#refs)</sup> Whichever you pick, say which one, and why.
+</Callout>
+
+## The inflation outlook
+
+Now build the deliverable. We model the **log price level** rather than the inflation rate, because any forecast of log prices converts exactly into a forecast of 12-month inflation, intervals included: the base month of each year-over-year rate is already observed. Three contenders compete with a benchmark that is surprisingly hard to beat in inflation forecasting, *"inflation over the next 12 months will equal inflation over the last 12"* (Atkeson & Ohanian, 2001).<sup>[7](#refs)</sup>
+
+<Predict client:load
+  question="Scored on 12-month-ahead inflation errors from 2010 to 2025, how do you expect ARIMA, ETS and the 12-month benchmark to compare?"
+  options={['ARIMA wins by a wide margin', 'ETS wins by a wide margin', 'ARIMA and ETS roughly tie, both a little better than the benchmark', 'The benchmark beats both models']}
+  answer={2}
+  explain="The best models cut the benchmark's average 12-month miss from about 0.61 to about 0.54 points, and ARIMA(0,2,1) and ETS(A,A,N) finish almost level. That is no coincidence: Holt's linear method is equivalent to an ARIMA(0,2,2). Simple, persistent models are very hard to beat on inflation."
+/>
+
+<div class="breakout">
+<CodeLab client:load id="ch06-outlook" title="Inflation outlook: fan chart and scorecard" r={outR} py={outPy} packages={['forecast']} pyPackages={['statsmodels']}
+  goal="Score ARIMA, ETS and a benchmark on 12-month inflation errors, then produce a 12-month core PCE inflation fan chart and the numbers for a memo." />
+</div>
+
+The R run gives these results (31 forecast origins, every June and December from mid-2010 to mid-2025):
+
+| 12 months ahead | MAE (pp) | RMSE (pp) | ME (pp) |
+|---|---|---|---|
+| Last 12 months (benchmark) | 0.61 | 1.03 | 0.11 |
+| ARIMA(0,2,1) | **0.54** | 0.94 | 0.12 |
+| ARIMA(1,1,1) + drift | 0.58 | 0.97 | 0.18 |
+| ETS(A,A,N) | 0.56 | **0.93** | 0.06 |
+
+**What surprised us:** for ARIMA(0,2,1), the average 12-month miss was 0.24 points for origins before 2020 and 1.08 points from 2020 on, more than four times larger. Every model was caught out by the 2021–22 surge, when core PCE inflation climbed above 5.5%. A positive ME means inflation came in *higher* than forecast on average. No univariate model saw that coming, because nothing in the history of inflation alone announced it.
+
+The outlook itself, from the `auto.arima()` model ARIMA(0,2,1) fitted through September 2026:
+
+- **Point forecast for September 2027: 3.1%**, essentially where inflation is today (3.1%). That is what a model without mean reversion says.
+- **80% interval: 2.0% to 4.1%**; 95% interval: 1.4% to 4.7%. Even one year out, the uncertainty is about ±1 point.
+- **The mean-reverting ARIMA(1,1,1) with drift says 2.8%.** The 0.3-point gap is the price of the unit-root decision.
+
+<Callout type="business" title="Context: what the Fed projects">
+At its September 15–16, 2026 meeting, the median FOMC participant projected core PCE inflation of **3.4%** for 2026 and **2.5%** for 2027, both measured from the fourth quarter of the previous year to the fourth quarter of the year shown.<sup>[8](#refs)</sup> These are not the same horizon as our forecast (September 2027 over September 2026), so compare directions, not decimals. The Fed expects inflation to come down in 2027; our ARIMA(0,2,1) does not, and the mean-reverting model sits in between. A good memo says that plainly: "statistical models extrapolating recent inflation see about 3%; policymakers expect a decline toward 2.5% by late 2027; our 80% interval spans both."
+</Callout>
+
+<Callout type="tip" title="Make it yours">
+Replace the six-month step with full time-series cross-validation, `tsCV(lp, function(y, h) forecast(Arima(y, order = c(0, 2, 1)), h = h), h = 12)`. It refits at every month, so it is slower in the browser. Or swap `"PCEPILFE"` for headline CPI with `fred("CPIAUCSL", end = c(2025, 9))` and see whether the ranking survives.
+</Callout>
+
+## Your turn
+
+The unemployment rate is the other half of the Fed's mandate. Decide how many differences it needs, fit an ARIMA, and check whether the residuals are white noise. Fill in the two blanks (`______`) and press **Run & check**.
+
+<div class="breakout">
+<CodeLab client:load id="ch06-ex1" exercise title="Exercise: identify, fit and check a model for unemployment" r={exR} solution={exSolR} check={exCheckR} packages={['forecast']}
+  goal="Choose d with ndiffs(), fit auto.arima() with that d, and run a Ljung–Box test with the right degrees of freedom."
+  hints={['The forecast-package function that counts how many first differences a series needs is `ndiffs()`.', 'Each estimated AR or MA coefficient uses up one degree of freedom. `length(coef(fit))` counts them.']} />
+</div>
+
+## Chapter checklist
+
+- **Stationary** series return to a fixed level and have bounded forecast intervals; **unit-root** series do not, and their intervals widen like √h.
+- Test with **ADF and KPSS together**: their nulls are opposite. Use `ndiffs()` and `nsdiffs()`, and remember that ADF has low power near φ = 1.
+- **Difference** to remove a stochastic trend, **seasonally difference** to remove drifting seasonality, and watch for **over-differencing** (a lag-1 ACF near −0.5).
+- Read the **ACF and PACF** to shortlist AR, MA or ARMA orders, then let AICc and out-of-sample accuracy decide. Never compare AICc across different d.
+- Check residuals with **`checkresiduals()`**: a large Ljung–Box p-value means nothing obvious is left to model.
+- Judge ARIMA against **ETS and a benchmark** on the same rolling-origin errors, and state your unit-root judgment in the memo.
+
+<InstructorKit
+  minutes={75}
+  data={['PCEPILFE', 'UNRATE', 'RSXFSN', 'CPIAUCSL']}
+  objectives={[
+    'Explain stationarity, and contrast how an AR(1) and a random walk respond to a shock and how their forecast intervals grow.',
+    'Distinguish a deterministic from a stochastic trend, and choose between detrending and differencing.',
+    'Run and interpret `adf.test()`, `kpss.test()`, `ndiffs()` and `nsdiffs()`, including what to do when the tests disagree.',
+    'Identify candidate AR, MA and ARMA orders from the ACF and PACF, and decode ARIMA(p,d,q)(P,D,Q)[m] notation.',
+    'Fit ARIMA models by hand and with `auto.arima()`, and check residuals with the Ljung–Box test.',
+    'Produce a 12-month inflation fan chart and compare ARIMA with ETS and a benchmark on rolling-origin errors.'
+  ]}
+  discussion={[
+    'Is U.S. inflation stationary? What would each answer imply about the credibility of the Fed’s 2% target?',
+    'The unemployment rate cannot exceed 100%, yet unit-root tests often cannot reject a unit root. How can both be true, and which view should a forecaster adopt for a one-year horizon?',
+    'A colleague picks the model with the lowest AICc among ARIMA(0,1,1) and ARMA(1,1). What is wrong with that comparison, and what would you do instead?'
+  ]}
+  misconceptions={[
+    '“Failing to reject a unit root proves the series has one.” ADF has low power when φ is near 1; check KPSS and think about the economics.',
+    '“More differencing is safer.” Over-differencing adds an artificial MA(1) pattern and widens intervals.',
+    '“A significant Ljung–Box test means the model is useless.” With long samples it flags tiny correlations; inspect the residual ACF and the forecast accuracy before adding terms.',
+    '“ARIMA and ETS are rival philosophies.” Many ETS models have exact ARIMA equivalents; Holt’s linear method is an ARIMA(0,2,2).'
+  ]}
+>
+
+**The persistence debate (30 minutes).** Split the class into "mean reversion" and "unit root" teams.
+
+1. **Predict (5 min).** Each student writes down a point forecast for core PCE inflation 12 months after the latest data, without any code.
+2. **Build (15 min).** The mean-reversion team runs the outlook lab with `Arima(lp, order = c(1, 1, 1), include.drift = TRUE)` as its headline model; the unit-root team keeps `auto.arima()`. Each team produces a fan chart and a two-sentence memo.
+3. **Confront (10 min).** Put both memos next to the FOMC's September 2026 median projections (core PCE 3.4% for 2026 and 2.5% for 2027, Q4 over Q4).
+
+*Expected results* (data through September 2026): ARIMA(0,2,1) forecasts **3.1%** for September 2027 with an 80% interval of **2.0% to 4.1%**; ARIMA(1,1,1) with drift forecasts **2.8%**. On the rolling-origin scorecard the 12-month MAE is 0.54 (ARIMA(0,2,1)), 0.56 (ETS), 0.58 (mean-reverting ARIMA) and 0.61 (benchmark). Errors from 2020 onward are more than four times those before 2020. Use the gap between the two teams to discuss why "which d?" is an economic question as much as a statistical one.
+
+**ADF power simulation (for the pitfall box).** In R, with `library(tseries)`: `set.seed(123); for (n in c(120, 240, 360)) print(mean(replicate(1000, suppressWarnings(adf.test(arima.sim(list(ar = 0.9), n))$p.value) < 0.05)))`. *Expected:* 0.189, 0.510 and 0.835. It takes about 5 seconds natively (much longer in the browser), so run it locally.
+
+</InstructorKit>
+
+<div class="refs" id="refs">
+
+**References**
+
+1. Box, G. E. P., & Jenkins, G. M. (1970). *Time Series Analysis: Forecasting and Control*. San Francisco: Holden-Day.
+2. Dickey, D. A., & Fuller, W. A. (1979). Distribution of the estimators for autoregressive time series with a unit root. *Journal of the American Statistical Association*, 74(366), 427–431.
+3. Kwiatkowski, D., Phillips, P. C. B., Schmidt, P., & Shin, Y. (1992). Testing the null hypothesis of stationarity against the alternative of a unit root. *Journal of Econometrics*, 54(1–3), 159–178.
+4. Hyndman, R. J., & Khandakar, Y. (2008). Automatic time series forecasting: The forecast package for R. *Journal of Statistical Software*, 27(3), 1–22.
+5. Nelson, C. R., & Plosser, C. I. (1982). Trends and random walks in macroeconomic time series. *Journal of Monetary Economics*, 10(2), 139–162.
+6. Stock, J. H., & Watson, M. W. (2007). Why has U.S. inflation become harder to forecast? *Journal of Money, Credit and Banking*, 39(s1), 3–33.
+7. Atkeson, A., & Ohanian, L. E. (2001). Are Phillips curves useful for forecasting inflation? *Federal Reserve Bank of Minneapolis Quarterly Review*, 25(1), 2–11.
+8. Board of Governors of the Federal Reserve System (2026, September 16). Summary of Economic Projections, Table 1. [federalreserve.gov/monetarypolicy/fomcprojtabl20260916.htm](https://www.federalreserve.gov/monetarypolicy/fomcprojtabl20260916.htm)
+9. U.S. Bureau of Labor Statistics. 2025 lapse in appropriations: impact on the Consumer Price Index, FAQ (last modified September 16, 2026). [bls.gov/cpi/additional-resources/2025-federal-government-shutdown-impact-cpi-faq.htm](https://www.bls.gov/cpi/additional-resources/2025-federal-government-shutdown-impact-cpi-faq.htm)
+10. Ljung, G. M., & Box, G. E. P. (1978). On a measure of lack of fit in time series models. *Biometrika*, 65(2), 297–303.
+11. Hyndman, R. J., & Athanasopoulos, G. (2021). *Forecasting: Principles and Practice* (3rd ed.), ch. 9. [otexts.com/fpp3/arima.html](https://otexts.com/fpp3/arima.html)
+
+Data: FRED, Federal Reserve Bank of St. Louis (PCEPILFE, UNRATE, RSXFSN). Core PCE price index: index 2017 = 100, monthly, seasonally adjusted. Unemployment rate: %, monthly, SA. Retail sales: $ millions, monthly, not seasonally adjusted.
+
+</div>
+
+<style>{`
+  .refs { font-size: .86rem; color: var(--text-2); margin-top: 3rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+  .ch-body table { margin: 1.4rem 0 2rem; font-size: .88rem; }
+  .ch-body td { vertical-align: top; }
+`}</style>

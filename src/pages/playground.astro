@@ -1,0 +1,69 @@
+---
+import Base from '../layouts/Base.astro';
+import CodeLab from '../components/CodeLab.svelte';
+import fs from 'node:fs';
+import path from 'node:path';
+const manifest = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'public', 'data', 'manifest.json'), 'utf8'));
+const ids = Object.keys(manifest);
+const starterR = `# Playground: a full R session in your browser.
+# Every bundled FRED series is available via fred("ID"); see the list below.
+library(forecast)
+
+y  <- fred("UNRATE", start = 2000)        # try "PAYEMS", "CPIAUCSL", "HOUSTNSA" ...
+fit <- auto.arima(y)
+fc  <- forecast(fit, h = 24)
+
+viz_ts(y, title = "Your series", recessions = TRUE)
+viz_forecast(fc, from = 2015, title = "24-month forecast")
+summary(fit)
+`;
+const starterPy = `# Playground: Python (pandas, numpy, statsmodels, scikit-learn...) in your browser.
+y = fred("UNRATE", start=2000)
+from statsmodels.tsa.holtwinters import ExponentialSmoothing
+fit = ExponentialSmoothing(y, trend="add", damped_trend=True).fit()
+fc = fit.forecast(24)
+viz_ts(y, title="Your series", recessions=True)
+viz_compare(history=y["2015":], **{"Damped Holt": fc}, title="24-month forecast")
+print(fit.params)
+`;
+---
+<Base title="Playground · Forecast Lab" description={`A free R and Python session in your browser with ${ids.length} bundled economic data series.`}>
+  <main id="main" class="pg">
+    <h1>Playground</h1>
+    <p class="lede">A blank canvas: R or Python running in this page, with all the course data and chart helpers. Your code is saved in this browser.</p>
+    <CodeLab client:load id="playground" title="Playground" r={starterR} py={starterPy} packages={['forecast']} pyPackages={['statsmodels', 'scikit-learn']} goal="Experiment freely. Ctrl+Enter runs; Step through explains as it goes." />
+    <section class="ref">
+      <div>
+        <h2>Chart helpers</h2>
+        <table>
+          <tbody>
+            <tr><td><code>viz_ts(a, b, title=, recessions=TRUE, facet=TRUE)</code></td><td>Line chart of one or more series</td></tr>
+            <tr><td><code>viz_forecast(fc, actual=, from=)</code></td><td>Fan chart from <code>forecast()</code></td></tr>
+            <tr><td><code>viz_compare(history=, actual=, A = f1, B = f2)</code></td><td>Several forecasts against the truth</td></tr>
+            <tr><td><code>viz_table(df, highlight = "MAE")</code></td><td>Scorecard table, best value highlighted</td></tr>
+            <tr><td><code>viz_lines(x, A = y1, B = y2)</code></td><td>Lines against a numeric x (e.g. horizon)</td></tr>
+            <tr><td><code>viz_acf(x, type = "pacf")</code></td><td>ACF / PACF with significance band</td></tr>
+            <tr><td><code>viz_decomp(stl(x, "periodic"))</code></td><td>Trend / seasonal / remainder panels</td></tr>
+            <tr><td><code>viz_scatter(x, y)</code>, <code>viz_bars(v)</code>, <code>viz_kpi(A = 1)</code></td><td>Scatter with OLS line, bars, big numbers</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <h2>Bundled data ({ids.length} series)</h2>
+        <div class="ids">{ids.map((id) => <a href={id === 'DIVISIA_M4' ? 'https://centerforfinancialstability.org/amfm.php' : `https://fred.stlouisfed.org/series/${id}`} target="_blank" rel="noopener" title={`${manifest[id].start} to ${manifest[id].end}`}><code>{id}</code></a>)}</div>
+        <p class="muted small">Hover over an ID for its date range; click to open its source page (FRED, or the Center for Financial Stability for DIVISIA_M4). Load with <code>fred("ID")</code>.</p>
+      </div>
+    </section>
+  </main>
+  <style>
+    .pg { max-width: 1120px; margin: 0 auto; padding: 3rem 1.5rem 0; }
+    .pg h1 { margin: 0 0 .5rem; }
+    .ref { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 2.5rem; margin-top: 2rem; }
+    @media (max-width: 900px) { .ref { grid-template-columns: 1fr; } }
+    .ref h2 { font-size: 1.25rem; margin: 0 0 .8rem; }
+    .ref td { font-size: .85rem; color: var(--text-2); }
+    .ids { display: flex; flex-wrap: wrap; gap: .35rem; }
+    .ids a { text-decoration: none; }
+    .small { font-size: .82rem; margin-top: .8rem; }
+  </style>
+</Base>

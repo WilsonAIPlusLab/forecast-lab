@@ -1,0 +1,325 @@
+---
+layout: ../../layouts/Chapter.astro
+slug: exponential-smoothing
+minutes: 50
+build:
+  - An automated batch forecast for 14 retail categories, with a traffic-light exception report that tells a planner which forecasts need a human look
+  - An ETS forecast of U.S. e-commerce sales with 80% and 95% prediction intervals, chosen automatically by AICc
+  - A cross-validated head-to-head showing ETS cutting the seasonal naive error by 30% to 50% at every horizon on the Chapter 3 scorecard
+skills: [ses, holt, "holt(damped = TRUE)", hw, ets, AICc, "forecast()", "lapply()", MASE, tsCV, ExponentialSmoothing, ETSModel]
+---
+import CodeLab from '../../components/CodeLab.svelte';
+import Callout from '../../components/Callout.astro';
+import KeyIdea from '../../components/KeyIdea.astro';
+import Predict from '../../components/Predict.svelte';
+import Term from '../../components/Term.astro';
+import InstructorKit from '../../components/InstructorKit.astro';
+import MemoryExplorer from '../../components/ch05/MemoryExplorer.svelte';
+import TrendDamping from '../../components/ch05/TrendDamping.svelte';
+import SeasonalEngine from '../../components/ch05/SeasonalEngine.svelte';
+import MondayDashboard from '../../components/ch05/MondayDashboard.svelte';
+import smR from '../../labs/ch05/smoothing.R?raw';
+import smPy from '../../labs/ch05/smoothing.py?raw';
+import etsR from '../../labs/ch05/ets.R?raw';
+import etsPy from '../../labs/ch05/ets.py?raw';
+import batchR from '../../labs/ch05/batch.R?raw';
+import batchPy from '../../labs/ch05/batch.py?raw';
+import cvR from '../../labs/ch05/tscv.R?raw';
+import cvPy from '../../labs/ch05/tscv.py?raw';
+import exR from '../../labs/ch05/exercise.R?raw';
+import exSolR from '../../labs/ch05/exercise_solution.R?raw';
+import exCheckR from '../../labs/ch05/exercise_check.R?raw';
+
+<p class="lede">It is 7:30 on a Monday morning. The supply team needs next quarter's demand for every product by noon, and you have 500 of them. You cannot hand-tune 500 models. You need a method that is fast, automatic, hard to break, and accurate enough that you only have to <strong>look closely at the few forecasts that look wrong</strong>.</p>
+
+That method is **exponential smoothing**. It is the default engine in commercial demand-planning software: SAP's Integrated Business Planning, for example, offers single, double and triple exponential smoothing plus an automated variant that picks the model and its parameters for you.<sup>[1](#refs)</sup> In this chapter you will build the same machine yourself, one component at a time, and finish with a batch run over 14 U.S. retail categories that produces the planner's real deliverable: an **exception report**.
+
+<KeyIdea>Exponential smoothing forecasts with a weighted average of the past, where the weights fade the further back you go. Add a smoothed trend and smoothed seasonal indices, and you have the workhorse of business forecasting.</KeyIdea>
+
+## Forecasting with a fading memory
+
+In Chapter 3 you met two extreme benchmarks. The **mean** forecast gives every past month the same weight, as if 2010 mattered as much as last month. The **naive** forecast puts all the weight on the last month and forgets everything else. Most real series need something in between: recent months should count most, but not exclusively.
+
+<Term def="A forecasting method in which the forecast is a weighted average of past observations, with weights that shrink geometrically as observations get older.">Simple exponential smoothing</Term> (SES) does exactly that. It keeps a single number, the **level**, and updates it each month:
+
+$$
+\text{new level} = \alpha \times \text{this month's value} + (1-\alpha) \times \text{old level}
+$$
+
+The <Term def="The smoothing parameter of SES, between 0 and 1. High alpha reacts fast to new data (short memory); low alpha averages over many months (long memory).">smoothing parameter α</Term> sets how much the newest month moves the level. Unroll the update and you find that the month $j$ periods back gets weight $\alpha(1-\alpha)^j$. Those weights shrink geometrically, which is where the name "exponential" comes from. The forecast for every future month is simply the last level, so **SES forecasts are flat**.
+
+<Predict client:load
+  question="Pick **Gasoline price** in the explorer below, but before you touch anything: which α do you expect to give the smallest one-step errors?"
+  options={['Close to 0: average over years of prices', 'Around 0.3', 'Around 0.6', 'Close to 1: last month is all you need']}
+  answer={3}
+  explain="Gasoline prices behave almost like a random walk: next month's best guess is this month's price. The search lands on α = 1.00, which makes SES identical to the naive forecast. Now switch to **monthly inflation**: it is so noisy month to month that the best α drops to about 0.23, and half the weight is spread over the last three months."
+/>
+
+<div class="breakout">
+<MemoryExplorer client:load />
+</div>
+
+Three things to notice as you play:
+
+- **α is a memory dial.** At α = 0.9, 90% of the weight sits on the last month alone. At α = 0.1, it takes seven months to accumulate half the weight. Watch the cyan bars stretch back as you lower α.
+- **The best α depends on the data.** The grid search finds α ≈ 1.00 for gasoline prices, 0.46 for housing starts and 0.23 for monthly inflation. Noisier series need longer memories.
+- **Long memory has a price.** Set inflation's best α and look at 2021–2022 (the explorer fills the missing October 2025 CPI, which was never published because of the government shutdown, by interpolation<sup>[11](#refs)</sup>). When inflation surged, SES with α = 0.23 lagged behind for months, because it kept averaging in the calm months that came before. A low α filters noise, but it is slow to notice a genuine change.
+
+<Callout type="math" title="Why the weights are α(1 − α)^j">
+Write the level after month $t$ as $\ell_t = \alpha y_t + (1-\alpha)\ell_{t-1}$. Substitute the same formula for $\ell_{t-1}$, then for $\ell_{t-2}$, and so on:
+
+$$
+\ell_t = \alpha y_t + \alpha(1-\alpha) y_{t-1} + \alpha(1-\alpha)^2 y_{t-2} + \cdots + (1-\alpha)^t \ell_0 .
+$$
+
+The weights $\alpha(1-\alpha)^j$ sum to (almost) 1, so the level is a weighted average. The forecast for any horizon $h$ is $\hat y_{T+h} = \ell_T$. The parameter $\alpha$ and the starting level $\ell_0$ are chosen to minimize the sum of squared one-step errors $\sum_t (y_t - \ell_{t-1})^2$, the SSE in the explorer.
+</Callout>
+
+## Adding a trend: Holt's method and the damped trend
+
+SES is flat, so it lags behind any series that grows. Charles Holt's fix (1957) was to smooth a second number, the **slope** $b_t$, with its own parameter β. The forecast becomes a straight line: level plus $h$ times slope.<sup>[2](#refs)</sup>
+
+That straight line is also Holt's weakness. A trend estimated today is extended forever, even though few business trends last forever. Everette Gardner and Ed McKenzie (1985) proposed a **damped trend**: multiply the slope by a factor φ (phi) slightly below 1 at each step, so the forecast bends and eventually levels off.<sup>[3](#refs)</sup> With φ = 1 you get Holt's straight line back.
+
+<Predict client:load
+  question="It is December 2020. Online sales have grown at a record pace for nine months during the lockdowns. Over the next three years, which forecast will be closer to reality?"
+  options={["Holt's straight-line trend: the boom continues", 'A damped trend: growth gradually fades', 'They will be about the same']}
+  answer={1}
+  explain="Set the origin to **Dec 2020** below. With β = 0.10, the straight line reaches about $126 billion a month by December 2023; actual sales were about $100 billion. Its 36-month MAE is about $14.4 billion. Damping with φ = 0.90 cuts that to about $5.8 billion. Then try **Dec 2019**: there, damping *loses*, because nobody could have foreseen the pandemic surge."
+/>
+
+<div class="breakout">
+<TrendDamping client:load />
+</div>
+
+The three origins tell the whole story of trend forecasting. From **December 2020**, the straight line extrapolates a pandemic boom that ended within months, and damping wins easily. From **August 2023**, a gentle φ of 0.98 roughly halves the linear trend's error (about \$1.9 billion vs \$4.1 billion). From **December 2019**, every method is wrong, and the linear trend is least wrong, because the future really did accelerate. Damping is a bet that trends fade. It is usually a good bet, but not always.
+
+<Callout type="business" title="Why damping usually wins in practice">
+Gardner and McKenzie tested the damped trend on the 1,001 series of the first M-competition and found it more accurate than smoothing methods that extend a linear trend.<sup>[3](#refs)</sup> Gardner's 2006 review of two decades of later studies concluded that it is "still difficult to beat the application of a damped trend to every time series."<sup>[4](#refs)</sup> In the M4 competition (100,000 series), the damped trend on its own was more accurate than either SES or Holt's linear trend, and the official benchmark, called *Comb*, was simply the average of those three methods. Only 17 of the 49 submissions did at least as well.<sup>[5](#refs)</sup> For a planner, the lesson is practical: **a damped trend is a safe default** when you cannot inspect every series.
+</Callout>
+
+<Callout type="math" title="Holt's linear and damped trend equations">
+$$
+\begin{aligned}
+\text{Forecast:}\quad & \hat y_{T+h} = \ell_T + (\phi + \phi^2 + \cdots + \phi^h)\, b_T \\
+\text{Level:}\quad & \ell_t = \alpha y_t + (1-\alpha)(\ell_{t-1} + \phi b_{t-1}) \\
+\text{Slope:}\quad & b_t = \beta^*(\ell_t - \ell_{t-1}) + (1-\beta^*)\,\phi b_{t-1}
+\end{aligned}
+$$
+
+With $\phi = 1$ this is Holt's linear method: the forecast rises by $b_T$ every period. With $\phi < 1$, the sum $\phi + \phi^2 + \cdots$ converges to $\phi/(1-\phi)$, so the forecast levels off at $\ell_T + b_T\,\phi/(1-\phi)$. That is the dashed "levels off near" line in the explorer. (R's `holt()` reports $\beta = \alpha\beta^*$; the explorer uses $\beta^*$.)
+</Callout>
+
+## Adding seasons: Holt-Winters
+
+Retail data have a third component: the calendar. Peter Winters (1960) extended Holt's method with a set of **seasonal indices**, one per month, each smoothed with a third parameter γ (gamma).<sup>[6](#refs)</sup> There are two ways to define an index:
+
+| Seasonality | December index means… | Use it when… |
+|---|---|---|
+| **Additive** | "December adds \$X million to the level" | The seasonal swing stays about the same size in dollars |
+| **Multiplicative** | "December is X% above the level" | The seasonal swing grows as the business grows |
+
+E-commerce sales are the textbook case for multiplicative seasonality. In 2001 the December bump was a few billion dollars; today it is tens of billions. Open the seasonal engine and compare the two.
+
+<div class="breakout">
+<SeasonalEngine client:load />
+</div>
+
+At γ = 0.20, the **additive** model's December index has to climb from about +\$4.0 billion in 2001 to about +\$19.2 billion in 2025, chasing a swing that keeps growing. The **multiplicative** index stays in a narrow band, from about +43% to about +33%, and its one-step MAPE is lower (3.48% vs 4.09%). Two more things to try:
+
+- **Set γ to 0.** The indices freeze at their 2000 values. Neither model can follow the changing calendar, and errors jump to about 6%.
+- **Drag the year slider** with multiplicative indices. The holiday peak, measured in percent, has *shrunk* since the mid-2010s. December has become a smaller share of the online year, and a model with γ > 0 notices.
+
+Now build all four methods in code and score them on the 12 months from September 2025 to August 2026.
+
+<div class="breakout">
+<CodeLab client:load id="ch05-smoothing" title="SES, Holt and Holt-Winters, one component at a time" r={smR} py={smPy} packages={['forecast']} pyPackages={['statsmodels']} goal="Fit SES, Holt, damped Holt and Holt-Winters to e-commerce sales, then compare their test-year accuracy with seasonal naive." />
+</div>
+
+The scorecard is unambiguous. Without a seasonal component, SES, Holt and damped Holt all score MASE above 1.2, worse than seasonal naive (1.04). Holt-Winters with multiplicative seasonality scores **0.35**, with a MAPE of 2.25% against 8.40% for SES. Every component you add fixes one failure of the method before it.
+
+## ETS: the whole family, with error bars
+
+You have now seen the three building blocks: a **level**, an optional **trend** (none, linear, or damped) and an optional **season** (none, additive, or multiplicative). Rob Hyndman and colleagues (2002) showed that each combination is equivalent to a statistical <Term def="A model in which unobserved 'states' (here: level, slope, seasonal indices) evolve over time and generate the data. It gives a likelihood, so parameters can be estimated and prediction intervals computed.">state-space model</Term> with an explicit error term.<sup>[7](#refs)</sup> They named the family **ETS**, for **E**rror, **T**rend, **S**eason, and gave each member a three-letter code:
+
+| Letter | Options | Meaning |
+|---|---|---|
+| **E**rror | A, M | Are surprises a fixed size (additive), or a percentage of the level (multiplicative)? |
+| **T**rend | N, A, Ad | None, additive (straight line), or additive damped |
+| **S**eason | N, A, M | None, additive, or multiplicative |
+
+So SES is ETS(A,N,N), Holt's method is ETS(A,A,N), and multiplicative Holt-Winters with percentage errors is ETS(M,A,M). The error letter does not change the point forecast, but it changes the **prediction intervals**: with multiplicative errors, the intervals widen as sales grow.
+
+Having a statistical model buys you two things that the old recipes could not provide:
+
+1. **Prediction intervals** for every forecast, computed from the model.
+2. **Automatic model selection.** Every candidate has a likelihood, so `ets()` can fit them all and keep the one with the lowest <Term def="Akaike's information criterion, corrected for small samples. It rewards a model's fit (likelihood) and penalizes its number of parameters. Lower is better; only differences between models fitted to the same data matter.">AICc</Term>, without ever touching the test set.
+
+<div class="breakout">
+<CodeLab client:load id="ch05-ets" title="Let ets() choose the model, then forecast with intervals" r={etsR} py={etsPy} packages={['forecast']} pyPackages={['statsmodels']} goal="Select an ETS model automatically by AICc, read its parameters, look at its states, and produce a forecast with 80% and 95% prediction intervals." />
+</div>
+
+`ets()` picks **ETS(M,A,M)**: multiplicative errors, a straight-line trend, and multiplicative seasonality. That is the structure you would have chosen by hand from the explorers above. Its closest rival in the lab, the damped version ETS(M,Ad,M), is 12 AICc points behind; the no-trend ETS(M,N,M) is 37 behind. The estimated σ of 0.042 says a typical one-step miss is about 4%. On the test year, all 12 actual months fall inside the 95% interval, and the point forecast scores a MAPE of 2.27% and a MASE of 0.35.
+
+<Callout type="tip" title="Make it yours">
+Change `"MRTSSM4541USN"` to `"RSXFSN"` (total retail sales, NSA) and rerun. `ets()` now chooses **ETS(A,A,A)**, with β and γ estimated at essentially zero (0.0001). In words: total retail's trend and seasonal pattern have been so stable since 2015 that the model barely updates them, and only the level moves.
+</Callout>
+
+<Predict client:load kind="check"
+  question="A colleague's model printout says **ETS(A,Ad,N)**. Which description is right?"
+  options={[
+    'Additive errors, a damped trend, and no seasonality: Holt’s damped trend with fixed-size errors',
+    'Additive seasonality with a damped error term',
+    'Automatic error, automatic trend, and no seasonality',
+    'A model that cannot produce prediction intervals'
+  ]}
+  answer={0}
+  explain="Read the letters in order: Error = A (additive), Trend = Ad (additive damped), Season = N (none). The point forecasts are exactly those of Holt's damped trend method; the error type only affects the intervals. Every ETS model gives prediction intervals, because each one is a full statistical model."
+/>
+
+<Callout type="math" title="The state-space form of ETS(M,A,M)">
+Let $\mu_t = (\ell_{t-1} + b_{t-1})\, s_{t-m}$ be the one-step forecast and let the error be a percentage, $\varepsilon_t \sim N(0, \sigma^2)$:
+
+$$
+\begin{aligned}
+y_t &= \mu_t\,(1 + \varepsilon_t) \\
+\ell_t &= (\ell_{t-1} + b_{t-1})(1 + \alpha\varepsilon_t) \\
+b_t &= b_{t-1} + \beta(\ell_{t-1} + b_{t-1})\,\varepsilon_t \\
+s_t &= s_{t-m}\,(1 + \gamma\varepsilon_t)
+\end{aligned}
+$$
+
+The point forecasts are the same as multiplicative Holt-Winters, but now there is a likelihood. `ets()` maximizes it over the parameters and the initial states, then compares models with
+
+$$
+\text{AICc} = -2\log L + 2k + \frac{2k(k+1)}{n-k-1},
+$$
+
+where $k$ counts estimated parameters and initial states. Prediction intervals come from the same equations, either by formula or by simulating many future sample paths.<sup>[7, 8](#refs)</sup>
+</Callout>
+
+## Monday morning: forecasting every category at once
+
+Here is the payoff. A batch forecast applies one recipe to every series, then **ranks the results** so a person only looks at the exceptions. The tiles below fit an ETS model to each of 14 U.S. retail categories, backtest it on the 12 months to August 2026, and sort the categories worst-first by MASE.
+
+<Predict client:load
+  question="Before you look: which kind of category do you expect the batch run to flag for review?"
+  options={['The biggest categories, because their numbers are largest', 'Categories whose growth rate changed recently', 'Categories with the strongest seasonal pattern', 'Categories that the Census Bureau revises the most']}
+  answer={1}
+  explain="ETS projects the recent level, trend and seasonal pattern. It does well when those are steady, even if the seasonality is huge (clothing, general merchandise), and it struggles at **turning points**. The flagged categories below each changed course in the test year. MASE is scale-free, so size does not matter."
+/>
+
+<div class="breakout">
+<MondayDashboard client:load />
+</div>
+
+The exception report has a story to tell. Most tiles are green: for 9 of 14 categories, ETS beats the in-sample seasonal naive error comfortably, so those forecasts can go straight to the supply team. The red tiles are categories whose behavior changed during the test year:
+
+- **Misc. store retailers** (NAICS 453) were roughly flat through 2024, then grew 8% to 17% year over year in every month of 2026 so far. ETS, trained through August 2025, expected far less.
+- **Health & personal care** (446) went the other way: from roughly 6% to 12% annual growth in most of 2025 to small declines in every month of 2026.
+- **Sporting goods & hobby** (451) accelerated from 2% to 4% growth in most of 2025 to 10% to 14% in April–June 2026.
+- **Gasoline stations** (447) are red in the browser and borderline in R. Their sales follow pump prices, which no smoothing model can foresee.
+
+None of these is a modeling bug. They are exactly the cases a human should investigate: Is there a new competitor, a reclassification, a price change? Now run the same report in code.
+
+<div class="breakout">
+<CodeLab client:load id="ch05-batch" title="The Monday-morning batch run: 14 forecasts and an exception report" r={batchR} py={batchPy} packages={['forecast']} pyPackages={['statsmodels']} goal="Write a forecasting recipe once, apply it to 14 retail categories with lapply(), and produce a sorted exception report, a MASE bar chart and a small-multiples page of forecasts." />
+</div>
+
+In R, four categories cross the MASE = 1 line: misc. store retailers (1.98), health & personal care (1.43), sporting goods (1.21) and building materials (1.08). Gasoline stations sit right at the edge (1.00). The best-forecast category is food services & drinking places, at 0.33. The browser explorer (with its simplified fitting) and R agree on the two worst categories and flag sporting goods in both, but they disagree on the borderline cases, building materials and gasoline stations. That is normal: an exception threshold is a management choice, not a law of nature.
+
+<Callout type="business" title="Manage by exception">
+Forecasting software in practice works like this report. The system forecasts everything automatically and raises an alert only when a forecast error or bias crosses a threshold. Planners spend their time on the alerts: talking to sales, checking for promotions or data errors, and overriding where they know something the model does not. Chapter 3's forecast-value-added idea applies here too: track whether those overrides actually improve accuracy.
+</Callout>
+
+<Callout type="pitfall" title="A green badge is not a guarantee">
+The badges come from one backtest year. A category can be green because its last 12 months happened to be calm. Before you trust a status, re-run the backtest from a second origin (try ending the training data in August 2024 instead) and see whether the ranking holds. In production, teams track MASE over many weeks, not one snapshot.
+</Callout>
+
+## Does ETS beat the benchmark?
+
+Every new method in this course must earn its place on the Chapter 3 scorecard. On total retail sales, seasonal naive was the benchmark to beat. Let's make the comparison with time-series cross-validation, re-fitting ETS at every forecast origin, on the pre-COVID years 2012–2019.
+
+<div class="breakout">
+<CodeLab client:load id="ch05-tscv" title="ETS vs seasonal naive, cross-validated by horizon" r={cvR} py={cvPy} packages={['forecast']} pyPackages={['statsmodels']} goal="Use tsCV() to compare ETS(M,A,M) with seasonal naive at horizons 1 to 12, then test whether the one-step difference is statistically significant." />
+</div>
+
+ETS wins at every horizon, cutting the seasonal naive error by 30% to 50%. One month ahead, its MAE is about \$8.0 billion against \$15.6 billion for seasonal naive. Twelve months ahead it is about \$6.4 billion against \$13.1 billion. The Diebold–Mariano test gives p = 0.001 for the one-step errors, so the gap is very unlikely to be luck. ETS earns a permanent row on the scorecard. In Chapter 6 it will face its main rival, ARIMA.
+
+## Your turn
+
+Fill in the three blanks (`______`) and press **Run & check**.
+
+<div class="breakout">
+<CodeLab client:load id="ch05-ex1" exercise title="Exercise: automatic ETS for clothing stores" r={exR} solution={exSolR} check={exCheckR} packages={['forecast']}
+  goal="Let ets() choose a model for U.S. clothing-store sales, forecast the 12-month test period, and extract the test-set MASE."
+  hints={['The function that fits and selects an exponential smoothing model automatically is `ets()`.', 'The horizon should cover every month of the test set: `length(test)`. The column of `accuracy()` you need is named `"MASE"`, in capitals and in quotes.']} />
+</div>
+
+## Chapter checklist
+
+- Exponential smoothing is a **weighted average with fading weights**. α sets the memory: high α reacts fast, low α filters noise.
+- **Holt** adds a smoothed trend (β). A **damped trend** (φ < 1) lets the trend fade, and is a hard-to-beat default.
+- **Holt-Winters** adds seasonal indices (γ). Use **multiplicative** seasonality when the seasonal swing grows with the level.
+- **ETS(Error, Trend, Season)** names every combination as a state-space model. That gives **prediction intervals** and **automatic selection by AICc** with `ets()`.
+- **Batch forecasting** means writing one recipe and applying it to every series, then ranking by a scale-free metric (MASE) so people only review the **exceptions**.
+- ETS must still beat the benchmark: on retail sales it cuts the **seasonal naive error by 30% to 50%** at every horizon under cross-validation.
+
+<InstructorKit
+  minutes={60}
+  data={['MRTSSM4541USN', 'MRTSSM4541USS', 'RSXFSN', 'CPIAUCSL', 'HOUST', 'GASREGW', 'MRTSSM441USN … MRTSSM722USN']}
+  objectives={[
+    'Explain simple exponential smoothing as a weighted average with weights α(1 − α)^j, and relate α to the "memory" of the forecast.',
+    'Describe how Holt’s method adds a trend (β), why a damped trend (φ < 1) is a robust default, and when damping can lose.',
+    'Choose between additive and multiplicative seasonality in Holt-Winters by looking at whether the seasonal swing grows with the level.',
+    'Decode an ETS(E,T,S) label, fit an automatic model with `ets()`, interpret α, β, γ, σ and AICc, and produce prediction intervals.',
+    'Build a batch forecast over many series with `lapply()` and turn it into an exception report sorted by MASE.',
+    'Compare ETS with the seasonal naive benchmark using `tsCV()` and a Diebold–Mariano test.'
+  ]}
+  discussion={[
+    'Your exception report flags **health & personal care** for review. List three things you would check before overriding the forecast, and who in the company you would ask.',
+    'A vendor’s planning tool uses a fixed α = 0.2 for every product. Using the memory explorer, describe a product for which that would work well and one for which it would fail.',
+    'Why might a company prefer a damped-trend forecast for a product that has grown 20% a year for three years, even if the growth looks steady?'
+  ]}
+  misconceptions={[
+    '“A higher α is always better because it uses the latest data.” High α also chases noise; the best α depends on the noise-to-signal ratio.',
+    '“Exponential smoothing is too simple to be accurate.” Damped-trend and automatic ETS methods were hard to beat in the M-competitions, including M4.',
+    '“ETS(M,…) and ETS(A,…) give different point forecasts.” The error type changes the intervals and the likelihood, not the point forecast recursion.',
+    '“A low backtest MASE means next year’s forecast is safe.” One backtest year can be calm by luck; turning points are what break ETS.'
+  ]}
+>
+
+**The Monday-morning meeting (25 minutes).** Students work in pairs; each pair "owns" two retail categories.
+
+1. **Predict (5 min).** Before running anything, each pair writes down whether their categories will be flagged (MASE > 1) and why.
+2. **Run (5 min).** Run the batch lab and find their categories in the exception report and the small multiples.
+3. **Investigate (10 min).** Pairs with a flagged category plot it with `viz_ts(fred("MRTSSM453USN", start = 2022))` (their own code) and compute year-over-year growth with `y / stats::lag(y, -12) - 1` to find what changed.
+4. **Brief (5 min).** Each flagged pair gives a 60-second recommendation: keep the forecast, override it, or escalate.
+
+*Expected results (R, backtest Sep 2025–Aug 2026):* four categories are flagged: misc. store retailers (MASE 1.98, year-over-year growth jumped to 8–17% in 2026), health & personal care (1.43, growth turned slightly negative in 2026), sporting goods & hobby (1.21, growth accelerated to 10–14% in April–June 2026) and building materials (1.08). Gasoline stations are borderline at 1.00 (Watch). The other nine are OK, led by food services & drinking places (0.33) and e-commerce (0.35). The Python tab flags gasoline stations instead of building materials: a good moment to discuss how sensitive a threshold rule is near its cut-off.
+
+</InstructorKit>
+
+<div class="refs" id="refs">
+
+**References**
+
+1. SAP. *Using forecast profiles* (SAP Integrated Business Planning for demand, learning module), describing single, double, triple and automated exponential smoothing. [learning.sap.com](https://learning.sap.com/courses/mastering-sap-ibp-for-demand/using-forecast-profiles)
+2. Holt, C. C. (1957/2004). Forecasting seasonals and trends by exponentially weighted moving averages. ONR Memorandum 52; reprinted in *International Journal of Forecasting*, 20(1), 5–10.
+3. Gardner, E. S., Jr., & McKenzie, E. (1985). Forecasting trends in time series. *Management Science*, 31(10), 1237–1246.
+4. Gardner, E. S., Jr. (2006). Exponential smoothing: The state of the art, Part II. *International Journal of Forecasting*, 22(4), 637–666.
+5. Makridakis, S., Spiliotis, E., & Assimakopoulos, V. (2018). The M4 Competition: Results, findings, conclusion and way forward. *International Journal of Forecasting*, 34(4), 802–808; and (2020). The M4 Competition: 100,000 time series and 61 forecasting methods. *International Journal of Forecasting*, 36(1), 54–74 (full benchmark results).
+6. Winters, P. R. (1960). Forecasting sales by exponentially weighted moving averages. *Management Science*, 6(3), 324–342.
+7. Hyndman, R. J., Koehler, A. B., Snyder, R. D., & Grose, S. (2002). A state space framework for automatic forecasting using exponential smoothing methods. *International Journal of Forecasting*, 18(3), 439–454.
+8. Hyndman, R. J., Koehler, A. B., Ord, J. K., & Snyder, R. D. (2008). *Forecasting with Exponential Smoothing: The State Space Approach*. Springer.
+9. Gardner, E. S., Jr. (1985). Exponential smoothing: The state of the art. *Journal of Forecasting*, 4(1), 1–28.
+10. Hyndman, R. J., & Athanasopoulos, G. (2021). *Forecasting: Principles and Practice* (3rd ed.), ch. 8. [otexts.com/fpp3](https://otexts.com/fpp3/)
+11. U.S. Bureau of Labor Statistics. *2025 lapse in appropriations: impact on the Consumer Price Index* (FAQ): no October 2025 CPI was published. [bls.gov](https://www.bls.gov/cpi/additional-resources/2025-federal-government-shutdown-impact-cpi-faq.htm)
+
+</div>
+
+<style>{`
+  .refs { font-size: .86rem; color: var(--text-2); margin-top: 3rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+  .ch-body table { margin: 1.4rem 0 2rem; font-size: .88rem; }
+  .ch-body td { vertical-align: top; }
+`}</style>

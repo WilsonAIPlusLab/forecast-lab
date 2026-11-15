@@ -1,0 +1,37 @@
+---
+// <Callout type="intuition|pitfall|business|tip|math" title="...">  — math renders as a collapsible "Under the hood" box
+interface Props { type?: 'intuition' | 'pitfall' | 'business' | 'tip' | 'math'; title?: string; open?: boolean }
+const { type = 'intuition', title, open = false } = Astro.props;
+const meta = {
+  intuition: { icon: '◐', label: 'Intuition', c: '#22d3ee' },
+  pitfall: { icon: '!', label: 'Pitfall', c: '#f87171' },
+  business: { icon: '$', label: 'In practice', c: '#f59e0b' },
+  tip: { icon: '↗', label: 'Try this', c: '#34d399' },
+  math: { icon: 'Σ', label: 'Show the math', c: '#a99bff' },
+}[type];
+---
+{type === 'math' ? (
+  <details class="callout math" style={`--cc:${meta.c}`} open={open}>
+    <summary><span class="ci">{meta.icon}</span><span class="cl">{meta.label}</span>{title && <span class="ct">{title}</span>}<span class="chev">▸</span></summary>
+    <div class="cb"><slot /></div>
+  </details>
+) : (
+  <aside class={`callout ${type}`} style={`--cc:${meta.c}`}>
+    <div class="ch"><span class="ci">{meta.icon}</span><span class="cl">{meta.label}</span>{title && <span class="ct">{title}</span>}</div>
+    <div class="cb"><slot /></div>
+  </aside>
+)}
+<style>
+  .callout { margin: 1.8rem 0; border: 1px solid color-mix(in srgb, var(--cc) 35%, var(--border)); background: color-mix(in srgb, var(--cc) 7%, var(--surface)); border-radius: var(--radius); padding: 1rem 1.2rem; }
+  .ch, summary { display: flex; align-items: center; gap: .55rem; font-size: .78rem; }
+  .ci { font: 700 .8rem var(--font-ui); width: 1.4rem; height: 1.4rem; display: grid; place-items: center; border-radius: 6px; color: var(--cc); background: color-mix(in srgb, var(--cc) 16%, transparent); }
+  .cl { font-weight: 700; color: var(--cc); font-size: .86rem; }
+  .ct { font-weight: 650; color: var(--text); font-size: .95rem; }
+  .ct::before { content: '·'; color: var(--muted); margin-right: .5rem; }
+  .cb { margin-top: .5rem; font-size: .97rem; color: var(--text-2); }
+  .cb :global(p:last-child) { margin-bottom: 0; }
+  summary { cursor: pointer; list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+  .chev { margin-left: auto; color: var(--muted); transition: transform .2s; }
+  details[open] .chev { transform: rotate(90deg); }
+</style>

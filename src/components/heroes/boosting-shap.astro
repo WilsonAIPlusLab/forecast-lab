@@ -1,0 +1,72 @@
+---
+// Signature hero for Chapter 12: a SHAP waterfall building up, push by push, to a forecast.
+// Values are the real December 2025 explanation from Lab 12.3 ($bn; small contributions merged).
+const W = 520, H = 330;
+const top = 40, bottom = 260;              // plot area (y pixels)
+const lo = 610, hi = 700;                  // $bn shown (axis deliberately truncated: this is art, the lab has the real chart)
+const y = (v: number) => bottom - ((v - lo) / (hi - lo)) * (bottom - top);
+const start = 620.6;
+const pushes = [
+  { label: 'Base', sub: 'avg. month', v: 5.8 },
+  { label: 'Last Dec', sub: 'jump', v: 47.3 },
+  { label: 'December', sub: 'calendar', v: 13.2 },
+  { label: 'Weekends', sub: '8 days', v: 2.2 },
+  { label: 'Other', sub: '4 features', v: 0.6 },
+];
+const n = pushes.length + 2, colW = (W - 60) / n, bw = colW * 0.58;
+const cx = (i: number) => 40 + colW * i + colW / 2;
+let c = start;
+const steps = pushes.map((p, i) => { const s = { ...p, from: c, to: c + p.v, i: i + 1 }; c += p.v; return s; });
+const forecast = c, actual = 694.1;
+---
+<svg viewBox={`0 0 ${W} ${H}`} class="sh" role="img" aria-label="A waterfall chart: last month's sales plus a base value and four feature pushes add up to the forecast, which lands close to the actual value">
+  <line x1="30" x2={W - 10} y1={bottom} y2={bottom} class="axis" />
+  <text x="32" y={bottom + 52} class="lbl">$ billions; the axis starts at $610bn</text>
+  <!-- start bar -->
+  <g class="col" style="--d:.1s">
+    <rect x={cx(0) - bw / 2} y={y(start)} width={bw} height={bottom - y(start)} rx="3" class="start" />
+    <text x={cx(0)} y={y(start) - 8} class="num">$620.6</text>
+    <text x={cx(0)} y={bottom + 15} class="nm">Nov</text>
+  </g>
+  {steps.map((s) => (
+    <g class="col" style={`--d:${0.35 + s.i * 0.32}s`}>
+      <line x1={cx(s.i - 1) + bw / 2} x2={cx(s.i) - bw / 2} y1={y(s.from)} y2={y(s.from)} class="conn" />
+      <rect x={cx(s.i) - bw / 2} y={y(s.to)} width={bw} height={Math.max(1.5, y(s.from) - y(s.to))} rx="2" class="push" />
+      <text x={cx(s.i)} y={y(s.to) - 7} class="num">+{s.v.toFixed(1)}</text>
+      <text x={cx(s.i)} y={bottom + 15} class="nm">{s.label}</text>
+      <text x={cx(s.i)} y={bottom + 29} class="nm sub">{s.sub}</text>
+    </g>
+  ))}
+  <g class="col final" style={`--d:${0.35 + (n - 1) * 0.32}s`}>
+    <line x1={cx(n - 2) + bw / 2} x2={cx(n - 1) - bw / 2} y1={y(forecast)} y2={y(forecast)} class="conn" />
+    <rect x={cx(n - 1) - bw / 2} y={y(forecast)} width={bw} height={bottom - y(forecast)} rx="3" class="fc" />
+    <text x={cx(n - 1)} y={bottom + 15} class="nm strong">Forecast</text>
+    <text x={cx(n - 1)} y={bottom + 29} class="nm sub">Dec 2025</text>
+  </g>
+  <g class="act" style={`--d:${0.6 + n * 0.32}s`}>
+    <line x1={cx(n - 1) - bw / 2 - 6} x2={cx(n - 1) + bw / 2 + 6} y1={y(actual)} y2={y(actual)} />
+    <text x={W - 4} y={y(actual) - 7} class="actl">actual $694.1</text>
+  </g>
+  <text x={cx(n - 1)} y={y(forecast) + 18} class="num inv" style={`--d:${0.5 + (n - 1) * 0.32}s`}>$689.6</text>
+</svg>
+<style>
+  .sh { max-width: 560px; width: 100%; }
+  .axis { stroke: var(--border-strong); stroke-width: 1.5; }
+  .lbl { font: 500 12px var(--font-ui); fill: var(--muted); }
+  .nm { font: 600 12px var(--font-ui); fill: var(--text-2); text-anchor: middle; }
+  .nm.sub { font-weight: 500; fill: var(--muted); font-size: 12px; }
+  .nm.strong { fill: var(--c-forecast); font-weight: 700; }
+  .num { font: 600 12px var(--font-ui); font-variant-numeric: tabular-nums; fill: var(--text); text-anchor: middle; }
+  .num.inv { fill: #fff; font-weight: 700; opacity: 0; animation: fade .4s var(--d) forwards; }
+  .start { fill: var(--c-history); opacity: .55; }
+  .push { fill: var(--c-s2); }
+  .fc { fill: var(--c-forecast); filter: drop-shadow(0 0 10px color-mix(in srgb, var(--c-forecast) 55%, transparent)); }
+  .conn { stroke: var(--border-strong); stroke-dasharray: 3 3; }
+  .col { opacity: 0; transform-box: fill-box; animation: rise .5s var(--d) cubic-bezier(.05,.7,.1,1) forwards; }
+  .act { opacity: 0; animation: fade .5s var(--d) forwards; }
+  .act line { stroke: var(--c-actual); stroke-width: 3; }
+  .actl { font: 600 12px var(--font-ui); fill: var(--c-actual); text-anchor: end; }
+  @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  @keyframes fade { to { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .col, .act, .num.inv { animation: none; opacity: 1; transform: none; } }
+</style>

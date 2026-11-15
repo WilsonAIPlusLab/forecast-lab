@@ -1,0 +1,128 @@
+---
+// Signature hero for Chapter 14: a miniature forecast dashboard assembles itself.
+// Pipeline dots fill, KPI tiles appear, the fan chart unfurls, the scorecard bars grow, the summary "types" itself.
+const W = 520, H = 380;
+// fan chart panel geometry
+const P = { x: 18, y: 112, w: 318, h: 150 };
+const N = 40, O = 30;
+const season = [0, -5, 3, 1, 4, 2, 0, 3, -2, 1, 6, 18];
+const y = Array.from({ length: N }, (_, t) => 100 + 0.8 * t + season[t % 12] + Math.sin(t * 1.3) * 1.6);
+const fx = (t: number) => P.x + 14 + (t / (N - 1)) * (P.w - 28);
+const fy = (v: number) => P.y + P.h - 16 - ((v - 92) / 60) * (P.h - 34);
+const line = (pts: [number, number][]) => pts.map((p, i) => `${i ? 'L' : 'M'}${fx(p[0]).toFixed(1)},${fy(p[1]).toFixed(1)}`).join('');
+const hist = line(y.slice(0, O + 1).map((v, t) => [t, v]));
+const fut = Array.from({ length: N - O }, (_, i) => O + i);
+const fc = (t: number) => y[t - 12] + 0.8 * 12;
+const point = line(fut.map((t) => [t, t === O ? y[O] : fc(t)]));
+const band = (k: number) => {
+  const up = fut.map((t) => [t, (t === O ? y[O] : fc(t)) + k * Math.sqrt(t - O) * 2.2] as [number, number]);
+  const dn = fut.map((t) => [t, (t === O ? y[O] : fc(t)) - k * Math.sqrt(t - O) * 2.2] as [number, number]).reverse();
+  return line([...up, ...dn]) + 'Z';
+};
+const kpis = [
+  { l: 'Forecast', v: '$652.7B' },
+  { l: '80% range', v: '626–658' },
+  { l: 'Best method', v: 'HW mult.' },
+];
+const bars = [
+  { l: 'HW mult.', v: 0.49, best: true },
+  { l: 'HW add.', v: 0.57 },
+  { l: 'S. naive', v: 0.75 },
+  { l: 'Combo', v: 0.83 },
+  { l: 'Holt', v: 1.37 },
+  { l: 'Naive', v: 1.76 },
+];
+const textLines = [250, 300, 270, 300, 190];
+---
+<svg viewBox={`0 0 ${W} ${H}`} class="fs" role="img" aria-label="A miniature forecast dashboard: key numbers, a fan chart, a scorecard and an executive summary">
+  <defs>
+    <clipPath id="fs-fan"><rect x={fx(O)} y={P.y} width={P.x + P.w - fx(O)} height={P.h} class="fan-clip" /></clipPath>
+  </defs>
+  <!-- window -->
+  <rect x="2" y="2" width={W - 4} height={H - 4} rx="14" class="win" />
+  <circle cx="20" cy="20" r="4" class="tl" /><circle cx="34" cy="20" r="4" class="tl" /><circle cx="48" cy="20" r="4" class="tl" />
+  <text x="66" y="24" class="ttl">Forecast Studio</text>
+  <!-- pipeline progress -->
+  {Array.from({ length: 9 }, (_, i) => (
+    <g>
+      {i < 8 && <line x1={300 + i * 24 + 5} x2={300 + (i + 1) * 24 - 5} y1="20" y2="20" class="pl-ln" />}
+      <circle cx={300 + i * 24} cy="20" r="5" class="pl-dot" style={`--d:${0.15 + i * 0.12}s`} />
+    </g>
+  ))}
+  <!-- KPI tiles -->
+  {kpis.map((k, i) => (
+    <g class="tile" style={`--d:${0.5 + i * 0.15}s`}>
+      <rect x={18 + i * 164} y="42" width="152" height="56" rx="9" class="card" />
+      <text x={30 + i * 164} y="62" class="kl">{k.l}</text>
+      <text x={30 + i * 164} y="86" class="kv">{k.v}</text>
+    </g>
+  ))}
+  <!-- fan chart panel -->
+  <rect x={P.x} y={P.y} width={P.w} height={P.h} rx="9" class="card" />
+  {[0.3, 0.55, 0.8].map((f) => <line x1={P.x + 10} x2={P.x + P.w - 10} y1={P.y + P.h * f} y2={P.y + P.h * f} class="grid" />)}
+  <line x1={fx(O)} x2={fx(O)} y1={P.y + 10} y2={P.y + P.h - 10} class="origin" />
+  <g clip-path="url(#fs-fan)">
+    <path d={band(1.6)} class="band b80" />
+    <path d={band(0.8)} class="band b50" />
+  </g>
+  <path d={hist} class="ln hist" pathLength="1" />
+  <path d={point} class="ln fcl" pathLength="1" />
+  <!-- scorecard -->
+  <rect x="348" y={P.y} width="154" height={P.h} rx="9" class="card" />
+  <text x="360" y={P.y + 20} class="kl">MASE, lower is better</text>
+  {bars.map((b, i) => (
+    <g>
+      <text x="360" y={P.y + 42 + i * 18} class={`bl ${b.best ? 'best' : ''}`}>{b.l}</text>
+      <rect x="414" y={P.y + 33 + i * 18} height="10" rx="3" width={(b.v / 1.8) * 76} class={`bar ${b.best ? 'best' : ''}`} style={`--d:${1.9 + i * 0.08}s`} />
+    </g>
+  ))}
+  <!-- executive summary -->
+  <rect x="18" y="274" width={W - 36} height="88" rx="9" class="card" />
+  <rect x="18" y="274" width="3" height="88" class="accent" />
+  <text x="32" y="292" class="kl">Executive summary</text>
+  {textLines.map((w, i) => (
+    <rect x="32" y={302 + i * 11} width={w} height="5" rx="2.5" class="tx" style={`--d:${2.3 + i * 0.16}s`} />
+  ))}
+  <g class="copy" style="--d:3.2s">
+    <rect x={W - 104} y="290" width="72" height="22" rx="7" class="btnr" />
+    <text x={W - 68} y="305" class="btnt" text-anchor="middle">Copy</text>
+  </g>
+</svg>
+<style>
+  .fs { max-width: 560px; }
+  .win { fill: var(--surface); stroke: var(--border-strong); }
+  .tl { fill: var(--border-strong); }
+  .ttl { font: 650 12px var(--font-ui); fill: var(--text-2); }
+  .card { fill: var(--bg-2); stroke: var(--border); }
+  .grid { stroke: var(--border); }
+  .kl { font: 600 10.5px var(--font-ui); fill: var(--muted); }
+  .kv { font: 700 17px var(--font-ui); fill: var(--text); font-variant-numeric: tabular-nums; }
+  .pl-ln { stroke: var(--border-strong); stroke-width: 1.5; }
+  .pl-dot { fill: var(--bg-2); stroke: var(--border-strong); stroke-width: 1.5; animation: plf .3s var(--d) forwards; }
+  @keyframes plf { to { fill: var(--ch, var(--accent)); stroke: var(--ch, var(--accent)); } }
+  .tile { opacity: 0; animation: fade .45s var(--d) forwards; }
+  .origin { stroke: var(--border-strong); stroke-dasharray: 3 4; }
+  .ln { fill: none; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; stroke-dashoffset: 1; }
+  .hist { stroke: var(--c-history); stroke-width: 2; animation: draw 1s .7s cubic-bezier(.65,0,.35,1) forwards; }
+  .fcl { stroke: var(--c-forecast); stroke-width: 2.6; animation: draw .7s 1.6s cubic-bezier(.65,0,.35,1) forwards; }
+  .band { fill: var(--c-band); }
+  .b80 { opacity: .2; } .b50 { opacity: .36; }
+  .fan-clip { transform-box: fill-box; transform-origin: left; transform: scaleX(0); animation: grow .8s 1.6s cubic-bezier(.2,.8,.2,1) forwards; }
+  .bl { font: 600 10px var(--font-ui); fill: var(--text-2); }
+  .bl.best { fill: var(--good); }
+  .bar { fill: var(--muted); opacity: .55; transform-box: fill-box; transform-origin: left; transform: scaleX(0); animation: grow .6s var(--d) cubic-bezier(.2,.8,.2,1) forwards; }
+  .bar.best { fill: var(--good); opacity: 1; }
+  .accent { fill: var(--ch, var(--accent)); }
+  .tx { fill: var(--text-2); opacity: .35; transform-box: fill-box; transform-origin: left; transform: scaleX(0); animation: grow .35s var(--d) linear forwards; }
+  .copy { opacity: 0; animation: fade .3s var(--d) forwards; }
+  .btnr { fill: var(--ch, var(--accent)); }
+  .btnt { font: 700 11px var(--font-ui); fill: var(--bg); }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  @keyframes grow { to { transform: scaleX(1); } }
+  @keyframes fade { to { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) {
+    .pl-dot, .tile, .ln, .fan-clip, .bar, .tx, .copy { animation: none; }
+    .tile, .copy { opacity: 1; } .ln { stroke-dashoffset: 0; } .fan-clip, .bar, .tx { transform: none; }
+    .pl-dot { fill: var(--ch, var(--accent)); stroke: var(--ch, var(--accent)); }
+  }
+</style>

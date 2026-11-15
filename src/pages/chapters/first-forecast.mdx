@@ -1,0 +1,146 @@
+---
+layout: ../../layouts/Chapter.astro
+slug: first-forecast
+minutes: 10
+build:
+  - A 24-month forecast of U.S. retail sales with 80% and 95% prediction intervals
+  - Your first R (or Python) program that runs entirely in the browser
+skills: [R, webR, forecast, auto.arima, fan chart]
+---
+import CodeLab from '../../components/CodeLab.svelte';
+import Callout from '../../components/Callout.astro';
+import KeyIdea from '../../components/KeyIdea.astro';
+import Predict from '../../components/Predict.svelte';
+import Term from '../../components/Term.astro';
+import firstR from '../../labs/ch00/first.R?raw';
+import firstPy from '../../labs/ch00/first.py?raw';
+import exR from '../../labs/ch00/exercise.R?raw';
+import exSolR from '../../labs/ch00/exercise_solution.R?raw';
+import exCheckR from '../../labs/ch00/exercise_check.R?raw';
+import YouDrawIt from '../../components/ch00/YouDrawIt.svelte';
+import InstructorKit from '../../components/InstructorKit.astro';
+
+<p class="lede">Most forecasting courses spend weeks on theory before you forecast anything. We start the other way around: in the next minute you will produce a real, professional-looking forecast of the U.S. economy. Then the rest of the course explains, one step at a time, what just happened and how to do it better.</p>
+
+## First, your gut
+
+Before any statistics, try it yourself. You see U.S. retail sales up to the end of 2022. Sketch what you think happened in 2023.
+
+<div class="breakout">
+<YouDrawIt client:load />
+</div>
+
+A common result: people get the trend about right and the seasonal pattern wrong. They draw a smooth line and miss the December spike and the January drop. A good model never forgets them. Let's build one.
+
+## Run it
+
+The box below is a real R session running **inside your browser**. Nothing to install, no account. Press **▶ Run**. The first run downloads R (about 15 MB, cached afterwards), so give it a few seconds.
+
+<div class="breakout">
+<CodeLab client:load id="ch00-first" title="Forecast U.S. retail sales" r={firstR} py={firstPy} packages={['forecast']} pyPackages={['statsmodels']} goal="Produce a 24-month forecast with uncertainty bands, in six lines of code." />
+</div>
+
+Now press **⏯ Step through**. The code runs one piece at a time, and the panel explains each line and shows every object R creates, with a tiny chart of its values.
+
+<Callout type="tip" title="It's your code now">
+Change `h = 24` to `h = 60` and run again. Change `"RSXFSN"` to `"UNRATE"` (the unemployment rate) or `"HOUST"` (housing starts). Your edits are saved in this browser; **↺ Reset** brings back the original.
+</Callout>
+
+## What you just made
+
+The chart has three ingredients that will appear in every chapter:
+
+1. **History**: the data we observed, here U.S. retail sales since 2018.
+2. **Point forecast**: the single "best guess" path, the bold line.
+3. **Prediction intervals**: the shaded fan. The darker band is where we expect the future to land **80%** of the time, the lighter band **95%** of the time.
+
+<KeyIdea>A forecast is not a number. It is a range of plausible futures, plus our best guess within that range.</KeyIdea>
+
+<Predict client:visible
+  question="Why does the shaded fan get **wider** the further ahead we forecast?"
+  options={[
+    'The model is broken for long horizons',
+    'Errors accumulate: next month is uncertain, and the month after builds on an uncertain next month',
+    'Retail sales are more volatile in the future',
+    'The 95% interval is always twice as wide as the 80% interval'
+  ]}
+  answer={1}
+  explain="Each step ahead stacks a new source of uncertainty on top of the old ones, so the spread of plausible paths grows with the <em>horizon</em>. Short-run forecasts are almost always more accurate than long-run ones."
+/>
+
+## The vocabulary of forecasting
+
+<dl class="vocab">
+  <dt>Time series</dt><dd>Observations of one variable in time order: monthly sales, quarterly GDP, daily prices. The order matters.</dd>
+  <dt>Horizon (h)</dt><dd>How far ahead we forecast. `h = 24` with monthly data means two years.</dd>
+  <dt>Model</dt><dd>A rule that turns the past into a forecast. `auto.arima()` picked one for us; Chapter 6 opens the box.</dd>
+  <dt>Prediction interval</dt><dd>A range that should contain the future value with a stated probability (80%, 95%).</dd>
+  <dt>Seasonality</dt><dd>A pattern that repeats every year, like the December shopping spike. Chapter 2 is all about it.</dd>
+</dl>
+
+<Callout type="business" title="Where this shows up at work">
+Retailers forecast sales to plan staffing and inventory. Banks forecast deposits and defaults. The Federal Reserve forecasts inflation and unemployment before every policy meeting. The workflow you just ran (load data, look, fit, forecast, communicate uncertainty) is the same one professional analysts follow. Their tools and data are bigger; the logic is the same.
+</Callout>
+
+## Your turn
+
+Fill in the two blanks (`______`) and press **Run & check**.
+
+<div class="breakout">
+<CodeLab client:load id="ch00-ex1" exercise title="Exercise: forecast housing starts" r={exR} solution={exSolR} check={exCheckR} packages={['forecast']}
+  goal="Forecast U.S. housing starts (not seasonally adjusted, ID `HOUSTNSA`) 18 months ahead and draw the fan chart."
+  hints={['The series ID is text, so it needs quotes: `"HOUSTNSA"`.', 'The horizon `h` is a number of months: 18.']} />
+</div>
+
+## How this course works
+
+Every chapter follows the same rhythm:
+
+- **A real question**, about the economy or a business decision.
+- **Code you can run, edit and step through**, in R (with a Python tab on most labs).
+- **Interactive figures** that let you move a slider and watch a concept change.
+- **A portfolio-ready result**: a chart, table or mini-dashboard you could show an employer.
+
+From here we go back to the start. Chapter 1 asks what a time series actually is and where economic data comes from. Chapter 3 asks the question every forecaster must answer: is my model actually better than a naive guess?
+
+<Callout type="math" title="What did auto.arima actually choose?">
+With the bundled data, the printed output reads `ARIMA(2,0,2)(0,1,1)[12] with drift` (the exact label can change when the data are updated). Roughly, it means: compare each month with the same month last year (the seasonal `(0,1,1)[12]` part), use the last two months and the model's last two surprises to predict the next move (the `(2,0,2)` part), and add a steady upward drift. Chapter 6 decodes this notation completely. For now, the point is that a well-chosen model learns both the trend and the seasonal pattern from the data.
+</Callout>
+
+<InstructorKit
+  minutes={30}
+  data={['RSXFSN', 'HOUSTNSA', 'UNRATE']}
+  objectives={[
+    'Run, edit and step through R (or Python) code in the browser.',
+    'Identify the three parts of a forecast chart: history, point forecast and prediction intervals.',
+    'Explain why prediction intervals widen with the forecast horizon.',
+    'Use the vocabulary of forecasting: time series, horizon, model, interval, seasonality.'
+  ]}
+  discussion={[
+    'Look at the class’s hand-drawn forecasts. What patterns did most people miss, and why do you think the model did not miss them?',
+    'Where in your own life do you forecast informally (commute time, grades, prices)? How do you express your uncertainty?',
+    'A manager asks for "the number" for next year’s sales. How would you explain why you are also giving a range?'
+  ]}
+  misconceptions={[
+    '“The forecast line is what will happen.” It is the center of a range of plausible outcomes.',
+    '“A wider interval means a worse model.” Honest intervals are often wide; a narrow but wrong interval is worse.',
+    '“More complex code means a better forecast.” Chapter 3 shows that simple benchmarks are hard to beat.'
+  ]}
+>
+
+**Draw-off (15 minutes).** Project the "Draw your forecast" figure. Ask every student to draw their 2023 forecast on their own device and write down their average miss after revealing.
+
+1. Collect the numbers in a quick poll and show the distribution next to the model's error.
+2. Ask the students who beat the model what they did. Usually they copied last year's seasonal pattern, which is the seasonal naive method of Chapter 3. Here that strategy genuinely wins: copying 2022 month by month misses 2023 by about \$8 billion a month on average, while the explorable's Holt-Winters model misses by about \$14 billion.
+3. Then run the six-line lab together and change `h` and the series live.
+
+*Expected result:* most hand-drawn forecasts miss the December peak and January drop. A flat line at the 2022 average misses by about \$25 billion a month, about twice the model's error, so smooth drawings lose. Students who copied last year's shape can beat the model. That sets up the course: models are useful because they are disciplined about patterns people overlook, and Chapter 3 shows that a simple benchmark is sometimes hard to beat.
+
+</InstructorKit>
+
+<style>{`
+  .vocab { display: grid; grid-template-columns: max-content 1fr; gap: .55rem 1.4rem; margin: 1.5rem 0 2rem; }
+  .vocab dt { font-weight: 700; color: var(--text); }
+  .vocab dd { margin: 0; color: var(--text-2); }
+  @media (max-width: 600px) { .vocab { grid-template-columns: 1fr; } .vocab dd { margin-bottom: .6rem; } }
+`}</style>

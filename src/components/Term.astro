@@ -1,0 +1,14 @@
+---
+// Inline glossary term with hover/focus definition: <Term def="The forecast horizon is how far ahead...">horizon</Term>
+interface Props { def: string }
+const { def } = Astro.props;
+---
+<span class="term" tabindex="0"><slot /><span class="tip" role="tooltip">{def}</span></span>
+<style>
+  .term { position: relative; border-bottom: 1.5px dotted var(--accent-2); cursor: help; color: var(--text); }
+  .tip { position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%) translateY(4px); width: max-content; max-width: 300px; background: var(--surface-3); color: var(--text); border: 1px solid var(--border-strong); border-radius: 10px; padding: .6rem .8rem; font-size: .82rem; line-height: 1.5; font-weight: 400; box-shadow: var(--shadow); opacity: 0; pointer-events: none; transition: opacity .15s, transform .15s; z-index: 40; }
+  .term:hover .tip, .term:focus .tip { opacity: 1; transform: translateX(-50%); }
+  .tip { visibility: hidden; }
+  .term:hover .tip, .term:focus .tip { visibility: visible; }
+  @media (max-width: 700px) { .tip { left: 0; transform: translateY(4px); max-width: min(300px, 80vw); } .term:hover .tip, .term:focus .tip { transform: none; } }
+</style>

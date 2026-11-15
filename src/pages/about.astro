@@ -1,0 +1,46 @@
+---
+import Base from '../layouts/Base.astro';
+const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
+---
+<Base title="About · Forecast Lab">
+  <main id="main" class="prose about">
+    <h1>About Forecast Lab</h1>
+    <p class="lede">Forecast Lab is the interactive companion to ECON 3371 <em>Economic &amp; Business Forecasting</em> at the University of Northern Iowa. It is designed so that any instructor can teach an undergraduate forecasting course from it, and any student can learn by doing.</p>
+
+    <h2>What makes it different</h2>
+    <ul>
+      <li><strong>Application first.</strong> Every concept is reached through real U.S. data and code you run. Theory is one click away in "Show the math" boxes.</li>
+      <li><strong>Nothing to install.</strong> R runs in the page through <a href="https://docs.r-wasm.org/webr/">webR</a> and Python through <a href="https://pyodide.org">Pyodide</a>, both compiled to WebAssembly. The first run downloads the engine (about 15 MB for R), and your browser caches it afterwards.</li>
+      <li><strong>Every line explained.</strong> <em>Step through</em> runs code one step at a time, explains it, and shows each object it creates.</li>
+      <li><strong>Modern curriculum.</strong> The content map follows a survey of 18 forecasting courses (Monash, Carnegie Mellon, Toronto, Illinois, Penn, Duke and others), the M4, M5 and M6 forecasting competitions, and current job postings for forecasting and demand-planning analysts.</li>
+    </ul>
+
+    <h2>How to use it in a course</h2>
+    <ul>
+      <li>Assign chapters as pre-class reading with the labs. Most chapters take 40 to 60 minutes; the opening chapter takes about 10.</li>
+      <li>Use the explorables live in lecture, and download any chart as PNG/SVG for slides.</li>
+      <li>Each chapter's <strong>Instructor kit</strong> has objectives, discussion prompts, misconceptions and an in-class activity with verified results.</li>
+      <li>Students who want a full IDE can copy any lab into RStudio or Jupyter. The helpers <code>fred()</code> and <code>viz_*()</code> are small; replace <code>fred("ID")</code> with <code>read.csv()</code> on the downloadable data.</li>
+    </ul>
+
+    <h2>Data</h2>
+    <p>All series but one come from <a href="https://fred.stlouisfed.org">FRED®</a>, Federal Reserve Bank of St. Louis, and every series is bundled with the site, so labs work offline and give reproducible results. Each chapter's instructor kit links the CSV files it uses. The exception, the Divisia M4 monetary aggregate (<code>DIVISIA_M4</code>), is from the <a href="https://centerforfinancialstability.org/amfm.php">Center for Financial Stability</a>.</p>
+    <p><strong>Rights and attribution.</strong> Data are provided for nonprofit teaching and are reproduced as published. Most FRED series come from U.S. government agencies (BLS, BEA, Census, the Federal Reserve) and are in the public domain. Three bundled series are copyrighted by their owners and are used with attribution under FRED's terms: the University of Michigan <em>Surveys of Consumers</em> index of consumer sentiment (<code>UMCSENT</code>, © University of Michigan); Moody's Seasoned Baa corporate bond yield relative to the 10-year Treasury (<code>BAA10Y</code>, © Moody's); and the Freddie Mac Primary Mortgage Market Survey 30-year rate (<code>MORTGAGE30US</code>, © Freddie Mac). Please see each series' FRED page for its terms before reusing it outside this course. FRED® is a registered trademark of the Federal Reserve Bank of St. Louis; this site is not affiliated with or endorsed by it.</p>
+
+    <h2>Technology</h2>
+    <p>Built with <a href="https://astro.build">Astro</a> and <a href="https://svelte.dev">Svelte</a>. Charts use <a href="https://observablehq.com/plot/">Observable Plot</a> and <a href="https://d3js.org">D3</a>, the code editor is <a href="https://codemirror.net">CodeMirror</a>, and math uses <a href="https://katex.org">KaTeX</a>. R labs rely on Rob Hyndman's <code>forecast</code> package and other CRAN packages compiled for webR.</p>
+
+    <h2>Key references</h2>
+    <ul>
+      <li>Hyndman, R. J., &amp; Athanasopoulos, G. (2021). <em>Forecasting: Principles and Practice</em> (3rd ed.). <a href="https://otexts.com/fpp3/">otexts.com/fpp3</a></li>
+      <li>Diebold, F. X. <em>Forecasting in Economics, Business, Finance and Beyond.</em> <a href="https://www.sas.upenn.edu/~fdiebold/Teaching221/FullBook.pdf">Free online edition</a></li>
+      <li>Stock, J. H., &amp; Watson, M. W. <em>Introduction to Econometrics</em>, time-series chapters.</li>
+      <li>Studenmund, A. H. <em>Using Econometrics: A Practical Guide.</em></li>
+    </ul>
+    <p class="muted">Instructor: Dr. Zhengyang (Robin) Chen, Department of Economics, University of Northern Iowa.</p>
+  </main>
+  <style>
+    .about { padding-top: 3rem; }
+    .about h1 { margin-top: 0; }
+  </style>
+</Base>

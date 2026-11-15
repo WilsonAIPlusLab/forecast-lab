@@ -1,0 +1,71 @@
+---
+// Signature hero for Chapter 3: four benchmarks "race" against what actually happened.
+const W = 520, H = 300, N = 48, O = 32; // N points, origin at O
+const season = [0, -6, 4, 2, 5, 3, 1, 4, -2, 2, 8, 26];
+const y = Array.from({ length: N }, (_, t) => 100 + 0.5 * t + season[t % 12] + Math.sin(t * 1.7) * 2.2);
+const x = (t: number) => 20 + (t / (N - 1)) * (W - 40);
+const ys = (v: number) => H - 40 - ((v - 85) / 90) * (H - 80);
+const path = (pts: [number, number][]) => pts.map((p, i) => `${i ? 'L' : 'M'}${x(p[0]).toFixed(1)},${ys(p[1]).toFixed(1)}`).join('');
+const hist = path(y.slice(0, O + 1).map((v, t) => [t, v]));
+const act = path(y.slice(O).map((v, i) => [O + i, v]));
+const tr = y.slice(0, O + 1);
+const meanV = tr.reduce((a, b) => a + b, 0) / tr.length;
+const slope = (tr[O] - tr[0]) / O;
+const fut = Array.from({ length: N - O }, (_, i) => O + i);
+const fc = {
+  mean: path(fut.map((t) => [t, meanV])),
+  naive: path(fut.map((t) => [t, tr[O]])),
+  drift: path(fut.map((t) => [t, tr[O] + slope * (t - O)])),
+  snaive: path(fut.map((t) => [t, y[t - 12]])),
+};
+const mae = (f: (t: number) => number) => fut.slice(1).reduce((s, t) => s + Math.abs(y[t] - f(t)), 0) / (fut.length - 1);
+const scores = [
+  { k: 'snaive', label: 'Seasonal naive', v: mae((t) => y[t - 12]), c: 'var(--c-s1)' },
+  { k: 'naive', label: 'Naive', v: mae(() => tr[O]), c: 'var(--c-s2)' },
+  { k: 'drift', label: 'Drift', v: mae((t) => tr[O] + slope * (t - O)), c: 'var(--c-s3)' },
+  { k: 'mean', label: 'Mean', v: mae(() => meanV), c: 'var(--c-s5)' },
+].sort((a, b) => a.v - b.v); // winner first, so the star always marks the lowest MAE
+const maxV = Math.max(...scores.map((s) => s.v));
+---
+<svg viewBox={`0 0 ${W} ${H + 120}`} class="bh" role="img" aria-label="Four benchmark forecasts compared with the actual outcome">
+  <defs>
+    <linearGradient id="bh-test" x1="0" x2="1"><stop offset="0" stop-color="var(--c-actual)" stop-opacity=".12" /><stop offset="1" stop-color="var(--c-actual)" stop-opacity="0" /></linearGradient>
+  </defs>
+  <rect x={x(O)} y="18" width={W - 20 - x(O)} height={H - 50} fill="url(#bh-test)" rx="6" />
+  <line x1={x(O)} x2={x(O)} y1="14" y2={H - 28} stroke="var(--border-strong)" stroke-dasharray="3 4" />
+  <text x={x(O) + 6} y="30" class="lbl">Hidden future</text>
+  <text x="22" y="30" class="lbl">Past</text>
+  <path d={hist} class="ln hist" pathLength="1" />
+  <path d={fc.mean} class="ln fc" style="--c:var(--c-s5);--d:1.3s" pathLength="1" />
+  <path d={fc.naive} class="ln fc" style="--c:var(--c-s2);--d:1.45s" pathLength="1" />
+  <path d={fc.drift} class="ln fc" style="--c:var(--c-s3);--d:1.6s" pathLength="1" />
+  <path d={fc.snaive} class="ln fc win" style="--c:var(--c-s1);--d:1.75s" pathLength="1" />
+  <path d={act} class="ln act" pathLength="1" />
+  <g transform={`translate(20, ${H + 4})`}>
+    <text x="0" y="0" class="lbl">Average miss (MAE): lower is better</text>
+    {scores.map((s, i) => (
+      <g transform={`translate(0, ${14 + i * 24})`}>
+        <text x="0" y="12" class="nm" fill={s.c}>{s.label}{i === 0 ? '  ★' : ''}</text>
+        <rect x="118" y="2" height="13" rx="4" width={(s.v / maxV) * (W - 200)} fill={s.c} class="bar" style={`--d:${3.2 + i * 0.12}s`} opacity={i === 0 ? 1 : 0.55} />
+        <text x={124 + (s.v / maxV) * (W - 200)} y="13" class="val" style={`--d:${3.5 + i * 0.12}s`}>{s.v.toFixed(1)}</text>
+      </g>
+    ))}
+  </g>
+</svg>
+<style>
+  .bh { max-width: 560px; }
+  .lbl { font: 700 12px var(--font-ui); fill: var(--muted); }
+  .nm { font: 600 12px var(--font-ui); }
+  .val { font: 600 12px var(--font-ui); font-variant-numeric: tabular-nums; fill: var(--text-2); opacity: 0; animation: fade .4s var(--d) forwards; }
+  .ln { fill: none; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw 1.2s cubic-bezier(.65,0,.35,1) forwards; }
+  .hist { stroke: var(--c-history); stroke-width: 2.2; animation-duration: 1.3s; }
+  .fc { stroke: var(--c); stroke-width: 2; opacity: .6; animation-delay: var(--d); }
+  .fc.win { stroke-width: 3; opacity: 1; filter: drop-shadow(0 0 6px color-mix(in srgb, var(--c-s1) 60%, transparent)); }
+  .act { stroke: var(--c-actual); stroke-width: 2.4; stroke-dasharray: 1; animation: draw 1.4s 2.2s cubic-bezier(.65,0,.35,1) forwards, dash 0s 3.6s forwards; }
+  .bar { transform-box: fill-box; transform-origin: left; transform: scaleX(0); animation: grow .8s var(--d) cubic-bezier(.2,.8,.2,1) forwards; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  @keyframes dash { to { stroke-dasharray: .012 .008; } }
+  @keyframes grow { to { transform: scaleX(1); } }
+  @keyframes fade { to { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .ln, .bar, .val { animation: none; stroke-dashoffset: 0; transform: none; opacity: 1; } }
+</style>

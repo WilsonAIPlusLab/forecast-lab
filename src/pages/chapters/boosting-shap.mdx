@@ -1,0 +1,361 @@
+---
+layout: ../../layouts/Chapter.astro
+slug: boosting-shap
+minutes: 55
+build:
+  - An XGBoost forecaster tuned with early stopping and rolling-origin folds, scored honestly against ETS, a random forest and seasonal naive
+  - A SHAP waterfall that explains next month's retail-sales forecast in dollars, feature by feature
+  - A global model trained on 14 retail categories at once, with evidence of when it beats one-model-per-series
+skills: [xgb.DMatrix, xgb.train, eta, max_depth, early_stopping_rounds, predcontrib, pred_contribs, SHAP, TreeSHAP, global models]
+---
+import CodeLab from '../../components/CodeLab.svelte';
+import Callout from '../../components/Callout.astro';
+import KeyIdea from '../../components/KeyIdea.astro';
+import Predict from '../../components/Predict.svelte';
+import Term from '../../components/Term.astro';
+import InstructorKit from '../../components/InstructorKit.astro';
+import BoostingRounds from '../../components/ch12/BoostingRounds.svelte';
+import ShapWaterfall from '../../components/ch12/ShapWaterfall.svelte';
+import ShapBeeswarm from '../../components/ch12/ShapBeeswarm.svelte';
+import GlobalLocal from '../../components/ch12/GlobalLocal.svelte';
+import liteR from '../../labs/ch12/xgboost_lite.R?raw';
+import featuresR from '../../labs/ch12/features_setup.R?raw';
+import setupPy from '../../labs/ch12/features_setup.py?raw';
+import trainR from '../../labs/ch12/xgb_train.R?raw';
+import trainPy from '../../labs/ch12/xgb_train.py?raw';
+import bakeR from '../../labs/ch12/bakeoff.R?raw';
+import bakePy from '../../labs/ch12/bakeoff.py?raw';
+import shapR from '../../labs/ch12/shap.R?raw';
+import shapPy from '../../labs/ch12/shap.py?raw';
+import globalR from '../../labs/ch12/global.R?raw';
+import globalPy from '../../labs/ch12/global.py?raw';
+import exR from '../../labs/ch12/exercise.R?raw';
+import exSolR from '../../labs/ch12/exercise_solution.R?raw';
+import exCheckR from '../../labs/ch12/exercise_check.R?raw';
+import exPy from '../../labs/ch12/exercise.py?raw';
+import exSolPy from '../../labs/ch12/exercise_solution.py?raw';
+import exCheckPy from '../../labs/ch12/exercise_check.py?raw';
+export const setupR = [liteR, featuresR].join(String.fromCharCode(10));
+
+<p class="lede">Your model says U.S. retail sales will jump from \$621 billion in November to \$690 billion in December. Your manager asks the obvious question: <strong>why?</strong> "Because the algorithm said so" ends the meeting badly. This chapter builds one of the most successful forecasting algorithms of the last decade, gradient boosting, and then takes it apart so that every forecast comes with a reason, in dollars.</p>
+
+In Chapter 11 you turned a time series into a table of features and grew a random forest. A forest grows hundreds of deep trees *independently* and averages them. Boosting does the opposite: it grows small trees *one after another*, and each new tree studies the mistakes of all the trees before it. That idea, implemented in libraries such as XGBoost and LightGBM, sat behind the top entries of the 2020 M5 forecasting competition, which was won by a senior undergraduate student with an average of LightGBM models.<sup>[8](#refs)</sup>
+
+<KeyIdea>Boosting builds a forecast from many small corrections. SHAP values take the forecast apart again into those same kinds of pieces: a starting point plus one push per feature, adding up exactly to the number you report.</KeyIdea>
+
+## Boosting: small trees that fix each other's mistakes
+
+A <Term def="A model only slightly better than guessing on its own, such as a decision tree with one or two splits.">weak learner</Term> is a model too simple to be useful alone: a tree that asks one or two yes/no questions. <Term def="An ensemble method that fits weak learners in sequence, each one trained on the errors (residuals) left by the ones before it.">Boosting</Term> turns a crowd of weak learners into a strong one in four steps:
+
+1. Start with a dull forecast: the average monthly growth, the same for every month.
+2. Compute the <Term def="What the model got wrong: actual minus prediction.">residuals</Term>, the misses.
+3. Fit a small tree to the residuals. It finds the months the current model gets most wrong ("December is badly under-predicted").
+4. Add only a fraction of that tree's correction, the <Term def="The share of each new tree's correction that is added to the model. Also called shrinkage or eta. Small values learn slowly and generalize better.">learning rate</Term>, then go back to step 2.
+
+Below, a small boosting engine written in JavaScript runs on the real retail-sales table: the target is this month's growth over last month, and the features are the calendar month, last year's growth in the same month, last month's growth, last month's 12-month growth and the number of weekend days. It trains on 1993 to 2022 and forecasts each held-out month from January 2023 one month ahead.
+
+<Predict client:load
+  question="Set the learning rate to **1** (each tree's full correction is added) and use **depth-3** trees. As you add trees from 25 to 300, what happens to the error on the **held-out** months?"
+  options={['It keeps falling, because more trees always mean a better fit', 'It stays flat after about 25 trees', 'It starts to rise: the model memorizes the training years', 'It falls to zero, like the training error']}
+  answer={2}
+  explain="Training error collapses to essentially zero, but held-out RMSE reaches its low of about $15.2 billion after 26 trees and then climbs to $16.3 billion by tree 300. Each extra tree is chasing noise in the training years. With learning rate 0.1, held-out error keeps improving for longer and ends lower (about $11.7 billion with depth-3 trees)."
+/>
+
+<div class="breakout">
+<BoostingRounds client:load />
+</div>
+
+Three things to notice as you drag:
+
+- **Tree 0 misses every December.** With no trees, every month gets the average growth of about 0.95%, so the held-out error (RMSE) is \$49.4 billion. The very first trees split on the calendar month or on last year's growth in the same month. They find the December peak and the January drop.
+- **The residual bars shrink, then stop shrinking.** After about a hundred trees at learning rate 0.1, the held-out misses barely improve, while the training misses keep shrinking. That gap is overfitting, live.
+- **Learning rate trades speed for safety.** At 0.1, the model learns slowly and the held-out error settles near its best. At 1, it learns in a few trees and then overfits. This is why practitioners use a small learning rate plus <Term def="Stopping the addition of trees when the error on a validation set has not improved for a set number of rounds.">early stopping</Term>.
+
+<Callout type="math" title="Gradient boosting is gradient descent in function space">
+Write the model after $m$ trees as $F_m(x)$. Boosting updates it as
+
+$$
+F_m(x) = F_{m-1}(x) + \eta\, h_m(x),
+$$
+
+where $\eta$ is the learning rate and $h_m$ is a small tree. Friedman (2001) showed which target $h_m$ should be fitted to: the **negative gradient** of the loss with respect to the current prediction.<sup>[1](#refs)</sup> For squared error $L = \tfrac12 (y - F)^2$, that gradient is $-(y - F_{m-1}(x))$, so the negative gradient is exactly the residual. "Fit the next tree to the residuals" is therefore one step of gradient descent, taken not on a parameter but on the whole prediction function. Change the loss (absolute error, pinball loss for quantiles, log loss for recession probabilities) and the same recipe still works. XGBoost (Chen & Guestrin, 2016) adds a second-order (Newton) step and a penalty $\lambda$ on leaf values, and it learns a default direction for missing values at every split.<sup>[2](#refs)</sup>
+</Callout>
+
+## XGBoost in R and Python
+
+<Term def="eXtreme Gradient Boosting: a fast, regularized gradient-boosting library with R and Python interfaces (Chen & Guestrin, 2016).">XGBoost</Term> is the industrial version of the toy above. Its settings map one-to-one onto what you just played with:
+
+| Setting | What it controls | Typical starting value |
+|---|---|---|
+| `eta` | Learning rate: share of each tree added | 0.05 to 0.3 |
+| `max_depth` | Questions per tree (tree depth) | 2 to 6 |
+| `nrounds` | Number of trees | Let early stopping decide |
+| `subsample` | Share of rows each tree sees (adds randomness) | 0.8 to 1 |
+| `early_stopping_rounds` | Stop when validation error has not improved for this many rounds | 30 to 50 |
+
+<Callout type="tip" title="R in the browser vs. R on your laptop">
+XGBoost's compiled R package cannot yet load inside webR, the WebAssembly version of R this site uses. When you run the R labs here, a pure-R version of the same algorithm (XGBoost's exact greedy method, with exact TreeSHAP values for `predcontrib`) stands in for it and prints a one-line note saying so. We checked it against the CRAN package (version 3.x, `tree_method = "exact"`): every number quoted in this chapter, including the SHAP values, comes out the same. It covers only the settings these labs use, and it is slower, so the labs keep the number of models small. In RStudio, `install.packages("xgboost")` gives you the real thing, and the Python tab runs the real `xgboost` package in the browser.
+</Callout>
+
+The validation set must come **after** the training data in time, exactly as in Chapter 3. If you let a random 20% of months decide when to stop, the model gets to peek at months surrounded by the future.
+
+<div class="breakout">
+<CodeLab client:load id="ch12-train" title="Lab 12.1: build the features and train XGBoost with early stopping" r={trainR} py={trainPy} setup={liteR} pyPackages={['xgboost']} goal="Turn retail sales into a feature table, train XGBoost on 1993–2021, and let a 2022 validation year decide how many trees to keep." />
+</div>
+
+With a learning rate of 0.05 and depth-3 trees, validation error (in percentage points of monthly growth) reaches its minimum of 2.72 after **78 trees**, and training continues for 50 more before early stopping gives up. The gain importance chart says two features do almost all the work: last year's growth in the same month (66% of the total gain) and the calendar month (30%). Both describe the seasonal pattern.
+
+<Callout type="pitfall" title="A quiet leak: filling a gap with the future">
+The unemployment rate for October 2025 was never published: the federal shutdown stopped the household survey.<sup>[10](#refs)</sup> The course's `fred()` helper fills one-month gaps by linear interpolation, which is right for a chart. But in a forecasting table, the interpolated October value is half made of *November's* rate, which nobody knew when forecasting November. That is a small look-ahead leak. The labs read the raw file instead and leave the gap empty. XGBoost handles it natively: at every split it learns which branch missing values should follow.
+</Callout>
+
+## Does boosting beat the benchmarks?
+
+Tuning is choosing settings (learning rate, depth, number of trees) without peeking at the test set. Lab 12.2 does it on <Term def="Several training/validation splits whose origin rolls forward in time: train on everything before year t, validate on year t. Chapter 3's tsCV idea applied to model tuning.">rolling folds</Term>: train on everything before 2019 and validate on 2019, then before 2020 and validate on 2020, and so on to 2022. Then it pits the winner against a random forest (Chapter 11's method) on the same features, ETS and seasonal naive on the same 45 test months. Every forecast is one month ahead, made once last month's sales are published (about two weeks into the month), so these numbers are not comparable with Chapter 11's multi-month scorecard. The labs also use today's revised data, not the first-published values a forecaster would have seen at the time, so errors in real time could differ somewhat.
+
+<Predict client:load
+  question="Gradient-boosted trees (LightGBM) won the M5 competition. On this one series, U.S. retail sales, what do you expect from tuned XGBoost one month ahead?"
+  options={['It beats ETS by a wide margin', 'It is in the same range as ETS and the random forest, and does not clearly win', 'It loses to seasonal naive']}
+  answer={1}
+  explain="Tuned XGBoost misses by $10.3 billion a month on average (MAE), ETS by $8.4 billion and the random forest by $9.1 billion. All three halve the error of seasonal naive ($16.1 billion). With one series and a clean seasonal pattern, there is not much left for a flexible model to find."
+/>
+
+<div class="breakout">
+<CodeLab client:load id="ch12-bakeoff" title="Lab 12.2: tune on rolling folds and run the bake-off" r={bakeR} py={bakePy} setup={setupR} pySetup={setupPy} packages={['forecast', 'randomForest']} pyPackages={['xgboost', 'scikit-learn', 'statsmodels']} goal="Tune XGBoost on rolling yearly folds, then score it against a random forest, ETS, a combination and seasonal naive on 2023–2026." />
+</div>
+
+The honest result, in R (Python's ETS and forest differ slightly, XGBoost is identical):
+
+| One-month-ahead, Jan 2023 to Sep 2026 | MAE (\$bn) | RMSE (\$bn) | MAPE |
+|---|---|---|---|
+| XGBoost (tuned: eta 0.1, depth 2, 38 trees) | 10.35 | 13.30 | 1.74% |
+| Random forest | 9.12 | 11.51 | 1.53% |
+| ETS(M,A,M) | **8.35** | 10.53 | **1.39%** |
+| Average of XGBoost and ETS | 8.38 | **10.17** | 1.41% |
+| Seasonal naive | 16.11 | 19.47 | 2.64% |
+
+Two lessons. First, **tuning is noisy**: the folds include 2020, when lockdowns dominated every error, so the tuning picked shallow depth-2 trees. On 2023–2026 they do worse than the untuned depth-3 model of Lab 12.1 (MAE \$10.35 billion vs \$9.21 billion). Second, **combining helps**: the simple average of XGBoost and ETS has the lowest RMSE, because the two models make different kinds of mistakes. Boosting does not need to win on its own to be useful.
+
+<Callout type="business" title="When is boosting worth it?">
+On one long, clean, seasonal series, a well-specified statistical model is hard to beat. Boosting earns its keep when there are <strong>many related series</strong> to learn from, <strong>many drivers</strong> (prices, promotions, holidays, weather) whose effects interact, and <strong>short or noisy histories</strong>. That describes a retailer forecasting thousands of products, which is exactly the M5 setting. You will see the many-series case at the end of this chapter.
+</Callout>
+
+## Explaining one forecast: SHAP values
+
+Suppose four colleagues produced a forecast together and you must split the credit fairly. In 1953 Lloyd Shapley answered the general version of that question for cooperative games: give each player their **marginal contribution**, averaged over every order in which the team could have been assembled.<sup>[4](#refs)</sup> Lundberg and Lee (2017) applied the idea to model predictions, with features as the players and the prediction as the payout, and called the result <Term def="SHapley Additive exPlanations: each feature's contribution to one prediction, measured as its Shapley value. Contributions plus the base value add up exactly to the prediction.">SHAP values</Term>.<sup>[5](#refs)</sup>
+
+For any single forecast, SHAP gives you an additive receipt:
+
+$$
+\text{prediction} = \underbrace{\phi_0}_{\text{base value}} + \phi_{\text{month}} + \phi_{\text{growth\_ly}} + \dots + \phi_{\text{unrate\_lm}}
+$$
+
+The <Term def="The model's average prediction over the training data: where every explanation starts before any feature has been taken into account.">base value</Term> $\phi_0$ is the model's average prediction. Each $\phi_j$ is how far feature $j$ moved *this* forecast away from that average, up or down. Our model predicts growth, and the dollar forecast is last month's sales $\times (1 + \text{growth}/100)$. Multiplying every term by the same number keeps the receipt additive, so we can state every push in billions of dollars.
+
+<div class="breakout">
+<ShapWaterfall client:load />
+</div>
+
+Read December 2025 from the top. November's sales were \$620.6 billion. An average month adds \$5.8 billion (the base value). Last year's November-to-December jump of 9.4% tells the model a big jump is coming again: **+\$47.3 billion**. The calendar month adds another \$13.2 billion, and the weekend mix \$2.2 billion. The forecast lands at \$689.6 billion; actual sales were \$694.1 billion, a miss of 0.6%. Now pick **Next month**: for October 2026, the biggest pushes are last October's 4.7% growth (+\$9.1 billion), the calendar month (+\$5.5 billion), and a bounce-back after September's 3.2% drop (+\$4.5 billion), for a forecast of \$659.0 billion.
+
+<Callout type="math" title="How XGBoost computes exact SHAP values">
+The Shapley value of feature $j$ in a model with feature set $N$ is
+
+$$
+\phi_j = \sum_{S \subseteq N \setminus \{j\}} \frac{|S|!\,(|N| - |S| - 1)!}{|N|!}\Big[f_{S \cup \{j\}}(x) - f_S(x)\Big],
+$$
+
+where $f_S(x)$ is the model's expected prediction when only the features in $S$ are known. The weights count how many orderings put exactly the features in $S$ before $j$. With 7 features there are $2^6 = 64$ subsets per feature; with 100 features the sum is hopeless. Lundberg and Lee's **Kernel SHAP** estimates these values for any model by sampling feature subsets and fitting a weighted regression: general, but slow and approximate.<sup>[5](#refs)</sup> For tree ensembles, **TreeSHAP** computes them exactly, in time polynomial in the number of leaves and the depth, by pushing all subsets through each tree at once.<sup>[6](#refs)</sup> It defines $f_S(x)$ by following the tree where a feature in $S$ decides the split and averaging both branches, weighted by training cover, where it does not. That is why correlated features can share credit in ways that depend on how the trees happened to split. XGBoost has TreeSHAP built in: `predict(..., predcontrib = TRUE)` in R and `predict(..., pred_contribs=True)` in Python. The four properties that make Shapley values the unique "fair" split are efficiency (they add up to the prediction), symmetry, dummy (a feature the model never uses gets zero) and additivity across models.
+</Callout>
+
+<div class="breakout">
+<CodeLab client:load id="ch12-shap" title="Lab 12.3: SHAP values, a waterfall and next month's explained forecast" r={shapR} py={shapPy} setup={setupR} pySetup={setupPy} pyPackages={['xgboost']} goal="Compute SHAP values with predcontrib, check that they add up to the forecast, and draw waterfalls for December 2025 and October 2026." />
+</div>
+
+Notice the **dummy** property at work: consumer sentiment gets a SHAP value of exactly zero in every month, because the tuned model never splits on it. That is information too. A manager who asks "what about consumer confidence?" gets a precise answer: for next month's sales, once you know the seasonal pattern, this model found no use for it.
+
+## Explaining all forecasts at once
+
+A waterfall explains one month. Stack the SHAP values of every month and you get a global picture that is far more informative than a single importance number: it shows **how much** each feature moves forecasts, **in which direction**, and **for which values**.
+
+<div class="breakout">
+<ShapBeeswarm client:load />
+</div>
+
+- **Seasonality dominates.** Last year's growth in the same month accounts for 66% of the total absolute SHAP across all months since 2005, and the calendar month for another 19%. High values (red) push right, low values (blue) push left.
+- **Two features, one story.** Switch to the dependence view for the calendar month: January is pushed down by about 7.5 points of growth, December up by about 2. But the bigger December push sits on *last year's growth*, which carries the same seasonal information. When features are correlated, SHAP splits the credit between them in a way that depends on how the trees happened to split. Do not read too much into the split; read the sum.
+- **A surprise.** The dependence plot for weekend days slopes *down*: months with 10 weekend days get about −0.6 points on average, months with 8 get about +0.4. Is that because people shop less on weekends, or because of something else that happens to line up with the calendar? The model cannot tell you. SHAP explains the **model**, not the economy.
+
+<Callout type="pitfall" title="Three ways SHAP explanations mislead">
+<ul>
+<li><strong>Explanation is not causation.</strong> A large SHAP value means the model leaned on that feature, not that changing the feature would change sales. "Unemployment pushed the forecast down \$2 billion" is a statement about the model.</li>
+<li><strong>Correlated features share credit unpredictably.</strong> Calendar month and last year's growth both encode seasonality. Retrain with a different seed or depth and the credit can move from one to the other while the forecast barely changes.</li>
+<li><strong>Explanations are only as good as the model.</strong> SHAP will explain a bad forecast just as confidently as a good one. Always show accuracy next to the explanation.</li>
+</ul>
+</Callout>
+
+<Callout type="tip" title="Gain importance or SHAP importance?">
+Lab 12.1 ranked features by **gain**, the training-loss reduction from splits on each feature. Lab 12.3 ranks them by **mean absolute SHAP** in dollars over the test months: last year's growth \$27.1 billion, calendar month \$8.9 billion, last month's growth \$3.2 billion, weekend days \$2.6 billion. The rankings agree here, but only SHAP is in the forecast's own units, has a direction, and can be broken down month by month. Split-based importance can also favor features with many distinct values. For a manager, use SHAP.
+</Callout>
+
+## Many series: global models and the M5 lesson
+
+So far, one model learned from one series. A <Term def="One model trained on many related series at once, usually with a feature identifying each series. Also called cross-learning.">global model</Term> learns from many series at once: here, 14 Census retail and food-service categories, from motor vehicles to e-commerce and restaurants, each not seasonally adjusted. (E-commerce is part of nonstore retail, so those two overlap.) Because the target is growth in percent, a \$10 billion category and a \$150 billion category fit in the same table. A **local** approach fits one model per category instead.
+
+<Predict client:load
+  question="Each category has about 30 years of monthly data. Will one global model beat 14 local models?"
+  options={['Yes, always: more data is always better', 'It depends on how much history each category has', 'No: each category is different, so local models always win']}
+  answer={1}
+  explain="Drag the slider in the next figure. With 2 or 3 years of history per category, the global model wins 13 and 9 of 14 categories and cuts the average MAPE by more than a point. With 29 years, each local model has enough data of its own, and the local average is slightly better (2.90% vs 3.00%)."
+/>
+
+<div class="breakout">
+<GlobalLocal client:load />
+</div>
+
+This is the situation of a new product, a new store or a newly tracked category: a short history of its own, and many relatives with long ones. Cross-learning lets the newcomer borrow the December peak and the 2020 shock from the others. In the M5 competition, essentially all of the top 50 teams used cross-learning.<sup>[8](#refs)</sup>
+
+<div class="breakout">
+<CodeLab client:load id="ch12-global" title="Lab 12.4: one global model for 14 retail categories" r={globalR} py={globalPy} setup={setupR} pySetup={setupPy} pyPackages={['xgboost']} goal="Train one XGBoost model on all 14 categories and 14 local models, then compare their test MAPE by category." />
+</div>
+
+## What the M competitions teach
+
+The M competitions, organized by Spyros Makridakis since 1982, are the forecasting field's large-scale reality checks. Three recent ones bear on this chapter:
+
+- **M4 (2018), 100,000 series.** The winner was a hybrid of exponential smoothing and a neural network (Smyl), and the runner-up used XGBoost to *weight* the forecasts of standard statistical methods. Both used machine learning, and both leaned on statistical, series-by-series building blocks.<sup>[7](#refs)</sup>
+- **M5 (2020), 42,840 series of Walmart unit sales.** 5,507 teams from 101 countries took part. Almost all of the top 50 entries that described their methods used LightGBM, a fast gradient-boosting library.<sup>[3](#refs)</sup> <sup>[8](#refs)</sup> The winning entry, an equal-weighted average of LightGBM models built by an undergraduate, was 22.4% more accurate than the best benchmark (bottom-up exponential smoothing). Among the organizers' findings: simple ML methods were superior, combining helped, cross-learning helped, explanatory variables such as prices and promotions helped, and effective cross-validation strategies mattered.<sup>[8](#refs)</sup>
+- **M6 (2022 to 2023), 50 S&P 500 stocks and 50 ETFs.** Over twelve four-week rounds, 226 teams forecast returns and made investment decisions. The organizers stressed how hard it was to beat the market consistently, and found only a weak link between forecasting accuracy and investment returns.<sup>[9](#refs)</sup>
+
+<Callout type="intuition" title="What this chapter's numbers add">
+Your results echo the competitions' pattern. On one series, boosting did not beat ETS, but a combination helped. Across 14 related series with short histories, one global boosted model clearly beat 14 local ones (an M5-style result). The method that wins depends on the data you have, which is why you keep a benchmark scorecard.
+</Callout>
+
+## One slide for your manager
+
+Everything above compresses into one slide. Lead with the number and its uncertainty, give three reasons in plain words, and say how much to trust it. Here is the slide for next month, built only from numbers you produced in Labs 12.2 and 12.3:
+
+<div class="slide" role="figure" aria-label="Example one-slide summary of the October 2026 retail sales forecast">
+  <div class="slide-k">Retail sales outlook, October 2026 (U.S., excl. food services, not seasonally adjusted)</div>
+  <div class="slide-h">We expect <b>\$659 billion</b>, up 3.8% from September's \$635 billion.</div>
+  <div class="slide-cols">
+    <div>
+      <div class="slide-sub">Why</div>
+      <ul>
+        <li><b>October usually grows.</b> Last October grew 4.7% over September; the model expects a similar move: <b>+\$9.1bn</b>.</li>
+        <li><b>The calendar.</b> In 30 years of data, October grows faster than the average month: <b>+\$5.5bn</b>.</li>
+        <li><b>A bounce-back.</b> September fell 3.2%, and the model has learned that sales tend to recover after a drop: <b>+\$4.5bn</b>.</li>
+        <li>Economy-wide signals (sentiment, unemployment) change the forecast by less than \$0.1bn in total.</li>
+      </ul>
+    </div>
+    <div>
+      <div class="slide-sub">How much to trust it</div>
+      <ul>
+        <li>Over the 45 months from January 2023, this model missed by <b>\$10.3bn on average (1.7%)</b> one month ahead.</li>
+        <li>A standard statistical model (ETS) was slightly more accurate (1.4%); averaging the two avoided the biggest misses. <b>Recommendation: report the average of both.</b></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<Callout type="business" title="Rules for explaining a forecast to a non-technical audience">
+<ul>
+<li><strong>Lead with the number and the range</strong>, not the method. Nobody needs the words "gradient boosting" on the slide.</li>
+<li><strong>Three drivers at most</strong>, in dollars, in plain words, ranked by size. Lump the rest into "everything else".</li>
+<li><strong>Say what does not matter.</strong> "Consumer sentiment barely moves this forecast" saves a 20-minute debate.</li>
+<li><strong>Show the track record</strong> against a simple benchmark, so the explanation is not mistaken for proof.</li>
+</ul>
+</Callout>
+
+## Your turn
+
+Explain November 2025 yourself. Fill in the two blanks (`______`) and press **Run & check**.
+
+<div class="breakout">
+<CodeLab client:load id="ch12-ex1" exercise title="Exercise: rebuild a forecast from its SHAP values" r={exR} solution={exSolR} check={exCheckR} py={exPy} solutionPy={exSolPy} checkPy={exCheckPy} setup={setupR} pySetup={setupPy} pyPackages={['xgboost']}
+  goal="Compute the SHAP values for November 2025, rebuild the dollar forecast from them alone, and find the feature that pulled it down the most."
+  hints={['In R, the argument that switches on SHAP values is `predcontrib`; it takes a logical value. In Python it is `pred_contribs`.', 'Additivity: base value + all contributions = predicted growth. The base value is already one of the columns, so the second blank is just the sum of everything in `S`, e.g. `sum(S)` in R or `S.sum()` in Python.']} />
+</div>
+
+<Predict client:load kind="check"
+  question="A colleague's SHAP waterfall shows the unemployment rate pushing next month's sales forecast down by $3 billion. Which statement is justified?"
+  options={['If unemployment fell, sales would rise by about $3 billion', 'The model relied on the unemployment rate to lower this forecast by about $3 billion relative to its average', 'Unemployment is the main cause of the expected sales decline', 'The model is wrong, because unemployment cannot affect next month\'s sales']}
+  answer={1}
+  explain="SHAP values describe the model's arithmetic for this one forecast: base value plus contributions equals the prediction. They are not causal effects, and correlated features (such as sentiment or claims) could have picked up the same signal."
+/>
+
+## Chapter checklist
+
+- Boosting fits small trees **in sequence**, each to the residuals of the model so far, and adds a fraction (the **learning rate**) of each.
+- Use a small learning rate, let **early stopping on a later validation period** pick the number of trees, and tune on **rolling folds**, never on the test set.
+- Predict **growth, not levels**, so trees are not trapped inside the range of past sales. Convert back to dollars at the end.
+- On one clean series, boosting may not beat ETS; a **combination** often beats both. Boosting shines with **many related series** (global models) and rich drivers.
+- **SHAP values** split each forecast into a base value plus one contribution per feature, adding up exactly. Use waterfalls for one forecast and beeswarms or dependence plots for all of them.
+- SHAP explains the **model**, not the world: watch for correlated features and never present contributions as causal effects.
+
+<InstructorKit
+  minutes={80}
+  data={['RSXFSN', 'UMCSENT', 'UNRATE', 'MRTSSM441USN', 'MRTSSM4541USN', 'MRTSSM722USN']}
+  objectives={[
+    'Explain boosting as a sequence of small trees fitted to residuals, and the roles of learning rate, depth and number of trees.',
+    'Train XGBoost in R or Python with early stopping on a time-ordered validation set, and tune it on rolling yearly folds.',
+    'Score a boosted model honestly against ETS, a random forest, a combination and seasonal naive.',
+    'Compute SHAP values with `predcontrib` / `pred_contribs`, verify additivity, and explain one forecast in dollars with a waterfall.',
+    'Read a SHAP beeswarm and dependence plot, and state three limits of SHAP explanations.',
+    'Compare a global model across many series with local models, and connect the result to the M5 findings.'
+  ]}
+  discussion={[
+    'Tuned XGBoost lost to ETS on retail sales, yet LightGBM-style models won the M5. What differs between the two settings?',
+    'Calendar month and last year\'s growth share the credit for seasonality. If a manager asks "which one really matters?", what do you answer?',
+    'Your waterfall says weekend days lowered the forecast by \$4 billion. Write the sentence you would put on the slide, and the one you would not.'
+  ]}
+  misconceptions={[
+    '“More trees are always better.” Training error falls forever; held-out error turns up. Early stopping exists for this reason.',
+    '“A big SHAP value means a causal effect.” SHAP decomposes the model\'s prediction; it says nothing about what would happen if you changed the feature.',
+    '“Feature importance (gain) and SHAP importance are the same thing.” Gain measures training-loss reduction; mean |SHAP| measures how much forecasts move, in the target\'s units and with a direction.',
+    '“Global models always win.” In this chapter they win clearly with 2–3 years per series and tie or lose slightly with 29 years.'
+  ]}
+>
+
+**Explain-the-forecast relay (30 minutes).** Teams of three: an analyst, a manager and a skeptic.
+
+1. **Predict (5 min).** Each team picks a month in the SHAP waterfall explorable (one team must take January 2023, one December 2025, one October 2026). Before looking at the bars, the analyst writes down which feature they expect to push hardest and in which direction.
+2. **Explain (10 min).** The analyst writes a three-sentence explanation for the manager, in dollars, using the waterfall. The skeptic must find one statement that sounds causal and rewrite it as a statement about the model.
+3. **Check (10 min).** Run Lab 12.3 and the exercise. Teams confirm their numbers and compare forecast with actual.
+4. **Debrief (5 min).** Run Lab 12.4 with `years <- 3` and then `years <- 29` (roughly 20 seconds in the browser, about 1 second in RStudio), or drag the slider in the global-vs-local figure, and ask the room when they would deploy a global model.
+
+*Expected results:* December 2025: forecast \$689.6bn vs actual \$694.1bn; the biggest push is last December's growth (+\$47.3bn), then the calendar month (+\$13.2bn). January 2023: the forecast is pulled down by about \$67bn by last January's drop and \$48bn by the calendar month (forecast \$523.5bn vs actual \$535.9bn). October 2026: \$659.0bn, driven by last October's growth (+\$9.1bn), the calendar (+\$5.5bn) and September's dip (+\$4.5bn). November 2025 (the exercise): forecast \$626.9bn vs actual \$620.6bn; the largest drag is the weekend-days feature (10 weekend days, −\$4.2bn). Global vs local: with 3 years, global wins 9 of 14 categories, average MAPE 4.05% vs 5.44%; with 29 years, global wins 8 of 14 but the local average is lower, 2.90% vs 3.00%.
+
+</InstructorKit>
+
+<div class="refs" id="refs">
+
+**References**
+
+1. Friedman, J. H. (2001). Greedy function approximation: A gradient boosting machine. *Annals of Statistics*, 29(5), 1189–1232.
+2. Chen, T., & Guestrin, C. (2016). XGBoost: A scalable tree boosting system. *Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining*, 785–794.
+3. Ke, G., Meng, Q., Finley, T., Wang, T., Chen, W., Ma, W., Ye, Q., & Liu, T.-Y. (2017). LightGBM: A highly efficient gradient boosting decision tree. *Advances in Neural Information Processing Systems*, 30.
+4. Shapley, L. S. (1953). A value for n-person games. In H. W. Kuhn & A. W. Tucker (Eds.), *Contributions to the Theory of Games II* (pp. 307–317). Princeton University Press.
+5. Lundberg, S. M., & Lee, S.-I. (2017). A unified approach to interpreting model predictions. *Advances in Neural Information Processing Systems*, 30.
+6. Lundberg, S. M., Erion, G., Chen, H., DeGrave, A., Prutkin, J. M., Nair, B., Katz, R., Himmelfarb, J., Bansal, N., & Lee, S.-I. (2020). From local explanations to global understanding with explainable AI for trees. *Nature Machine Intelligence*, 2, 56–67.
+7. Makridakis, S., Spiliotis, E., & Assimakopoulos, V. (2020). The M4 Competition: 100,000 time series and 61 forecasting methods. *International Journal of Forecasting*, 36(1), 54–74.
+8. Makridakis, S., Spiliotis, E., & Assimakopoulos, V. (2022). M5 accuracy competition: Results, findings, and conclusions. *International Journal of Forecasting*, 38(4), 1346–1364. [econpapers](https://econpapers.repec.org/RePEc:eee:intfor:v:38:y:2022:i:4:p:1346-1364)
+9. Makridakis, S., Spiliotis, E., Hollyman, R., Petropoulos, F., Swanson, N., & Gaba, A. (2025). The M6 forecasting competition: Bridging the gap between forecasting and investment decisions. *International Journal of Forecasting*, 41(4), 1315–1354. Preprint: [arXiv:2310.13357](https://arxiv.org/abs/2310.13357)
+10. NBC News (2025, November 19). October jobs report canceled and November release delayed, BLS says. [nbcnews.com](https://www.nbcnews.com/news/amp/rcna244828)
+
+</div>
+
+<style>{`
+  .refs { font-size: .86rem; color: var(--text-2); margin-top: 3rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+  .ch-body table { margin: 1.4rem 0 2rem; font-size: .88rem; }
+  .ch-body td { vertical-align: top; }
+  .slide { margin: 1.6rem 0 2rem; padding: 1.4rem 1.5rem 1.2rem; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--surface); aspect-ratio: auto; }
+  .slide-k { font-size: .78rem; font-weight: 650; color: var(--muted); }
+  .slide-h { font-family: var(--font-display); font-size: 1.45rem; line-height: 1.25; color: var(--text); margin: .35rem 0 1rem; text-wrap: balance; }
+  .slide-h b { color: var(--c-forecast); }
+  .slide-cols { display: grid; grid-template-columns: 1.25fr 1fr; gap: 1.4rem; font-size: .88rem; }
+  .slide-cols ul { margin: .3rem 0 0; padding-left: 1.1rem; }
+  .slide-cols li { margin: .3rem 0; line-height: 1.45; }
+  .slide-sub { font-weight: 700; font-size: .82rem; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: .25rem; }
+  @media (max-width: 700px) { .slide-cols { grid-template-columns: 1fr; } }
+`}</style>
