@@ -24,3 +24,8 @@ export const chapters: Chapter[] = [
   { n: 15, slug: 'forecast-studio', title: 'The Forecast Studio', short: 'Forecast Studio', question: 'Can I ship a forecast an employer would actually use?', part: 'Ship It', accent: '#c084fc' },
 ];
 export const bySlug = (s: string) => chapters.find((c) => c.slug === s)!;
+/** Anchor id for a part on the chapter index, e.g. 'Machine Learning & Big Data' -> 'machine-learning-big-data'. */
+export const partId = (p: string) => p.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+/** Spelled-out count for prose ("Sixteen chapters"); falls back to digits. */
+const words = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty'];
+export const spell = (n: number, cap = false) => { const w = words[n] ?? String(n); return cap ? w[0].toUpperCase() + w.slice(1) : w; };

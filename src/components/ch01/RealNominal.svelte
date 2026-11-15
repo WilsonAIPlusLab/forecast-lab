@@ -66,7 +66,7 @@
     marks.push(Plot.tip(both, Plot.pointerX({ x: 'date', y: 'n', title: (d: any) => `${monthLabel(d.date)}\nNominal: ${d.n.toFixed(1)}${revealed && Number.isFinite(d.r) ? `\nReal: ${d.r.toFixed(1)}` : ''}\n(index, 2019 average = 100)` })));
     const chart = Plot.plot({
       width: W, height: Math.max(300, Math.min(400, W * 0.48)), marginLeft: 48, marginRight: 128, marginTop: 14,
-      style: plotStyle(), x: { label: null }, y: { grid: true, nice: true, label: null, domain: [80, Math.max(155, 100 + guess + 5)] },
+      style: plotStyle(), x: { label: null }, y: { grid: true, nice: true, label: null, domain: [75, Math.max(155, 100 + guess + 5)] },
       marks,
     });
     chart.setAttribute('role', 'img');

@@ -5,7 +5,7 @@ minutes: 50
 build:
   - An automated batch forecast for 14 retail categories, with a traffic-light exception report that tells a planner which forecasts need a human look
   - An ETS forecast of U.S. e-commerce sales with 80% and 95% prediction intervals, chosen automatically by AICc
-  - A cross-validated head-to-head showing ETS cutting the seasonal naive error by 30% to 50% at every horizon on the Chapter 3 scorecard
+  - A cross-validated head-to-head showing ETS cutting the seasonal naive error by about 30% to 50% at every horizon on the Chapter 3 scorecard
 skills: [ses, holt, "holt(damped = TRUE)", hw, ets, AICc, "forecast()", "lapply()", MASE, tsCV, ExponentialSmoothing, ETSModel]
 ---
 import CodeLab from '../../components/CodeLab.svelte';
@@ -95,7 +95,7 @@ That straight line is also Holt's weakness. A trend estimated today is extended 
 The three origins tell the whole story of trend forecasting. From **December 2020**, the straight line extrapolates a pandemic boom that ended within months, and damping wins easily. From **August 2023**, a gentle φ of 0.98 roughly halves the linear trend's error (about \$1.9 billion vs \$4.1 billion). From **December 2019**, every method is wrong, and the linear trend is least wrong, because the future really did accelerate. Damping is a bet that trends fade. It is usually a good bet, but not always.
 
 <Callout type="business" title="Why damping usually wins in practice">
-Gardner and McKenzie tested the damped trend on the 1,001 series of the first M-competition and found it more accurate than smoothing methods that extend a linear trend.<sup>[3](#refs)</sup> Gardner's 2006 review of two decades of later studies concluded that it is "still difficult to beat the application of a damped trend to every time series."<sup>[4](#refs)</sup> In the M4 competition (100,000 series), the damped trend on its own was more accurate than either SES or Holt's linear trend, and the official benchmark, called *Comb*, was simply the average of those three methods. Only 17 of the 49 submissions did at least as well.<sup>[5](#refs)</sup> For a planner, the lesson is practical: **a damped trend is a safe default** when you cannot inspect every series.
+Gardner and McKenzie tested the damped trend on the 1,001 series of the first M-competition and found it more accurate than smoothing methods that extend a linear trend.<sup>[3](#refs)</sup> Gardner's 2006 review of two decades of later studies concluded that it is "still difficult to beat the application of a damped trend to every time series."<sup>[4](#refs)</sup> In the M4 competition (100,000 series), the damped trend on its own was more accurate than either SES or Holt's linear trend, and the official benchmark, called *Comb*, was simply the average of those three methods. Only 17 of the 49 submitted methods were more accurate than *Comb*.<sup>[5](#refs)</sup> For a planner, the lesson is practical: **a damped trend is a safe default** when you cannot inspect every series.
 </Callout>
 
 <Callout type="math" title="Holt's linear and damped trend equations">
@@ -150,7 +150,7 @@ You have now seen the three building blocks: a **level**, an optional **trend** 
 
 So SES is ETS(A,N,N), Holt's method is ETS(A,A,N), and multiplicative Holt-Winters with percentage errors is ETS(M,A,M). The error letter does not change the point forecast, but it changes the **prediction intervals**: with multiplicative errors, the intervals widen as sales grow.
 
-Having a statistical model buys you two things that the old recipes could not provide:
+Having a statistical model buys you two things that the old recipes, surveyed by Gardner (1985),<sup>[9](#refs)</sup> could not provide:
 
 1. **Prediction intervals** for every forecast, computed from the model.
 2. **Automatic model selection.** Every candidate has a likelihood, so `ets()` can fit them all and keep the one with the lowest <Term def="Akaike's information criterion, corrected for small samples. It rewards a model's fit (likelihood) and penalizes its number of parameters. Lower is better; only differences between models fitted to the same data matter.">AICc</Term>, without ever touching the test set.
@@ -192,10 +192,10 @@ $$
 The point forecasts are the same as multiplicative Holt-Winters, but now there is a likelihood. `ets()` maximizes it over the parameters and the initial states, then compares models with
 
 $$
-\text{AICc} = -2\log L + 2k + \frac{2k(k+1)}{n-k-1},
+\text{AIC} = -2\log L + 2k, \qquad \text{AICc} = \text{AIC} + \frac{2k(k+1)}{n-k-1}.
 $$
 
-where $k$ counts estimated parameters and initial states. Prediction intervals come from the same equations, either by formula or by simulating many future sample paths.<sup>[7, 8](#refs)</sup>
+These are Chapter 4's formulas. There, $-2\log L$ reduced to $T\log(\text{SSE}/T)$ plus a constant, and $k + 2$ counted the slopes, the intercept and the error variance. Here $k$ counts every estimated quantity: the smoothing parameters, the initial states and the error variance. Prediction intervals come from the same equations, either by formula or by simulating many future sample paths.<sup>[7, 8, 10](#refs)</sup>
 </Callout>
 
 ## Monday morning: forecasting every category at once
@@ -244,7 +244,7 @@ Every new method in this course must earn its place on the Chapter 3 scorecard. 
 <CodeLab client:load id="ch05-tscv" title="ETS vs seasonal naive, cross-validated by horizon" r={cvR} py={cvPy} packages={['forecast']} pyPackages={['statsmodels']} goal="Use tsCV() to compare ETS(M,A,M) with seasonal naive at horizons 1 to 12, then test whether the one-step difference is statistically significant." />
 </div>
 
-ETS wins at every horizon, cutting the seasonal naive error by 30% to 50%. One month ahead, its MAE is about \$8.0 billion against \$15.6 billion for seasonal naive. Twelve months ahead it is about \$6.4 billion against \$13.1 billion. The Diebold–Mariano test gives p = 0.001 for the one-step errors, so the gap is very unlikely to be luck. ETS earns a permanent row on the scorecard. In Chapter 7 it will face its main rival, ARIMA.
+ETS wins at every horizon, cutting the seasonal naive error by about 30% to 50%. One month ahead, its MAE is about \$8.0 billion against \$15.6 billion for seasonal naive. Twelve months ahead it is about \$6.4 billion against \$13.1 billion. The Diebold–Mariano test gives p = 0.001 for the one-step errors, so the gap is very unlikely to be luck. ETS earns a permanent row on the scorecard. In Chapter 7 it will face its main rival, ARIMA.
 
 ## Your turn
 
@@ -253,7 +253,7 @@ Fill in the three blanks (`______`) and press **Run & check**.
 <div class="breakout">
 <CodeLab client:load id="ch05-ex1" exercise title="Exercise: automatic ETS for clothing stores" r={exR} solution={exSolR} check={exCheckR} packages={['forecast']}
   goal="Let ets() choose a model for U.S. clothing-store sales, forecast the 12-month test period, and extract the test-set MASE."
-  hints={['The function that fits and selects an exponential smoothing model automatically is `ets()`.', 'The horizon should cover every month of the test set: `length(test)`. The column of `accuracy()` you need is named `"MASE"`, in capitals and in quotes.']} />
+  hints={['The function that fits and selects an exponential smoothing model automatically is `ets()`.', 'The horizon should cover every month of the test set: `length(test)`. The column of `accuracy()` you need is named MASE, in capitals (the quotes are already in the code).']} />
 </div>
 
 ## Chapter checklist
@@ -263,11 +263,11 @@ Fill in the three blanks (`______`) and press **Run & check**.
 - **Holt-Winters** adds seasonal indices (γ). Use **multiplicative** seasonality when the seasonal swing grows with the level.
 - **ETS(Error, Trend, Season)** names every combination as a state-space model. That gives **prediction intervals** and **automatic selection by AICc** with `ets()`.
 - **Batch forecasting** means writing one recipe and applying it to every series, then ranking by a scale-free metric (MASE) so people only review the **exceptions**.
-- ETS must still beat the benchmark: on retail sales it cuts the **seasonal naive error by 30% to 50%** at every horizon under cross-validation.
+- ETS must still beat the benchmark: on retail sales it cuts the **seasonal naive error by about 30% to 50%** at every horizon under cross-validation.
 
 <InstructorKit
   minutes={60}
-  data={['MRTSSM4541USN', 'MRTSSM4541USS', 'RSXFSN', 'CPIAUCSL', 'HOUST', 'GASREGW', 'MRTSSM441USN … MRTSSM722USN']}
+  data={['MRTSSM4541USN', 'MRTSSM4541USS', 'RSXFSN', 'CPIAUCSL', 'HOUST', 'GASREGW', 'MRTSSM441USN', 'MRTSSM442USN', 'MRTSSM443USN', 'MRTSSM444USN', 'MRTSSM445USN', 'MRTSSM446USN', 'MRTSSM447USN', 'MRTSSM448USN', 'MRTSSM451USN', 'MRTSSM452USN', 'MRTSSM453USN', 'MRTSSM454USN', 'MRTSSM722USN']}
   objectives={[
     'Explain simple exponential smoothing as a weighted average with weights α(1 − α)^j, and relate α to the "memory" of the forecast.',
     'Describe how Holt’s method adds a trend (β), why a damped trend (φ < 1) is a robust default, and when damping can lose.',

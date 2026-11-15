@@ -24,7 +24,7 @@ d = d.dropna(subset=["growth_ly", "yoy_lm"])  # drop the first months, which lac
 features = ["month", "growth_ly", "growth_lm", "yoy_lm", "weekend", "sent_lm", "unrate_lm"]   # the 7 predictors
 print(d[["growth"] + features].tail(3).round(2))   # peek at the last 3 rows
 
-#| **Split by time into three blocks:** fit on 1993–2021, validate on 2022, and keep 2023 onward untouched for Lab 12.2. `xgb.DMatrix` packs features and label; missing values are allowed.
+#| **Split by time into three blocks:** fit on 1993–2021, validate on 2022, and keep 2023 onward untouched for Lab 13.2. `xgb.DMatrix` packs features and label; missing values are allowed.
 fit_d, valid_d = d[:"2021-12"], d["2022-01":"2022-12"]   # fit block: through 2021; validation block: 2022
 dfit = xgb.DMatrix(fit_d[features], label=fit_d["growth"])         # features + target
 dvalid = xgb.DMatrix(valid_d[features], label=valid_d["growth"])

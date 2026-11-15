@@ -1,6 +1,6 @@
 ---
 import Base from './Base.astro';
-import { chapters, parts, bySlug } from '../lib/chapters';
+import { chapters, parts, bySlug, partId } from '../lib/chapters';
 const { frontmatter, headings = [] } = Astro.props;
 const ch = bySlug(frontmatter.slug);
 const i = chapters.indexOf(ch);
@@ -13,7 +13,7 @@ const pad = (n: number) => String(n).padStart(2, '0');
 const heroes = import.meta.glob('../components/heroes/*.astro', { eager: true }) as Record<string, any>;
 const Hero = heroes[`../components/heroes/${ch.slug}.astro`]?.default;
 ---
-<Base title={`${ch.n}. ${ch.title} · Forecast Lab`} description={ch.question} sidebar>
+<Base title={`${ch.n}. ${ch.title} · Forecast Lab`} description={ch.question} sidebar current={ch.slug}>
   <div class="ch-shell" style={`--ch:${ch.accent}`}>
     <aside class="ch-side" aria-label="Chapters">
       <nav>
@@ -21,7 +21,7 @@ const Hero = heroes[`../components/heroes/${ch.slug}.astro`]?.default;
           <div class="side-part">
             <div class="side-h">{p}</div>
             {chapters.filter((c) => c.part === p).map((c) => (
-              <a href={href(c.slug)} class:list={['side-a', { on: c.slug === ch.slug }]} data-slug={c.slug} style={`--c:${c.accent}`}>
+              <a href={href(c.slug)} class:list={['side-a', { on: c.slug === ch.slug }]} aria-current={c.slug === ch.slug ? 'page' : undefined} data-slug={c.slug} style={`--c:${c.accent}`}>
                 <span class="side-n">{c.n}</span><span>{c.short}</span><span class="side-ok" aria-hidden="true">✓</span>
               </a>
             ))}
@@ -35,6 +35,14 @@ const Hero = heroes[`../components/heroes/${ch.slug}.astro`]?.default;
         <div class="hero-bg" aria-hidden="true"></div>
         <div class:list={['hero-in', { 'with-art': !!Hero }]}>
           <div class="hero-text">
+          <nav class="crumbs" aria-label="Breadcrumb">
+            <ol>
+              <li><a href={base}>Home</a></li>
+              <li><a href={`${base}chapters/`}>Chapters</a></li>
+              <li><a href={`${base}chapters/#${partId(ch.part)}`}>{ch.part}</a></li>
+              <li aria-current="page">Chapter {ch.n}</li>
+            </ol>
+          </nav>
           <div class="hero-meta"><span class="hero-n">Chapter {ch.n}</span><span>{ch.part}{frontmatter.minutes && `, about ${frontmatter.minutes} minutes`}</span></div>
           <h1>{ch.title}</h1>
           <p class="hero-q"><span class="q-mark">Q</span>{ch.question}</p>
@@ -50,14 +58,26 @@ const Hero = heroes[`../components/heroes/${ch.slug}.astro`]?.default;
         </div>
       </header>
 
+      {toc.length > 0 && (
+        <div class="prose toc-m-wrap">
+          <details class="toc-m">
+            <summary>On this page <span class="muted">({toc.length} sections)</span></summary>
+            <nav aria-label="On this page (compact)">
+              <ol>{toc.map((h: any) => <li><a href={`#${h.slug}`}>{h.text}</a></li>)}</ol>
+            </nav>
+          </details>
+        </div>
+      )}
+
       <article class="prose ch-body">
         <slot />
       </article>
 
       <nav class="pn prose" aria-label="Chapter navigation">
         {prev ? <a class="pn-a" href={href(prev.slug)}><span class="eyebrow">Previous chapter</span><b>{prev.n}. {prev.title}</b></a> : <span />}
-        {next ? <a class="pn-a next" href={href(next.slug)}><span class="eyebrow">Next chapter</span><b>{next.n}. {next.title}</b></a> : <span />}
+        {next ? <a class="pn-a next" href={href(next.slug)}><span class="eyebrow">Next chapter</span><b>{next.n}. {next.title}</b></a> : <a class="pn-a next" href={`${base}chapters/`}><span class="eyebrow">You finished the course</span><b>Back to all chapters</b></a>}
       </nav>
+      <p class="pn-more prose"><a href={`${base}chapters/`}>All chapters</a><span aria-hidden="true">·</span><a href={base}>Home</a><span aria-hidden="true">·</span><a href="#top">Back to top</a></p>
     </main>
 
     {toc.length > 0 && (
@@ -81,6 +101,9 @@ const Hero = heroes[`../components/heroes/${ch.slug}.astro`]?.default;
       es.forEach((e) => { if (e.isIntersecting) { links.forEach((l) => l.classList.toggle('on', l.dataset.id === e.target.id)); } });
     }, { rootMargin: '-20% 0px -70% 0px' });
     links.forEach((l) => { const t = document.getElementById(l.dataset.id!); if (t) io.observe(t); });
+    // compact TOC (narrow screens): close after jumping to a section
+    const tm = document.querySelector<HTMLDetailsElement>('.toc-m');
+    tm?.querySelectorAll('a').forEach((a) => a.addEventListener('click', () => { tm.open = false; }));
   </script>
   <style is:global>
     .ch-shell { display: grid; grid-template-columns: 250px minmax(0, 1fr) 210px; gap: 0; }
@@ -125,14 +148,25 @@ const Hero = heroes[`../components/heroes/${ch.slug}.astro`]?.default;
     .ch-body { padding-top: 2.5rem; }
     .ch-body > h2 { position: relative; }
     .ch-body > h2::before { content: ''; display: block; width: 40px; height: 3px; border-radius: 3px; background: var(--ch); margin-bottom: .9rem; }
+    .toc-m-wrap { display: none; padding-top: 1.6rem; }
+    @media (max-width: 1280px) { .toc-m-wrap { display: block; } }
+    .toc-m { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); font-size: .9rem; }
+    .toc-m summary { cursor: pointer; padding: .6rem .9rem; font-weight: 650; }
+    .toc-m ol { margin: 0; padding: 0 .9rem .8rem 2.2rem; }
+    .toc-m li { margin: .2rem 0; }
+    .toc-m a { color: var(--text-2); }
     .pn { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 4rem; }
     .pn-a { display: grid; gap: .3rem; padding: 1rem 1.2rem; border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); text-decoration: none !important; background: var(--surface); transition: border-color .2s, transform .2s; }
     .pn-a:hover { border-color: var(--accent); transform: translateY(-2px); }
     .pn-a.next { text-align: right; }
+    @media (max-width: 560px) { .pn { grid-template-columns: 1fr; } .pn > span:empty { display: none; } .pn-a.next { text-align: left; } }
+    .pn-more { display: flex; flex-wrap: wrap; justify-content: center; gap: .3rem .8rem; margin-top: 1.4rem; font-size: .88rem; color: var(--muted); }
     .toc { position: sticky; top: var(--header-h); height: calc(100vh - var(--header-h)); padding: 2.2rem 1rem; display: flex; flex-direction: column; gap: .15rem; font-size: .8rem; }
     .toc .eyebrow { margin-bottom: .5rem; }
     .toc a { color: var(--muted); padding: .25rem .6rem; border-left: 2px solid var(--border); text-decoration: none; }
     .toc a:hover { color: var(--text); }
     .toc a.on { color: var(--text); border-left-color: var(--ch); }
+    /* must follow the .toc rule above, or the desktop TOC shows up under the chapter on narrow screens */
+    @media (max-width: 1280px) { .toc { display: none; } }
   </style>
 </Base>

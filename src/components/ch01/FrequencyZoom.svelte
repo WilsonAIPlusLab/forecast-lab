@@ -23,9 +23,9 @@
   ];
   const START = new Date('2006-01-01T00:00:00');
 
-  let sid: Sid = $state('T10Y3M');
-  let freq: Freq = $state('M');
-  let how: How = $state('mean');
+  let sid = $state<Sid>('T10Y3M');
+  let freq = $state<Freq>('M');
+  let how = $state<How>('mean');
   let raw: Partial<Record<Sid, Pt[]>> = $state({});
   let rec: Date[] = $state([]);
   let el: HTMLDivElement;

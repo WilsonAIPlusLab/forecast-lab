@@ -5,7 +5,7 @@ import sys, os, asyncio
 from playwright.async_api import async_playwright
 
 BASE = "http://localhost:4322"
-SLUGS = sys.argv[1:] or ["first-forecast", "time-series-data", "decomposition", "benchmarks", "regression", "exponential-smoothing", "arima",
+SLUGS = sys.argv[1:] or ["first-forecast", "time-series-data", "decomposition", "benchmarks", "regression", "nonlinear-regression", "exponential-smoothing", "arima",
                           "dynamic-regression", "recession-probability", "var", "uncertainty", "random-forests", "boosting-shap", "nowcasting", "forecast-studio"]
 OUT = os.path.join("..", "_shots")
 CHROME = r"C:\Program Files\Google\Chrome\Application\chrome.exe"

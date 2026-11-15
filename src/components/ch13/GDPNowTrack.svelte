@@ -82,8 +82,8 @@
 <Explorable title="GDPNow's track record, and the moving target" caption="Each dot is one quarter from 2011 Q3 to 2026 Q3: the Atlanta Fed's final GDPNow nowcast, made just before BEA's advance estimate, against real GDP growth <b>as revised today</b>. Hollow circles show the advance estimate for two quarters. The arrows show how far later revisions moved the target. Annualized %, SA. Data: FRED (GDPNOW, A191RL1Q225SBEA); advance estimates from BEA news releases.">
   {#snippet controls()}
     <div class="seg" role="group" aria-label="View">
-      <button class:on={view === 'scatter'} onclick={() => (view = 'scatter')}>Nowcast vs outcome</button>
-      <button class:on={view === 'time'} onclick={() => (view = 'time')}>Miss by quarter</button>
+      <button class:on={view === 'scatter'} aria-pressed={view === 'scatter'} onclick={() => (view = 'scatter')}>Nowcast vs outcome</button>
+      <button class:on={view === 'time'} aria-pressed={view === 'time'} onclick={() => (view = 'time')}>Miss by quarter</button>
     </div>
     <label class="ck"><input type="checkbox" bind:checked={covid} /> Include 2020 Q2–Q3</label>
   {/snippet}

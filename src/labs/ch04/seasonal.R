@@ -1,4 +1,4 @@
-#| **Retail sales, not seasonally adjusted**, from 2012. We hold out January 2024 onward as a test set, exactly as in Chapter 3. `tslm()` from **forecast** is `lm()` for time series: it knows the dates, so it can build trend and seasonal terms for you.
+#| **Retail sales, not seasonally adjusted**, from 2012. We hold out January 2024 onward as a test set, in the spirit of Chapter 3 (whose split started the test in 2023). `tslm()` from **forecast** is `lm()` for time series: it knows the dates, so it can build trend and seasonal terms for you.
 library(forecast)                          # for tslm(), forecast(), snaive(), accuracy()
 retail <- window(fred("RSXFSN"), start = c(2012, 1))   # $ millions, NSA
 train  <- window(retail, end = c(2023, 12))   # training set: through December 2023

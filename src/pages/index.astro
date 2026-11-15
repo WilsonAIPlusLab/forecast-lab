@@ -1,19 +1,21 @@
 ---
 import Base from '../layouts/Base.astro';
 import HomeFan from '../components/home/HomeFan.svelte';
-import { chapters, parts } from '../lib/chapters';
+import { chapters, parts, spell } from '../lib/chapters';
 import { sparkPath, chapterSeries } from '../lib/spark';
 import fs from 'node:fs';
 import path from 'node:path';
-const nSeries = Object.keys(JSON.parse(fs.readFileSync(path.join(process.cwd(), 'public', 'data', 'manifest.json'), 'utf8'))).length;
-const nWords = ['Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen', 'Twenty'];
-const nChapters = nWords[chapters.length] ?? String(chapters.length);
+const manifest = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'public', 'data', 'manifest.json'), 'utf8')) as Record<string, { lazy?: boolean }>;
+// time series (loaded with fred()) vs. the cross-sectional UCI datasets (lazy CSVs)
+const nSeries = Object.values(manifest).filter((m) => !m.lazy).length;
+const nTables = Object.values(manifest).filter((m) => m.lazy).length;
+const nChapters = spell(chapters.length, true);
 const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
 const href = (s: string) => `${base}chapters/${s}/`;
 const cards = chapters.map((c) => ({ ...c, spark: sparkPath(chapterSeries[c.slug].id, chapterSeries[c.slug]), sid: chapterSeries[c.slug].id }));
 const partBlurb: Record<string, string> = {
   Foundations: 'What a forecast is, where data comes from, and how to tell a good forecast from a lucky one.',
-  'Classic Toolkit': 'The three model families behind most professional forecasts: regression, exponential smoothing and ARIMA.',
+  'Classic Toolkit': 'The model families behind most professional forecasts: linear, logistic and Poisson regression, exponential smoothing and ARIMA.',
   'Economic Signals': 'Indicators, recession odds, feedback between variables, and turning uncertainty into decisions.',
   'Machine Learning & Big Data': 'Trees, forests, gradient boosting with explanations, and forecasting from many series at once.',
   'Ship It': 'Put it all together into a forecast a manager can act on.',
@@ -27,14 +29,14 @@ const partBlurb: Record<string, string> = {
         <div class="h-copy">
           <p class="h-kick">ECON 3371 · Economic &amp; Business Forecasting</p>
           <h1>Learn forecasting by forecasting.</h1>
-          <p class="h-lede">{nChapters} chapters, from your first forecast to machine learning, nowcasting and a forecast you can ship. Every idea comes with real U.S. data, code you can edit and run in this browser, in R or Python, and a step-through mode that explains every line.</p>
+          <p class="h-lede">{nChapters} chapters, from your first forecast to machine learning, nowcasting and a forecast you can ship. Every idea comes with real data (mostly U.S. economic series), code you can edit and run in this browser in R or Python, and a step-through mode that explains every line.</p>
           <div class="h-cta">
             <a class="btn btn-primary" href={href('first-forecast')}>Make your first forecast</a>
             <a class="btn" href={`${base}chapters/`}>See all chapters</a>
           </div>
           <ul class="h-facts">
             <li><b>0</b> installs: R and Python run in your browser</li>
-            <li><b>{nSeries}</b> real economic data series, bundled (all but one from FRED®)</li>
+            <li><b>{nSeries}</b> real economic time series, bundled (all but one from FRED®), plus {spell(nTables)} UCI datasets</li>
             <li><b>{chapters.length}</b> chapters, each with an instructor kit</li>
           </ul>
         </div>
@@ -64,7 +66,7 @@ const partBlurb: Record<string, string> = {
           <div class="cards">
             {cards.filter((c) => c.part === p).map((c) => (
               <a class="card" href={href(c.slug)} style={`--c:${c.accent}`} data-slug={c.slug}>
-                <div class="card-top"><span class="card-n">{c.n}</span><span class="card-done" aria-label="visited">✓</span></div>
+                <div class="card-top"><span class="card-n">{c.n}</span><span class="card-done" aria-hidden="true">✓</span><span class="sr-only seen-sr" hidden>(visited)</span></div>
                 <div class="card-t">{c.title}</div>
                 <div class="card-q">{c.question}</div>
                 <svg class="card-spark" viewBox="0 0 160 40" preserveAspectRatio="none" aria-hidden="true"><path d={c.spark} /></svg>
@@ -86,7 +88,7 @@ const partBlurb: Record<string, string> = {
           <div><h3>R and Python, side by side</h3><p>The main labs come in both languages with matching results. Students' edits are saved in their own browser.</p></div>
           <div><h3>Nothing to install</h3><p>R (webR) and Python (Pyodide) run as WebAssembly in the browser. The data are bundled with the site, so labs keep working offline after the first load.</p></div>
           <div><h3>Auto-checked exercises</h3><p>Exercises check students' answers and explain what the right answer teaches, with hints that unlock one at a time.</p></div>
-          <div><h3>Current methods</h3><p>Benchmarks and cross-validation, ETS, ARIMA, VAR, conformal intervals, random forests, gradient boosting with SHAP, and nowcasting.</p></div>
+          <div><h3>Current methods</h3><p>Benchmarks and cross-validation, logistic and Poisson regression, ETS, ARIMA, VAR, conformal intervals, random forests, gradient boosting with SHAP, and nowcasting.</p></div>
         </div>
       </div>
     </section>
@@ -94,7 +96,7 @@ const partBlurb: Record<string, string> = {
   <script>
     try {
       const v = JSON.parse(localStorage.getItem('fl-visited') || '{}');
-      document.querySelectorAll<HTMLElement>('.card').forEach((c) => { if (v[c.dataset.slug!]) c.classList.add('seen'); });
+      document.querySelectorAll<HTMLElement>('.card').forEach((c) => { if (v[c.dataset.slug!]) { c.classList.add('seen'); c.querySelector('.seen-sr')?.removeAttribute('hidden'); } });
     } catch {}
   </script>
   <style>

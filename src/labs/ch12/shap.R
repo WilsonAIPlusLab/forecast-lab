@@ -1,4 +1,4 @@
-#| **Refit the tuned model from Lab 12.2.** The hidden setup rebuilt the feature table (`train` = 1993–2022, `test` = 2023 onward). Tuning chose a learning rate of 0.1, depth-2 trees and 38 rounds.
+#| **Refit the tuned model from Lab 13.2.** The hidden setup rebuilt the feature table (`train` = 1993–2022, `test` = 2023 onward). Tuning chose a learning rate of 0.1, depth-2 trees and 38 rounds.
 params <- list(eta = 0.1, max_depth = 2, tree_method = "exact", nthread = 1)   # the tuned settings
 dtrain <- xgb.DMatrix(as.matrix(train[, features]), label = train$growth)   # training features + target
 dtest  <- xgb.DMatrix(as.matrix(test[, features]))                         # test features only

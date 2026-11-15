@@ -1,5 +1,5 @@
 # Hidden setup shared by the Chapter 13 labs: builds the supervised feature table.
-# (Lab 12.1 builds the same table step by step, with explanations.)
+# (Lab 13.1 builds the same table step by step, with explanations.)
 # Creates: retail, d (every month), train (1993-2022), test (2023 onward), features (7 predictor names), make_features().
 library(xgboost)
 lag_by <- function(x, k) c(rep(NA, k), head(x, -k))

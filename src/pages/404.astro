@@ -1,0 +1,41 @@
+---
+import Base from '../layouts/Base.astro';
+import { chapters, parts } from '../lib/chapters';
+const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
+---
+<Base title="Page not found · Forecast Lab" description="This page does not exist. Find your way back to the Forecast Lab chapters.">
+  <main id="main" class="nf">
+    <p class="eyebrow">Error 404</p>
+    <h1>This page is outside the forecast range.</h1>
+    <p class="lede">The address may be mistyped, or the page may have moved. Every chapter is listed below.</p>
+    <div class="nf-cta">
+      <a class="btn btn-primary" href={base}>Go to the home page</a>
+      <a class="btn" href={`${base}chapters/`}>See all chapters</a>
+      <a class="btn btn-ghost" href={`${base}playground/`}>Open the playground</a>
+    </div>
+    <div class="nf-parts">
+      {parts.map((p) => (
+        <section>
+          <h2>{p}</h2>
+          <ul>
+            {chapters.filter((c) => c.part === p).map((c) => (
+              <li><a href={`${base}chapters/${c.slug}/`}><span class="n" style={`color:${c.accent}`}>{c.n}</span> {c.title}</a></li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
+  </main>
+  <style>
+    .nf { max-width: 1040px; margin: 0 auto; padding: 3.5rem 1.5rem 0; }
+    .nf h1 { margin: .3rem 0 .8rem; }
+    .nf-cta { display: flex; flex-wrap: wrap; gap: .6rem; margin: 1.4rem 0 2.5rem; }
+    .nf-parts { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.5rem 2.5rem; }
+    .nf-parts h2 { font-size: 1.1rem; margin: 0 0 .5rem; padding-bottom: .4rem; border-bottom: 1px solid var(--border); }
+    .nf-parts ul { list-style: none; padding: 0; margin: 0; }
+    .nf-parts li { margin: .3rem 0; font-size: .95rem; }
+    .nf-parts a { color: var(--text-2); }
+    .nf-parts a:hover { color: var(--text); }
+    .n { display: inline-block; width: 1.4rem; text-align: right; margin-right: .4rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  </style>
+</Base>

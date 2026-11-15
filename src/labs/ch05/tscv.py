@@ -5,7 +5,7 @@ retail = fred("RSXFSN", start=2012, end="2019-12-01")   # Jan 2012 to Dec 2019 (
 y = retail.values                          # plain NumPy array of the sales numbers
 
 #| **Rolling-origin cross-validation by hand**, as in Chapter 3. At each origin we re-fit an additive-trend, multiplicative-season model (the ETS(M,A,M) point forecasts come from the same recursions) and forecast 1 to 12 months ahead. statsmodels fits by least squares, R's `ets()` by maximum likelihood, so the numbers differ somewhat from the R tab.
-H, INITIAL = 12, 72                        # forecast 1-12 months ahead; first origin uses 72 months (6 years)
+H, INITIAL = 12, 72                        # forecast 1-12 months ahead; first origin comes after the first 72 months (6 years)
 def f_ets(tr, h):                          # fit Holt-Winters (mult.) on the data so far, forecast h months
     return ExponentialSmoothing(tr, trend="add", seasonal="mul", seasonal_periods=12,
                                 initialization_method="estimated").fit().forecast(h)

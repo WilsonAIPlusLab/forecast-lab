@@ -47,7 +47,7 @@ import exPoisPy from '../../labs/nonlinear/ex_pois.py?raw';
 import exPoisSolPy from '../../labs/nonlinear/ex_pois_solution.py?raw';
 import exPoisCheckPy from '../../labs/nonlinear/ex_pois_check.py?raw';
 
-<p class="lede">Two managers, two forecasts. A bank's marketing lead has a list of clients and a budget for phone calls: <strong>who is likely to say yes to a term deposit, and how far down the list should the team call?</strong> A bike-share operations manager must put bikes and staff in place for tomorrow: <strong>how many rentals should she expect, and how sure can she be?</strong> Neither answer is a number on a smooth scale. The first is yes or no. The second is a count: 0, 1, 2, … bikes. Chapter 4's straight line handles both badly. This chapter bends it.</p>
+<p class="lede">Two managers, two forecasts. A bank's marketing lead has a list of clients and a budget for phone calls: <strong>who is likely to say yes to a term deposit, and how far down the list should the team call?</strong> A bike-share operations manager must put bikes and staff in place for tomorrow: <strong>how many rentals should she expect, and how sure can she be?</strong> Neither answer is a number on a smooth scale. The first is yes or no. The second is a count: 0, 1, 2, … bikes. [Chapter 4](/chapters/regression/)'s straight line handles both badly. This chapter bends it.</p>
 
 You will work with two real, openly licensed datasets. The first comes from a Portuguese bank's telephone marketing campaigns, run between May 2008 and November 2010 and published by Moro, Cortez and Rita.<sup>[1](#refs)</sup> The second is two years of rentals from Capital Bikeshare in Washington, D.C., 2011–2012, published by Fanaee-T and Gama.<sup>[2](#refs)</sup> Logistic regression gets most of the chapter, because yes/no forecasts are everywhere in business: will this customer buy, churn, default, click? Poisson regression then does the same job for counts.
 
@@ -140,7 +140,7 @@ $$
 \text{OR}_j = \frac{\text{odds}(x_j + 1)}{\text{odds}(x_j)} = e^{\beta_j}.
 $$
 
-The coefficients are chosen by **maximum likelihood**: make the observed yeses and noes as probable as possible. The log-likelihood is
+The coefficients are chosen by **maximum likelihood**: make the observed yeses and noes as probable as possible.<sup>[5](#refs)</sup> The log-likelihood is
 
 $$
 \ell(\beta) = \sum_{i=1}^{n} \Big[ y_i \log p_i + (1 - y_i)\log(1 - p_i) \Big].
@@ -253,7 +253,7 @@ Five metrics summarize it:
 The 0.5 threshold wins on accuracy and precision and loses on the thing the business cares about. The profit column assumes, for illustration, that a call costs \$5 and a new deposit is worth \$50 to the bank. Then a call pays off when $p \times 50 \gt 5$, that is, when $p \gt 0.10$: a threshold set by economics, not by statistics.
 
 <Callout type="business" title="Choose the threshold from costs, not habit">
-With a cost $c$ per call and a value $V$ per success, call a client when $p \cdot V \gt c$, so the break-even threshold is $p^\ast = c / V$. The 50% default is right only if a missed buyer and a wasted call cost the same, which is almost never true. Chapter 9 uses the same logic for recession warnings, where the costs are a false alarm and a missed recession.
+With a cost $c$ per call and a value $V$ per success, call a client when $p \cdot V \gt c$, so the break-even threshold is $p^\ast = c / V$. The 50% default is right only if a missed buyer and a wasted call cost the same, which is almost never true. [Chapter 9](/chapters/recession-probability/) uses the same logic for recession warnings, where the costs are a false alarm and a missed recession.
 </Callout>
 
 ### Plan the campaign: ROC, AUC, gains and lift
@@ -275,7 +275,7 @@ What the planner shows for the honest, before-the-call model:
 - **AUC 0.735**, Gini 0.470. Credit-scoring teams often report the <Term def="2 × AUC − 1: a rescaling of AUC so that 0 is random ranking and 1 is perfect. Common in credit scoring.">Gini coefficient</Term> instead of AUC; it carries the same information.
 
 <Callout type="pitfall" title="One test set is one draw">
-Our test set holds only 136 subscribers. The classification lab reruns the whole experiment on 50 random stratified splits: the middle 90% of test AUCs runs from **0.732 to 0.793** (median 0.759). Our deterministic split happens to sit near the bottom of that range. Report a range, as Chapter 3 recommended for time-series cross-validation.
+Our test set holds only 136 subscribers. The classification lab reruns the whole experiment on 50 random stratified splits: the middle 90% of test AUCs runs from **0.732 to 0.793** (median 0.759). Our deterministic split happens to sit near the bottom of that range. Report a range, not a single number: the same lesson as Chapter 3's time-series cross-validation.
 </Callout>
 
 <Callout type="math" title="ROC, AUC, gains and Gini in formulas">
@@ -375,7 +375,7 @@ $$
 \ell(\beta) = \sum_{i=1}^{n} \Big[ y_i \log \mu_i - \mu_i - \log(y_i!) \Big],
 $$
 
-again by IRLS in `glm()`. When counts are observed over different exposures $t_i$ (hours open, stores, population), model the rate instead: $\log \mu_i = \log t_i + x_i'\beta$, written `offset(log(t))` in an R formula. The last step of the lab shows why that matters here: on October 29, 2012 only one hour of data was recorded.<sup>[5](#refs)</sup>
+again by IRLS in `glm()`. When counts are observed over different exposures $t_i$ (hours open, stores, population), model the rate instead: $\log \mu_i = \log t_i + x_i'\beta$, written `offset(log(t))` in an R formula.<sup>[3](#refs)</sup> The last step of the lab shows why that matters here: on October 29, 2012 only one hour of data was recorded.<sup>[8](#refs)</sup>
 </Callout>
 
 ### Overdispersion: check it, then fix it
@@ -435,7 +435,7 @@ Here is where overdispersion stops being a statistics footnote and becomes a bus
 Both regressions beat the naive benchmark by about 240 bikes a day. But the Poisson "95%" interval caught the actual count on only 12% of days. On a typical day it is about 300 bikes wide, because a Poisson model with a mean near 5,800 has a standard deviation of only about 76. A manager who staffed to the top of that interval would be caught short most days. The negative-binomial interval is about 15 times wider and covers 89% of days: not perfect, but close to honest. Its misses are telling: Hurricane Sandy, when Capital Bikeshare shut down on October 29–30, 2012,<sup>[8](#refs)</sup> Thanksgiving weekend and the Christmas holidays. No weather-and-calendar model saw those coming.
 
 <Callout type="pitfall" title="These intervals are still too kind">
-The test gave each model the <em>actual</em> weather of each test day, as if the weather forecast were perfect: an ex-post forecast, in Chapter 4's language. Real weather forecasts miss, and the intervals also ignore uncertainty in the estimated coefficients. A real deployment would be a little less accurate and should have somewhat wider intervals. Chapter 11 returns to coverage audits and to methods that calibrate intervals from past errors.
+The test gave each model the <em>actual</em> weather of each test day, as if the weather forecast were perfect: an ex-post forecast, in Chapter 4's language. Real weather forecasts miss, and the intervals also ignore uncertainty in the estimated coefficients. A real deployment would be a little less accurate and should have somewhat wider intervals. [Chapter 11](/chapters/uncertainty/) returns to coverage audits and to methods that calibrate intervals from past errors.
 </Callout>
 
 <KeyIdea>Before you trust a count model's intervals, compare the variance with the mean. If the dispersion statistic is far above 1, Poisson intervals will be far too narrow; use a negative binomial (or quasi-Poisson) model and audit the coverage out of sample.</KeyIdea>
@@ -474,6 +474,7 @@ Is the morning rush hour Poisson? Check the dispersion of 8 a.m. rentals on work
 
 <InstructorKit
   minutes={80}
+  data={['bank_marketing', 'bike_day', 'bike_hour']}
   objectives={[
     'Explain the three problems of the linear probability model and show predictions outside [0, 1] on real data.',
     'Fit logit and probit models with `glm()`, convert coefficients to **odds ratios** with confidence intervals, and move between probability, odds and log-odds.',

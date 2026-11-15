@@ -5,7 +5,7 @@
   import * as d3 from 'd3';
   import 'd3-transition'; // side-effect import: keeps selection.transition() in production builds
   import Explorable from '../Explorable.svelte';
-    import { C, watchLayout } from '../../lib/viz/theme';
+  import { C, watchLayout } from '../../lib/viz/theme';
   import { loadPublished, monthLabel, signed, reducedMotion, avg, mkey, type GridPt } from './util';
 
   type View = 'level' | 'log' | 'mom' | 'yoy' | 'ann' | 'idx';

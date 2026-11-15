@@ -28,11 +28,13 @@
   function pause() { clearInterval(timer); playing = false; }
 
   async function compute() {
-    const s = await loadSeries(sid, { start: '2010-01-01', end: '2019-12-01' }); // pre-COVID for a clean lesson
+    const id = sid;
+    const s = await loadSeries(id, { start: '2010-01-01', end: '2019-12-01' }); // pre-COVID for a clean lesson
+    if (id !== sid) return; // the other series was picked while this one loaded: ignore the stale result
     const y = s.data.map((p) => p.value);
     const H = 12, out: typeof curve = [];
     const all: Record<string, (t: number[], h: number) => number[]> = { 'Seasonal naive': (t, k) => fcSNaive(t, k, 12), Naive: fcNaive, Drift: fcDrift };
-    for (const name of DATA[sid].methods) {
+    for (const name of DATA[id].methods) {
       const f = all[name];
       const errs: number[][] = Array.from({ length: H }, () => []);
       for (let o = 48; o < y.length - 1; o++) {
@@ -43,6 +45,9 @@
     }
     curve = out;
   }
+
+  // Nudge the end labels apart: at h = 12 naive and seasonal naive are identical for retail, and drift sits just below.
+  const LABEL_DY: Record<string, number> = { Naive: -8, 'Seasonal naive': 6, Drift: 10 };
 
   function draw() {
     if (!el || !curve.length) return;
@@ -56,7 +61,7 @@
         Plot.lineY(curve, { x: 'h', y: 'mae', z: 'method', stroke: (d: any) => col(d.method), strokeWidth: 2.2 }),
         Plot.dot(curve, { x: 'h', y: 'mae', fill: (d: any) => col(d.method), r: (d: any) => (d.h === h ? 6 : 2.5) }),
         Plot.ruleX([h], { stroke: C.borderStrong, strokeDasharray: '3,3' }),
-        Plot.text(curve, Plot.selectLast({ x: 'h', y: 'mae', z: 'method', text: 'method', textAnchor: 'start', dx: 8, fill: (d: any) => col(d.method), fontSize: 12, fontWeight: 650 })),
+        ...DATA[sid].methods.map((name) => Plot.text(curve.filter((d) => d.method === name), Plot.selectLast({ x: 'h', y: 'mae', text: 'method', textAnchor: 'start', dx: 8, dy: LABEL_DY[name] ?? 0, fill: col(name), fontSize: 12, fontWeight: 650 }))),
         Plot.tip(curve, Plot.pointer({ x: 'h', y: 'mae', title: (d: any) => `${d.method}, ${d.h} month(s) ahead\nMAE: ${fmt(d.mae)} ${DATA[sid].unit}` })),
       ],
     }));
@@ -71,7 +76,7 @@
   const cell = (r: number, t: number) => { const end = START + r; if (t < end) return 'train'; if (t === end + h - 1) return 'test'; if (t < end + h - 1) return 'gap'; return 'unused'; };
 </script>
 
-<Explorable title="Roll the origin forward: error grows with the horizon" caption="Each row is one <b>fold</b>. The method is trained on the blue points and must forecast the gold point <i>h</i> steps ahead. Then the origin rolls forward one period and we repeat. Averaging the errors across all folds gives a reliable accuracy estimate for every horizon. The chart on the right shows the result of doing exactly this on real 2010–2019 U.S. data.">
+<Explorable title="Roll the origin forward: error grows with the horizon" caption="Each row is one <b>fold</b>. The method is trained on the blue points and must forecast the gold point <i>h</i> steps ahead. Then the origin rolls forward one period and we repeat. Averaging the errors across all folds gives a reliable accuracy estimate for every horizon. The <i>Result on real data</i> chart shows what happens when you do exactly this on real 2010–2019 U.S. data.">
   {#snippet controls()}
     <div class="seg" role="group" aria-label="Horizon">
       {#each [1, 2, 3, 6, 12] as k}<button class:on={h === k} onclick={() => (h = k)}>h = {k}</button>{/each}
@@ -101,7 +106,7 @@
 
 <style>
   .grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 1.6rem; align-items: start; }
-  @media (max-width: 800px) { .grid2 { grid-template-columns: 1fr; } }
+  @media (max-width: 800px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
   .diag { display: flex; flex-direction: column; gap: 5px; min-height: 230px; }
   .row { display: flex; align-items: center; gap: 3px; animation: fadeUp .4s both; }
   .fl { font: 600 .75rem var(--font-ui); color: var(--muted); width: 3.6rem; flex-shrink: 0; }
@@ -113,4 +118,5 @@
   .axis { font-size: .75rem; color: var(--muted); padding-left: 3.6rem; margin-top: .2rem; }
   .lg { display: flex; gap: 1rem; flex-wrap: wrap; font-size: .75rem; color: var(--text-2); margin-top: .5rem; }
   .lg span { display: inline-flex; align-items: center; gap: .35rem; }
+  @media (max-width: 480px) { .row { gap: 2px; } .row i { width: 7px; height: 7px; } }
 </style>

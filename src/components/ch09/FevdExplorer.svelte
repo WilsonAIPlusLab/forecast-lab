@@ -59,7 +59,7 @@
           <b>{(100 * d.v).toFixed(0)}%</b>
         </div>
       {/each}
-      <p class="sum">The largest source is <b style:color={col(top.s)}>{META[top.s].label.toLowerCase()}</b> shocks. Funds-rate surprises explain {(100 * fe.ffr[h - 1]).toFixed(0)}%.</p>
+      <p class="sum">The largest source is <b style:color={col(top.s)}>{top.s === 'ffr' ? 'funds-rate' : META[top.s].label.toLowerCase()}</b> shocks. Funds-rate surprises explain {(100 * fe.ffr[h - 1]).toFixed(0)}%.</p>
     </div>
   {/snippet}
   <div bind:this={el} class="chart"></div>

@@ -5,6 +5,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 const manifest = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'public', 'data', 'manifest.json'), 'utf8'));
 const ids = Object.keys(manifest);
+const nSeries = ids.filter((id) => !manifest[id].lazy).length; // time series; the rest are UCI datasets
+const nTables = ids.length - nSeries;
+const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
 const starterR = `# Playground: a full R session in your browser.
 # Every bundled FRED series is available via fred("ID"); see the list below.
 library(forecast)                         # auto.arima(), forecast()
@@ -28,8 +31,9 @@ viz_compare(history=y["2015":], **{"Damped Holt": fc}, title="24-month forecast"
 print(fit.params)                         # fitted smoothing parameters
 `;
 ---
-<Base title="Playground · Forecast Lab" description={`A free R and Python session in your browser with ${ids.length} bundled economic data series.`}>
+<Base title="Playground · Forecast Lab" description={`A free R and Python session in your browser with ${nSeries} bundled economic time series and ${nTables} UCI datasets.`}>
   <main id="main" class="pg">
+    <nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href={base}>Home</a></li><li aria-current="page">Playground</li></ol></nav>
     <h1>Playground</h1>
     <p class="lede">A blank canvas: R or Python running in this page, with all the course data and chart helpers. Your code is saved in this browser.</p>
     <CodeLab client:load id="playground" title="Playground" r={starterR} py={starterPy} packages={['forecast']} pyPackages={['statsmodels', 'scikit-learn']} goal="Experiment freely. Ctrl+Enter runs; Step through explains as it goes." />
@@ -50,9 +54,9 @@ print(fit.params)                         # fitted smoothing parameters
         </table>
       </div>
       <div>
-        <h2>Bundled data ({ids.length} series)</h2>
+        <h2>Bundled data ({nSeries} time series, {nTables} datasets)</h2>
         <div class="ids">{ids.map((id) => <a href={manifest[id].lazy ? (id.startsWith('bank') ? 'https://archive.ics.uci.edu/dataset/222/bank+marketing' : 'https://archive.ics.uci.edu/dataset/275/bike+sharing+dataset') : id === 'DIVISIA_M4' ? 'https://centerforfinancialstability.org/amfm.php' : `https://fred.stlouisfed.org/series/${id}`} target="_blank" rel="noopener" title={manifest[id].lazy ? `${manifest[id].n} rows · read.csv("data/${manifest[id].file}")` : `${manifest[id].start} to ${manifest[id].end}`}><code>{id}</code></a>)}</div>
-        <p class="muted small">Hover over an ID for its date range; click to open its source page (FRED, or the Center for Financial Stability for DIVISIA_M4). Load FRED series with <code>fred("ID")</code>; the three UCI datasets (<code>bank_marketing</code>, <code>bike_day</code>, <code>bike_hour</code>) with <code>read.csv("data/bike_day.csv")</code>.</p>
+        <p class="muted small">Hover over an ID for its date range (or row count); click to open its source page (FRED, the Center for Financial Stability for DIVISIA_M4, or the UCI Machine Learning Repository). Load FRED series with <code>fred("ID")</code>; the three UCI datasets (<code>bank_marketing</code>, <code>bike_day</code>, <code>bike_hour</code>) with <code>read.csv("data/bike_day.csv")</code>.</p>
       </div>
     </section>
   </main>

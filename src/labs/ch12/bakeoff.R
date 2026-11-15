@@ -1,4 +1,4 @@
-#| **Start from the feature table of Lab 12.1.** A hidden setup step has rebuilt it: `d` holds every month, `train` is 1993–2022, `test` is January 2023 onward (45 months), and `features` lists the seven predictors. Each test row uses only information published by the middle of that month (last month's sales, sentiment and unemployment), so every forecast below is a genuine **one-month-ahead** forecast.
+#| **Start from the feature table of Lab 13.1.** A hidden setup step has rebuilt it: `d` holds every month, `train` is 1993–2022, `test` is January 2023 onward (45 months), and `features` lists the seven predictors. Each test row uses only information published by the middle of that month (last month's sales, sentiment and unemployment), so every forecast below is a genuine **one-month-ahead** forecast.
 c(train_months = nrow(train), test_months = nrow(test))   # rows in each block
 X <- function(df) xgb.DMatrix(as.matrix(df[, features]), label = df$growth)   # helper: rows -> XGBoost's data format
 

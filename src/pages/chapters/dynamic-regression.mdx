@@ -87,7 +87,7 @@ The explorer used the <Term def="The correlation between one series and lagged o
 </div>
 
 <Callout type="tip" title="Make it yours">
-Swap `"ICSA"` for `"PERMIT"` (building permits are already monthly, so `to = "month"` changes nothing). The peak moves to a 9-month lead with a **positive** correlation, because more permits mean more jobs. Then try the yield-curve spread: replace the whole `claims_yoy` line with `claims_yoy <- window(fred("T10Y3M", to = "month"), start = c(1990, 1), end = c(2019, 12))` (a spread can be negative, so no logs). The strongest correlation is now at **k = +9** and negative: within ±18 months the spread mostly *follows* job growth. Its reputation as a recession signal rests on longer horizons, which is where Chapter 9 picks it up.
+Swap `"ICSA"` for `"PERMIT"` (building permits are already monthly, so `to = "month"` changes nothing). The peak moves to a 9-month lead with a **positive** correlation, because more permits mean more jobs. Then try the yield-curve spread: replace the whole `claims_yoy` line with `claims_yoy <- window(fred("T10Y3M", to = "month"), start = c(1990, 1), end = c(2019, 12))` (a spread can be negative, so no logs). The strongest correlation is now at **k = +9** and negative: within ±18 months the spread mostly *follows* job growth. Its reputation as a recession signal rests on longer horizons, which is where [Chapter 9](/chapters/recession-probability/) picks it up.
 </Callout>
 
 ## From correlation to a model: distributed lags
@@ -122,9 +122,9 @@ There is a catch in running any regression on time series. OLS standard errors a
 
 Three fixes, all in the lab:
 
-1. **Keep OLS, fix the standard errors.** <Term def="Heteroskedasticity- and autocorrelation-consistent standard errors (Newey–West): they allow the regression errors to be correlated over time, so t-statistics are not overstated.">Newey–West (HAC)</Term> standard errors allow for autocorrelation. For the claims slope the standard error goes from 2.54 to **4.78**, and the t-statistic from −5.2 to **−2.7**.
+1. **Keep OLS, fix the standard errors.** <Term def="Heteroskedasticity- and autocorrelation-consistent standard errors (Newey–West): they allow the regression errors to be correlated over time, so t-statistics are not overstated.">Newey–West (HAC)</Term> standard errors<sup>[8](#refs)</sup> allow for autocorrelation. For the claims slope the standard error goes from 2.54 to **4.78**, and the t-statistic from −5.2 to **−2.7**.
 2. **Put the dynamics in the model.** Adding lags (the ADL) soaks up most of the autocorrelation. Some remains, so we still report Newey–West errors.
-3. **Model the errors directly.** <Term def="A regression y = a + b·x + e in which the error e follows an ARIMA model. Fitted in R with auto.arima(y, xreg = x).">Regression with ARIMA errors</Term> (`auto.arima(y, xreg = x)`) estimates the slope and an ARIMA model for the error together. It is also a forecasting model in its own right: forecast the predictor, and the ARIMA error carries the persistence forward.
+3. **Model the errors directly.** <Term def="A regression y = a + b·x + e in which the error e follows an ARIMA model. Fitted in R with auto.arima(y, xreg = x).">Regression with ARIMA errors</Term> (`auto.arima(y, xreg = x)`)<sup>[10](#refs)</sup> estimates the slope and an ARIMA model for the error together. It is also a forecasting model in its own right: forecast the predictor, and the ARIMA error carries the persistence forward.
 
 <div class="breakout">
 <CodeLab client:load id="ch07-adl" title="An ADL model of payrolls, with honest standard errors" r={adlR} py={adlPy}
@@ -167,7 +167,7 @@ The last chart in the lab is the most unsettling: the false-alarm rate climbs fr
 Two ways out:
 
 - **Difference both series**, as we did with job gains and claims growth in this chapter. Changes of random walks are white noise, and the t-test works again.
-- **Test for <Term def="Two random-walk series are cointegrated if some combination of them is stationary: they wander, but together, tied by a long-run equilibrium.">cointegration</Term>.** Sometimes two wandering series really are tied together (consumption and income, or a stock's price in two markets). Differencing would throw away that long-run link. Chapter 10 shows how to test for it and model it with an error-correction model.
+- **Test for <Term def="Two random-walk series are cointegrated if some combination of them is stationary: they wander, but together, tied by a long-run equilibrium.">cointegration</Term>.** Sometimes two wandering series really are tied together (consumption and income, or a stock's price in two markets). Differencing would throw away that long-run link. [Chapter 10](/chapters/var/) shows how to test for it and model it with an error-correction model.
 
 ## Structural breaks: when the relationship changes
 
@@ -209,12 +209,12 @@ $$
 F(\tau) = \frac{(\text{RSS}_0 - \text{RSS}_1 - \text{RSS}_2)/k}{(\text{RSS}_1+\text{RSS}_2)/(n-2k)}.
 $$
 
-At a known date it follows an $F(k, n-2k)$ distribution. The sup-F statistic is $\max_\tau F(\tau)$ over the middle 70% of the sample ("15% trimming"). Its distribution was derived by Andrews (1993); for $k=1$ the 5% critical value is about 8.7 in Andrews's table (strucchange's approximation, used in the lab and the explorer, gives 8.6), compared with about 4 for a single F-test. `strucchange::Fstats` reports $k \cdot F(\tau)$, which is the same as $F(\tau)$ when $k = 1$. Bai and Perron (1998, 2003) extend the idea to several unknown breaks, as `breakpoints()` does.
+At a known date it follows an $F(k, n-2k)$ distribution. The sup-F statistic is $\max_\tau F(\tau)$ over the middle 70% of the sample ("15% trimming"). Its distribution was derived by Andrews (1993); for $k=1$ the 5% critical value is about 8.7 in Andrews's table (strucchange's approximation, used in the lab and the explorer, gives 8.6), compared with about 4 for a single F-test. `strucchange::Fstats` reports $k \cdot F(\tau)$, which is the same as $F(\tau)$ when $k = 1$. Bai and Perron (1998, 2003) extend the idea to several unknown breaks, as `breakpoints()` in the strucchange package does.<sup>[9](#refs)</sup>
 </Callout>
 
 ### Handling COVID in a forecasting model
 
-The lab's last step shows how much this matters. Fitted on 2010–2024 with the pandemic months left in, the claims slope is **−30.2**: eight times the pre-COVID value. Your options:
+The lab's last step shows how much this matters. Fitted on 2010–2024 with the pandemic months left in, the claims slope is **−30.2**: eight times the −3.84 you get once those months are set aside. Your options:
 
 | Approach | What it does | In the lab |
 |---|---|---|
@@ -233,7 +233,7 @@ After 2020, forecasters used all of these: dropping the pandemic months, one dum
 Now the real test. Forget in-sample t-statistics: does adding claims make **next month's** payroll forecast more accurate than a model that only uses past payrolls? We run a <Term def="An evaluation that mimics real-time forecasting: for each target date, the model is estimated only on data before it, then scored on the value it did not see. 'Pseudo' because the data are today's revised figures, not what was available at the time.">pseudo out-of-sample</Term> test: for every month, fit on everything before it, forecast that month, record the error.
 
 <Callout type="pitfall" title="Leakage: was the predictor known when you forecast?">
-Standing at the end of month $t-1$ to forecast jobs in month $t$, you know claims through month $t-1$, not month $t$. A model that uses same-month claims is a <Term def="An estimate of the current period, made before the official number is published, using data that arrive sooner.">nowcast</Term>: legitimate, but only once month $t$'s claims are in. Almost all of a month's weekly claims figures are published before that month's jobs report (which covers the pay period including the 12th).<sup>[6](#refs)</sup> Score a nowcast as if it were a one-month-ahead forecast and you have leaked the future into your test.
+Standing at the end of month $t-1$ to forecast jobs in month $t$, you know claims through month $t-1$, not month $t$. A model that uses same-month claims is a <Term def="An estimate of the current period, made before the official number is published, using data that arrive sooner. Chapter 14 builds nowcasts properly.">nowcast</Term>: legitimate, but only once month $t$'s claims are in. Almost all of a month's weekly claims figures are published before that month's jobs report (which covers the pay period including the 12th).<sup>[6](#refs)</sup> Score a nowcast as if it were a one-month-ahead forecast and you have leaked the future into your test.
 </Callout>
 
 <Predict client:load
@@ -278,7 +278,7 @@ Fill in the two blanks (`______`) and press **Run & check**.
 - Classify indicators by **timing**: leading, coincident, lagging. Find the lead with the **cross-correlation function** and confirm it by shifting the series.
 - Write **ADL models** with `dynlm(y ~ L(y, 1:p) + L(x, 0:q))`, and read the **impact**, **dynamic** and **long-run multipliers**.
 - Time-series errors are autocorrelated: report **Newey–West** standard errors, add lags, or use **regression with ARIMA errors**.
-- Never regress one **random walk** on another in levels: difference both, or test for **cointegration** (Chapter 10).
+- Never regress one **random walk** on another in levels: difference both, or test for **cointegration** ([Chapter 10](/chapters/var/)).
 - Test for **structural breaks** with Chow (known date) or **sup-F** and `breakpoints()` (unknown date). Treat COVID as outliers with pulse dummies or exclusion, and say so.
 - Judge an indicator **out of sample**, against an AR benchmark, using only data **known at forecast time**.
 

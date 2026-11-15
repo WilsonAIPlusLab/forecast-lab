@@ -140,7 +140,7 @@ Try the terms one at a time on retail sales (January 2012 to the latest month, f
 With an intercept in the model, use <strong>11</strong> monthly dummies, not 12. The 12 dummies always add up to 1, which is exactly the intercept column, so the computer cannot separate them (perfect multicollinearity). R's `tslm(y ~ season)` and Python's `C(month)` drop the first month for you. The same rule applies to any category: for <em>k</em> groups, use <em>k</em> − 1 dummies.
 </Callout>
 
-`tslm()` from the **forecast** package builds `trend` and `season` for you. The lab below holds out January 2024 onward, so you can put the regression on the Chapter 3 scorecard.
+`tslm()` from the **forecast** package builds `trend` and `season` for you. The lab below holds out January 2024 onward and scores the regression against seasonal naive, Chapter 3 style.
 
 <div class="breakout">
 <CodeLab client:load id="ch04-seasonal" title="Trend + seasonal dummies with tslm()" r={seasonalR} py={seasonalPy}
@@ -151,7 +151,7 @@ With an intercept in the model, use <strong>11</strong> monthly dummies, not 12.
 The result is worth a pause. December runs about **25%** above January, and February is about 2% *below* it (fewer shopping days). April 2020 came in about 24% below what trend and season predict. On the 2024-onward test period the regression's MAE is about \$13.0 billion against \$27.0 billion for seasonal naive (MASE 0.56 against 1.17): calendar terms alone cut the benchmark's error by more than half. The R tab also compares **Fourier terms**: pairs of sine and cosine waves (`fourier(train, K)`) that describe the seasonal shape with fewer coefficients. Retail's December spike is so sharp that it needs the full set (K = 6), which is identical to the 11 dummies. For smooth seasonal patterns, or weekly data with 52 "seasons", a small K saves many coefficients.
 
 <Callout type="tip" title="Make it yours">
-In the seasonal lab, change `"RSXFSN"` to `"HOUSTNSA"` (housing starts, NSA). Then look at the Breusch–Godfrey test at the end: its tiny p-value says the residuals come in long runs. A straight trend cannot follow a housing cycle. Chapter 8 handles this properly with regression with ARIMA errors.
+In the seasonal lab, change `"RSXFSN"` to `"HOUSTNSA"` (housing starts, NSA). Then look at the Breusch–Godfrey test at the end: its tiny p-value says the residuals come in long runs. A straight trend cannot follow a housing cycle. [Chapter 8](/chapters/dynamic-regression/) handles this properly with regression with ARIMA errors.
 </Callout>
 
 ## The forecasting trap: you need tomorrow's drivers
@@ -195,7 +195,7 @@ Three things to notice:
 
 1. **The gap between scenarios is just slope × change.** Gas rising from \$4.31 (October 2026) to \$5.00 lowers the forecast by 0.48 × 0.69 ≈ **0.33 million** cars a year once the rise is complete. The bars in the panel show each driver's contribution.
 2. **Even a known scenario is uncertain.** If gas, unemployment and rates follow your path exactly, the 95% band after 12 months is still about **5.1 million** cars wide. That is the regression's own error.
-3. **Unknown drivers double the band.** Once the drivers can also surprise you (the light band replays real historical month-to-month moves in all three at once), the 12-month band is about **10.6 million** cars wide, and almost all of the extra width is on the downside: history includes recession-sized jumps in unemployment, such as April 2020. The textbook interval from `predict()` leaves this out, so it understates real uncertainty.
+3. **Unknown drivers double the band.** Once the drivers can also surprise you (the light band replays real historical month-to-month moves in all three at once), the 12-month band is about **10.2 million** cars wide, and almost all of the extra width is on the downside: history includes recession-sized jumps in unemployment, such as April 2020. The textbook interval from `predict()` leaves this out, so it understates real uncertainty.
 
 <div class="breakout">
 <CodeLab client:load id="ch04-scen" title="Scenario forecasts with forecast(fit, newdata)" r={scenR} py={scenPy}
@@ -295,6 +295,8 @@ Your boss asks: *"What if mortgage rates fall to 5%?"* Fill in the two blanks (`
 - A driver model needs **future drivers**. Judge it by **ex-ante** accuracy against a benchmark; use it for **scenarios** with intervals, and remember those intervals leave out driver uncertainty.
 - Choose models with **AIC, BIC, CV or a time-ordered test**, not R². **Multicollinearity** (VIF above about 10) muddles coefficients but barely changes predictions.
 
+Every outcome in this chapter was a quantity on a smooth scale: millions of cars, billions of dollars. Many business forecasts are not. *Will this customer buy?* is a yes or no; *how many bikes will we rent tomorrow?* is a count that cannot go below zero. [Chapter 5](/chapters/nonlinear-regression/) keeps the regression line you built here but puts it inside a curve: logistic regression for yes/no outcomes and Poisson regression for counts.
+
 <InstructorKit
   minutes={80}
   data={['TOTALSA', 'GASREGW', 'UNRATE', 'MORTGAGE30US', 'GS10', 'HOUST', 'HOUSTNSA', 'RSXFSN']}
@@ -326,7 +328,7 @@ Your boss asks: *"What if mortgage rates fall to 5%?"* Fill in the two blanks (`
 3. **Brief (10 min).** Each team presents a 60-second brief: baseline, their scenario, the gap from baseline by driver, and the band.
 4. **Debrief (5 min).** Reveal the ex-ante vs ex-post result and ask whether the scenarios should change any decisions.
 
-*Expected results:* the fitted model is sales = 24.98 − 0.48 gas − 0.90 unemployment − 0.48 mortgage rate − 2.43 chip (R² 0.58). With every driver at its October 2026 value, the baseline is 15.68 million; gas at \$5 gives 15.35 million (−0.33 once the rise is complete); the class "squeeze" scenario averages 14.45 million over the year and ends at 13.76 million. The 95% interval is about ±2.6 million. Compare the teams' guesses with −0.33 million; if they guessed larger, discuss why, and stress that the estimate is an association, not a controlled experiment. In the ex-ante test, naive (MAE 0.42) beats ex-ante (0.48) and ex-post (0.54).
+*Expected results:* the fitted model is sales = 24.98 − 0.48 gas − 0.90 unemployment − 0.48 mortgage rate − 2.43 chip (R² 0.58). With every driver at its October 2026 value, the baseline is 15.68 million; gas at \$5 gives 15.35 million (−0.33 once the rise is complete); the lab's "squeeze" scenario averages 14.45 million over the year and ends at 13.76 million. The 95% interval is about ±2.6 million. Compare the teams' guesses with −0.33 million; if they guessed larger, discuss why, and stress that the estimate is an association, not a controlled experiment. In the ex-ante test, naive (MAE 0.42) beats ex-ante (0.48) and ex-post (0.54).
 
 **Variations.** (a) Restrict the drivers lab to 1993–2019 and compare coefficients (structural stability). (b) Re-run with `log(veh)` and report elasticities. (c) Instructors who use `jtools` can show `summ(m1, robust = "HAC")` as an alternative summary; `car::vif()` reproduces the VIFs in the selection lab (21.9 and 23.8).
 

@@ -101,7 +101,7 @@
   const others = $derived(KEYS.filter((k) => k !== imp));
   const peak = $derived(Object.fromEntries(KEYS.map((k) => { const a = ir[k].pt; let j = 0; for (let i = 1; i <= H; i++) if (Math.abs(a[i]) > Math.abs(a[j])) j = i; return [k, j]; })) as Record<VarKey, number>);
   const STORY: Record<string, string> = {
-    ffr: 'A surprise hike. Unemployment barely moves for a year, then climbs for two years. Inflation first <i>rises</i> for two quarters before drifting lower: the price puzzle.',
+    ffr: 'A surprise hike. Unemployment barely moves for a year, then climbs until about two years after the hike. Inflation first <i>rises</i> for two quarters before drifting lower: the price puzzle.',
     infl: 'An inflation surprise of 1.3 pp. Inflation stays high for years, the funds rate climbs about 0.5 pp within a year and a half (the Fed leans against it), and unemployment creeps up by almost 0.3 pp over four years.',
     unemp: 'An unemployment surprise (a weakening economy). The funds rate is cut by about 0.8 pp within a year, and inflation falls by about half a point almost at once.',
   };
@@ -113,7 +113,7 @@
   caption={`Pick which variable gets the surprise. The clock runs quarter by quarter: rings show how far each variable has moved from where it would otherwise be (solid ring = above, dashed = below), and the lines on the right draw the same impulse responses with 90% bootstrap bands. Baseline ordering (inflation, unemployment, funds rate), VAR(4) on 1960–2000 quarterly data; responses to a one-standard-deviation shock, in percentage points. Data: FRED (CPIAUCSL, UNRATE, FEDFUNDS).`}>
   {#snippet controls()}
     <div class="seg" role="group" aria-label="Which variable is shocked">
-      {#each ['ffr', 'infl', 'unemp'] as k}<button class:on={imp === k} onclick={() => pick(k as VarKey)}>Shock {META[k as VarKey].label.toLowerCase()}</button>{/each}
+      {#each ['ffr', 'infl', 'unemp'] as k}<button class:on={imp === k} onclick={() => pick(k as VarKey)}>Shock {k === 'ffr' ? 'the funds rate' : META[k as VarKey].label.toLowerCase()}</button>{/each}
     </div>
     <button class="btn btn-ghost btn-sm" onclick={() => (playing ? pause() : play())}>{playing ? 'Pause' : t >= H ? 'Replay' : 'Play'}</button>
     <label class="sl">Quarter <input type="range" min="0" max={H} step="1" value={q} oninput={(e) => { pause(); t = +(e.target as HTMLInputElement).value; }} aria-valuetext={`${q} quarters after the shock`} /> <b>{q}</b></label>

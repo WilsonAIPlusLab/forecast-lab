@@ -91,7 +91,7 @@ Every analysis of a monthly series starts with three pictures. The first lab dra
 <CodeLab client:load id="ch02-plots" title="Seasonal plots and a classical decomposition" r={plotsR} py={plotsPy} packages={['forecast']} pyPackages={['statsmodels']} goal="Draw a time plot, a seasonal plot and a subseries plot of retail sales, then split the series with decompose()." />
 </div>
 
-The seasonal figure says a typical December sits about **\$61.9 billion** above trend and a typical February about **\$58.8 billion** below it (2015 onward). December was the biggest month of every year in this sample. It was not always so: in 2008, May beat December. Stimulus payments began arriving in late April 2008,<sup>[9](#refs)</sup> and the financial crisis hit that year's holiday season.
+The seasonal figure says a typical December sits about **\$61.9 billion** above trend and a typical February about **\$58.8 billion** below it (2015 onward). December was the biggest month of every full year in this sample. It was not always so: in 2008, May beat December. Stimulus payments began arriving in late April 2008,<sup>[9](#refs)</sup> and the financial crisis hit that year's holiday season.
 
 <Callout type="pitfall" title="Three weaknesses of classical decomposition">
 `decompose()` is easy to understand, but it has three flaws you can see in the lab output. It produces **no trend for the first and last six months**, which is exactly the recent data you care about. It forces the **seasonal pattern to be identical every year**. And a single shock such as April 2020 pulls the moving average down for a whole year around it. STL, below, fixes all three.

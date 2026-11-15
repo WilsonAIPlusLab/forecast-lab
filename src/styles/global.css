@@ -110,6 +110,14 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .fullbleed { width: min(var(--full), calc(100cqw - 32px)); margin-left: 50%; transform: translateX(-50%); max-width: none !important; }
 /* breakouts size to their container (the chapter's main column), not the viewport */
 
+/* ───────── Breadcrumbs (chapter pages, index, playground, about, 404) ───────── */
+.crumbs { font-size: .8rem; margin-bottom: .9rem; }
+.crumbs ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: .1rem .45rem; color: var(--muted); }
+.crumbs li { margin: 0; }
+.crumbs li + li::before { content: '›'; margin-right: .45rem; color: var(--muted); }
+.crumbs a { color: var(--text-2); }
+.crumbs [aria-current] { color: var(--text-2); font-weight: 600; }
+
 /* ───────── Utility ───────── */
 .grad-text { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .eyebrow { font-size: .8rem; font-weight: 650; color: var(--muted); letter-spacing: .005em; }

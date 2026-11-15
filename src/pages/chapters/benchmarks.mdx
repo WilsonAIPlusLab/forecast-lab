@@ -23,6 +23,9 @@ import cvPy from '../../labs/ch03/tscv.py?raw';
 import exR from '../../labs/ch03/exercise.R?raw';
 import exSolR from '../../labs/ch03/exercise_solution.R?raw';
 import exCheckR from '../../labs/ch03/exercise_check.R?raw';
+import exPy from '../../labs/ch03/exercise.py?raw';
+import exSolPy from '../../labs/ch03/exercise_solution.py?raw';
+import exCheckPy from '../../labs/ch03/exercise_check.py?raw';
 import InstructorKit from '../../components/InstructorKit.astro';
 
 <p class="lede">A vendor shows you a slick AI forecasting tool. Its chart looks impressive. Before you sign anything, ask one question: <strong>is it more accurate than simply assuming this month will look like the same month last year?</strong> You will be surprised how often the answer is no.</p>
@@ -129,24 +132,26 @@ The scorecard above rests on a single test period starting in January 2023. Pick
 2. Record the error.
 3. Move the origin forward by one period and repeat until the data run out.
 
-This is **time-series cross-validation**, also called *evaluation on a rolling forecasting origin*. Each row of dots below is one repetition.
+This is **time-series cross-validation**, also called *evaluation on a rolling forecasting origin*.<sup>[5](#refs)</sup> Each row of dots below is one repetition.
 
 <div class="breakout">
 <RollingOrigin client:load />
 </div>
 
-Three lessons jump out of the chart on the right:
+Three lessons jump out of the "Result on real data" chart:
 
 - **Error grows with the horizon.** For payroll jobs, the naive forecast misses by about 200,000 jobs one month ahead and by about 2.4 million twelve months ahead. Forecasting next month is far easier than forecasting next year.
 - **The best benchmark depends on the data.** Payrolls trend upward, so **drift** wins at every horizon. Retail sales are dominated by seasonality, so **seasonal naive** wins by a wide margin from 1 to 11 months ahead.
 - **Beware of coincidences.** Switch to retail sales and look at horizon 12: naive suddenly ties seasonal naive, and drift even beats it. Twelve months ahead, the "last observed value" is from the same month a year earlier, so naive briefly *becomes* seasonal naive (and drift becomes seasonal naive plus a year of trend). Cross-validation by horizon exposes this kind of illusion; a single test score would hide it.
 
 <div class="breakout">
-<CodeLab client:load id="ch03-tscv" title="Cross-validated accuracy by horizon" r={cvR} py={cvPy} packages={['forecast']} goal="Compute MAE at horizons 1 to 12 with tsCV(), then test whether the difference between two methods is statistically significant." />
+<CodeLab client:load id="ch03-tscv" title="Cross-validated accuracy by horizon" r={cvR} py={cvPy} packages={['forecast']} pyPackages={['scipy']} goal="Compute MAE at horizons 1 to 12 with tsCV(), then test whether the difference between two methods is statistically significant." />
 </div>
 
+The lab's chart says seasonal naive beats drift even at horizon 12, yet the explorer above showed drift winning there. Both are right. `tsCV()` starts scoring drift after only two months of data, when its slope is wild, while the explorer waits for four years of history before its first origin. Skip the first two years of origins in the lab and drift wins at horizon 12 again. How you set up the evaluation is part of the result.
+
 <Callout type="math" title="The Diebold–Mariano test in one paragraph">
-Let $d_t = |e_{1,t}| - |e_{2,t}|$ be the loss differential between methods 1 and 2 (any loss works; `dm.test` uses squared errors by default). If the two methods are equally accurate, $E[d_t] = 0$. The DM statistic is $\bar d / \widehat{\text{se}}(\bar d)$, where the standard error is corrected for autocorrelation in $d_t$. Under the null it is approximately standard normal (`dm.test` adds a small-sample correction and compares it with a $t$ distribution).<sup>[4](#refs)</sup> A p-value below 0.05 says the accuracy gap is unlikely to be luck.
+Let $d_t = e_{1,t}^2 - e_{2,t}^2$ be the loss differential between methods 1 and 2. That is the squared-error loss `dm.test` uses by default (and the lab uses); any loss works, for example absolute errors. If the two methods are equally accurate, $E[d_t] = 0$. The DM statistic is $\bar d / \widehat{\text{se}}(\bar d)$, where the standard error is corrected for autocorrelation in $d_t$. Under the null it is approximately standard normal (`dm.test` adds a small-sample correction and compares it with a $t$ distribution).<sup>[4](#refs)</sup> A p-value below 0.05 says the accuracy gap is unlikely to be luck.
 </Callout>
 
 ## From benchmark to business value
@@ -170,9 +175,9 @@ In companies, the benchmark idea becomes a metric called <Term def="The reductio
 Fill in the two blanks (`______`) and press **Run & check**. Hints unlock one at a time if you need them.
 
 <div class="breakout">
-<CodeLab client:load id="ch03-ex1" exercise title="Exercise: score seasonal naive on e-commerce sales" r={exR} solution={exSolR} check={exCheckR} packages={['forecast']}
+<CodeLab client:load id="ch03-ex1" exercise title="Exercise: score seasonal naive on e-commerce sales" r={exR} solution={exSolR} check={exCheckR} py={exPy} solutionPy={exSolPy} checkPy={exCheckPy} packages={['forecast']}
   goal="Forecast U.S. e-commerce sales for 2023 onward with the seasonal naive method, then compute its MAE yourself, without `accuracy()`."
-  hints={['The seasonal naive function in the `forecast` package is `snaive()`.', 'An error is **actual minus forecast**. The actual values for the test period are stored in `test`.']} />
+  hints={['Seasonal naive repeats the last 12 training months. In R, the `forecast` package function is `snaive()`. In Python, a negative position counts from the end, so `train.iloc[-12:]` is the last 12 rows.', 'An error is **actual minus forecast**. The actual values for the test period are stored in `test`.']} />
 </div>
 
 ## Chapter checklist

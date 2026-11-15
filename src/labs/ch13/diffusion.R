@@ -21,7 +21,7 @@ factors_at <- function(o, k = 2) {
   prcomp(pmax(pmin(Z, 4), -4))$x[, 1:k]                # clip at +/-4, PCA; keep first k factor series
 }
 
-#| **The diffusion-index forecast** (Stock & Watson, 2002). Target: next month's industrial production growth (`INDPRO`, % per month). The benchmark is an AR(2) regression on the last two months of IP growth. The challenger adds the first two factors. Both are re-fit at each of 179 monthly origins from January 2005 to December 2019.
+#| **The diffusion-index forecast** (Stock & Watson, 2002). Target: next month's industrial production growth (`INDPRO`, % per month). The benchmark is an AR(2) regression on the last two months of IP growth. The challenger adds the first two factors. Both are re-fit at each of 179 monthly origins, January 2005 to November 2019, so the forecasts cover February 2005 to December 2019.
 g <- X[, "INDPRO"]                                     # IP growth, % per month
 origins <- which(dates >= "2005-01-01" & dates <= "2019-11-01")   # row numbers of the forecast origins
 res <- t(sapply(origins, function(o) {                 # loop over origins; t() gives one row per origin

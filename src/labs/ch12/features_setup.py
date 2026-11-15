@@ -1,5 +1,5 @@
 # Hidden setup shared by the Chapter 13 Python labs: builds the supervised feature table.
-# (Lab 12.1 builds the same table step by step, with explanations.)
+# (Lab 13.1 builds the same table step by step, with explanations.)
 # Creates: retail, d (every month), train (1993-2022), test (2023 onward), features (7 predictor names), make_features().
 import xgboost as xgb
 

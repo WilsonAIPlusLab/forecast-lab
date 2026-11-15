@@ -13,7 +13,7 @@ yoy <- 100 * (retail / stats::lag(retail, -12) - 1)   # % change from the same m
 dlog <- 100 * diff(log(retail))               # log change x 100, close to % change for small moves
 round(window(cbind(mom, dlog), start = c(2025, 11), end = c(2026, 4)), 2)   # side by side, Nov 2025 to Apr 2026
 
-#| **Annualized rates: "if this month's pace lasted a year."** Compound the monthly growth factor 12 times: $100\,[(x_t/x_{t-1})^{12} - 1]$. Only do this with **seasonally adjusted** data. Annualizing a seasonal swing (December +12%) would claim sales are on track to triple. So we switch to the SA version, `RSAFS` (retail *and food services*, so the dollar level is a little higher).
+#| **Annualized rates: "if this month's pace lasted a year."** Compound the monthly growth factor 12 times: $100\,[(x_t/x_{t-1})^{12} - 1]$. Only do this with **seasonally adjusted** data. Annualizing a seasonal swing (December +12%) would claim sales are on track to nearly quadruple. So we switch to the SA version, `RSAFS` (retail *and food services*, so the dollar level is a little higher).
 sa  <- fred("RSAFS", start = 2015)            # seasonally adjusted retail & food services, $ millions
 ann <- 100 * ((sa / stats::lag(sa, -1))^12 - 1)   # monthly growth factor compounded over 12 months, in %
 

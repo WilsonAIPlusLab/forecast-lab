@@ -38,7 +38,7 @@
       .call((g) => { g.select('.domain').attr('stroke', C.border); g.selectAll('line').remove(); g.selectAll('text').attr('fill', C.muted).attr('font-size', 12); });
     const x0 = x(hist[hist.length - 1].date);
     svg.append('rect').attr('x', x0).attr('y', m.t).attr('width', W - m.r - x0).attr('height', Ht - m.t - m.b).attr('fill', C.forecast).attr('fill-opacity', revealed ? 0.03 : 0.07);
-    if (!revealed) svg.append('text').attr('class', 'hint').attr('x', (x0 + W - m.r) / 2).attr('y', m.t + 22).attr('text-anchor', 'middle').attr('fill', C.text2).attr('font-size', 13).attr('font-weight', 600).text(complete ? 'Done? Press “Reveal”' : 'Draw here: drag across 2023');
+    if (!revealed) svg.append('text').attr('class', 'hint').attr('x', (x0 + W - m.r) / 2).attr('y', m.t + 22).attr('text-anchor', 'middle').attr('fill', C.text2).attr('font-size', 13).attr('font-weight', 600).text(complete ? 'Done? Press “Reveal what happened”' : 'Draw here: drag across 2023');
     const line = d3.line<any>().x((d) => x(d.date)).y((d) => y(d.value));
     svg.append('path').attr('d', line(hist.slice(-36))).attr('fill', 'none').attr('stroke', C.history).attr('stroke-width', 1.8);
     const last = hist[hist.length - 1];
@@ -83,13 +83,28 @@
     el.replaceChildren(svg.node()!);
   }
 
-  function reset() { drawn = Array(H).fill(null); revealed = false; draw(); }
+  // keyboard drawing: Left/Right pick a month, Up/Down move its value by $5 billion
+  let kb = -1;
+  function onKey(e: KeyboardEvent) {
+    if (revealed || !truth.length) return;
+    const k = e.key;
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(k)) return;
+    e.preventDefault();
+    const prev = (i: number) => (i > 0 ? (drawn[i - 1] ?? hist[hist.length - 1].value) : hist[hist.length - 1].value);
+    if (kb < 0) kb = 0;
+    else if (k === 'ArrowLeft') kb = Math.max(0, kb - 1);
+    else if (k === 'ArrowRight') kb = Math.min(H - 1, kb + 1);
+    if (drawn[kb] === null) drawn[kb] = prev(kb);
+    if (k === 'ArrowUp' || k === 'ArrowDown') drawn[kb] = (drawn[kb] as number) + (k === 'ArrowUp' ? 5000 : -5000);
+    draw();
+  }
+  function reset() { drawn = Array(H).fill(null); revealed = false; kb = -1; draw(); }
   function useModel() { drawn = model.slice(); draw(); }
   $effect(() => { revealed; draw(); });
   onMount(() => { load(); return watchLayout(el, draw); });
 </script>
 
-<Explorable kicker="Your turn first" title="Draw your forecast for 2023, then see what happened" caption={`U.S. retail sales (NSA, $ millions) through December 2022. Drag across the shaded area to sketch the next 12 months, then reveal. The dotted line is a simple seasonal model fitted to the same history: the kind of model you will build in this course.`}>
+<Explorable kicker="Your turn first" title="Draw your forecast for 2023, then see what happened" caption={`U.S. retail sales (NSA, $ millions) through December 2022. Drag across the shaded area (or focus the chart and use the arrow keys) to sketch the next 12 months, then reveal. The dotted line is a simple seasonal model fitted to the same history: the kind of model you will build in this course.`}>
   {#snippet controls()}
     <button class="btn btn-primary btn-sm" disabled={!complete} onclick={() => (revealed = true)}>Reveal what happened</button>
     <button class="btn btn-sm" onclick={reset}>Start over</button>
@@ -108,11 +123,13 @@
       {/if}
     </div>
   {/snippet}
-  <div bind:this={el} class="yd-chart"></div>
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex a11y_no_noninteractive_element_interactions -->
+  <div bind:this={el} class="yd-chart" role="application" tabindex="0" onkeydown={onKey} aria-label="Drawing area for 2023. Use the left and right arrow keys to pick a month and the up and down arrow keys to raise or lower it by 5 billion dollars."></div>
 </Explorable>
 
 <style>
   .yd-chart { min-height: 300px; touch-action: none; user-select: none; }
+  .yd-chart:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 4px; border-radius: 6px; }
   .yd-chart :global(.yd-reveal) { stroke-dasharray: 1500; stroke-dashoffset: 1500; animation: ydr 1.2s cubic-bezier(.2,0,0,1) forwards; }
   @keyframes ydr { to { stroke-dashoffset: 0; } }
   .yd-side { display: grid; gap: .9rem; font-size: .88rem; color: var(--text-2); }

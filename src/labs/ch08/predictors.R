@@ -37,6 +37,6 @@ round(res, 3)
 #| **Read the table by column.** Higher AUC is better.
 #| - **Three months out**, the spread alone does *worse than a coin flip* (AUC below 0.5): the curve usually steepens again just before a recession, as the Fed starts cutting. Jobless claims transform the model.
 #| - **Twelve months out**, adding predictors barely changes the AUC.
-#| This matches Estrella and Mishkin (1998): other indicators help at short horizons, while the yield curve dominates beyond a couple of quarters.
+#| This matches Estrella and Mishkin (1998): other indicators help at short horizons, while the yield curve dominates beyond one quarter.
 viz_table(res, highlight = c("3 months ahead", "12 months ahead"), lower_is_better = FALSE, digits = 3,   # green = highest AUC
           title = "Claims help for the next quarter; a year out, extra predictors barely move the needle")

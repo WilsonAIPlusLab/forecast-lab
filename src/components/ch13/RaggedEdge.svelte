@@ -178,7 +178,7 @@
 <Explorable title="The ragged edge: a nowcast that sharpens every Thursday" caption={`Press <b>Play</b> or drag the <b>date</b> slider. The clock starts when last month's jobs report comes out. Each Thursday the Labor Department publishes another week of initial jobless claims (seasonally adjusted, thousands). The bridge model re-estimates the month's payroll change with a separate regression for each number of weeks known, fit on 1990 to the month before (2020–21 excluded). The gold dot is the payroll change in today's revised data, not the first print. Data: FRED (ICSA, PAYEMS).`}>
   {#snippet controls()}
     <div class="seg" role="group" aria-label="Target month">
-      {#each PRESETS as p}<button class:on={target === p.key} onclick={() => (target = p.key)}>{p.label}</button>{/each}
+      {#each PRESETS as p}<button class:on={target === p.key} aria-pressed={target === p.key} onclick={() => (target = p.key)}>{p.label}</button>{/each}
     </div>
     {#if model}
       <label class="sl">Date <input type="range" min="0" max={model.nDays} step="1" bind:value={day} oninput={stop} aria-valuetext={dayFmt(addDays(model.start, day))} /> <b>{dayFmt(addDays(model.start, day))}</b></label>

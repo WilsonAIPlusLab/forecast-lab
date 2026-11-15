@@ -34,7 +34,7 @@ d <- d[!is.na(d$growth_ly) & !is.na(d$yoy_lm), ]   # drop the first months, whic
 features <- c("month", "growth_ly", "growth_lm", "yoy_lm", "weekend", "sent_lm", "unrate_lm")   # the 7 predictors
 tail(d[, c("date", "growth", features)], 3)   # peek at the last 3 rows
 
-#| **Split by time into three blocks.** We *fit* on 1993–2021, *validate* on 2022 (to decide when to stop adding trees), and keep 2023 onward as the untouched *test* set for Lab 12.2. `xgb.DMatrix()` packs the feature matrix and the label into XGBoost's own format. Missing values (that October 2025 hole) are fine: XGBoost learns which way to send them at every split.
+#| **Split by time into three blocks.** We *fit* on 1993–2021, *validate* on 2022 (to decide when to stop adding trees), and keep 2023 onward as the untouched *test* set for Lab 13.2. `xgb.DMatrix()` packs the feature matrix and the label into XGBoost's own format. Missing values (that October 2025 hole) are fine: XGBoost learns which way to send them at every split.
 fit_d   <- d[d$date <= "2021-12-01", ]                          # fit block: through 2021
 valid_d <- d[d$date >= "2022-01-01" & d$date <= "2022-12-01", ]   # validation block: 2022
 dfit   <- xgb.DMatrix(as.matrix(fit_d[, features]),   label = fit_d$growth)     # features + target

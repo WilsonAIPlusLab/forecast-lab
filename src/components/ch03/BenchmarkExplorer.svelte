@@ -28,7 +28,10 @@
 
   // Load a series and put the origin at December 2022 (the same split as the code lab below).
   async function load() {
-    s = await loadSeries(sid, { start: '2005-01-01' });
+    const id = sid;
+    const loaded = await loadSeries(id, { start: '2005-01-01' });
+    if (id !== sid) return; // a newer series was picked while this one loaded: ignore the stale result
+    s = loaded;
     maxO = s.data.length - h - 1; minO = Math.max(36, s.data.length - 12 * 12);
     const dec22 = s.data.findIndex((p) => p.date.getFullYear() === 2022 && p.date.getMonth() === 11);
     originIdx = dec22 < 0 ? maxO : Math.min(maxO, Math.max(minO, dec22));
@@ -72,7 +75,7 @@
       style: plotStyle(), x: { label: null }, y: { grid: true, nice: true, tickFormat: fmt, label: null },
       marks: [
         Plot.rectX([{ a: test[0]?.date, b: test[test.length - 1]?.date }], { x1: 'a', x2: 'b', fill: C.actual, fillOpacity: 0.05 }),
-        Plot.text([test[0]?.date], { x: (d: any) => d, frameAnchor: 'top', dx: 6, dy: 2, textAnchor: 'start', text: () => 'Test period (hidden from the methods)', fill: C.muted, fontSize: 12, fontWeight: 700 }),
+        Plot.text([test[0]?.date], { x: (d: any) => d, frameAnchor: 'top', dx: 6, dy: 2, textAnchor: 'start', text: () => (W < 560 ? 'Test period' : 'Test period (hidden from the methods)'), fill: C.muted, fontSize: 12, fontWeight: 700 }),
         Plot.text([show[0]?.date], { x: (d: any) => d, frameAnchor: 'top', dx: 2, dy: 2, textAnchor: 'start', text: () => 'Training data', fill: C.muted, fontSize: 12, fontWeight: 700 }),
         Plot.ruleX(errs, { x: 'date', y1: 'a', y2: 'f', stroke: C.danger, strokeOpacity: 0.55, strokeWidth: 2 }),
         Plot.lineY(show, { x: 'date', y: 'value', stroke: C.history, strokeWidth: 1.5 }),

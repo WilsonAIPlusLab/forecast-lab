@@ -72,7 +72,7 @@ $$
 \sigma_h^2 = \sigma^2\left[1 + (h-1)\alpha^2\right],
 $$
 
-and a normal interval is $\hat y_{T+h|T} \pm z\,\sigma_h$, with $z = 1.28$ for 80% and $1.96$ for 95%. Models with trend and seasonality have longer formulas of the same kind (Hyndman & Athanasopoulos, ch. 8). Three assumptions hide inside: the model is right, its parameters are known exactly, and the shocks are normal and as large as in the past. Chatfield (1993) showed that such intervals tend to be too narrow in practice, precisely because real forecasts break these assumptions.<sup>[1](#refs)</sup>
+and a normal interval is $\hat y_{T+h|T} \pm z\,\sigma_h$, with $z = 1.28$ for 80% and $1.96$ for 95%. Models with trend and seasonality have longer formulas of the same kind (Hyndman & Athanasopoulos, 2021, section 8.7).<sup>[9](#refs)</sup> Three assumptions hide inside: the model is right, its parameters are known exactly, and the shocks are normal and as large as in the past. Chatfield (1993) showed that such intervals tend to be too narrow in practice, precisely because real forecasts break these assumptions.<sup>[1](#refs)</sup>
 </Callout>
 
 There are three standard ways to compute intervals from a fitted model, and the lab compares all three on the December 2019 example:
@@ -87,7 +87,7 @@ There are three standard ways to compute intervals from a fitted model, and the 
 <CodeLab client:load id="ch10-intervals" title="Three ways to build an interval, one blind spot" r={intR} py={intPy} packages={['forecast']} pyPackages={['statsmodels']} goal="Compute 80% and 95% intervals from December 2019 by formula, bootstrap and simulation, and count how many real months they contained." />
 </div>
 
-The three methods agree closely: the 80% interval for January 2020 is about \$17 billion wide by all three (17,511, 16,689 and 17,864 in \$ millions). All three contained only **3 of the 24** actual months, and 18 of the 21 misses were *above* the band, during the 2021 boom. The lesson: the way you compute the interval matters much less than the assumption that the future resembles the past.
+The three methods agree closely: the 80% interval for January 2020 is about \$17 billion wide by all three (17,511, 16,689 and 17,864 in \$ millions). All three contained only **3 of the 24** actual months, and 18 of the 21 misses were *above* the band, in the rebound of late 2020 and the 2021 boom. The lesson: the way you compute the interval matters much less than the assumption that the future resembles the past.
 
 ## Audit the promise: coverage
 
@@ -169,7 +169,7 @@ Drag the understock cost up: the stock line moves right into the tail, and the g
 <CodeLab client:load id="ch10-newsvendor" title="A December stocking recommendation" r={nvR} py={nvPy} packages={['forecast']} pyPackages={['statsmodels']} goal="Turn a simulated demand distribution into a stock level, a service level and an expected saving." />
 </div>
 
-The R lab recommends **\$40,466 million** of December 2026 stock (valued at retail), \$350 million above the point forecast of \$40,116 million. Expected cost falls from \$216 million to \$186 million. That \$31 million comes purely from using the *distribution* instead of the point forecast.
+The R lab recommends **\$40,466 million** of December 2026 stock (valued at retail), \$350 million above the point forecast of \$40,116 million. Expected cost falls from \$216.3 million to \$185.7 million. That saving of about \$31 million comes purely from using the *distribution* instead of the point forecast.
 
 <Callout type="tip" title="Make it yours: how history changes the safety stock">
 Change `start = 2022` to `start = 2010` in the lab and rerun. The model now sees the 2020 collapse and rebound in clothing sales, its 90% range for December widens from about \$2.1 billion to about \$10 billion, and the recommended safety stock jumps from \$350 million to \$1,672 million. Which window is right is a judgment call: do you expect another shock of that size? The data cannot answer that for you, but now you can show your manager what each answer costs.
@@ -193,7 +193,7 @@ You now have several models on the scorecard: ETS, ARIMA, seasonal naive. Choosi
 <CombinationWeights client:load />
 </div>
 
-Start with **Furniture**. Exponential smoothing and seasonal naive score almost the same alone (MAE about \$356 and \$354 million), but the 50/50 blend cuts the error to \$211 million. The reason is in the panel: smoothing ran \$339 million too high on average, seasonal naive \$295 million too low, and averaging cancels much of both. Now try **Sporting goods**, where both methods erred in the same direction: blending cannot help. And on **Total retail**, seasonal naive is so much worse that any weight on it hurts. Combination is insurance, not magic.
+Start with **Furniture**. Exponential smoothing and seasonal naive score almost the same alone (MAE about \$356 and \$354 million), but the 50/50 blend cuts the error to \$211 million. The reason is in the panel: smoothing ran \$339 million too high on average, seasonal naive \$295 million too low, and averaging cancels much of both. Now try **Sporting goods**, where both methods erred in the same direction: blending cannot help. And on **Total retail**, seasonal naive is so much worse that the 50/50 blend is far worse than smoothing alone (MAE \$11,823 against \$7,796 million); only a token weight on seasonal naive helps. Combination is insurance, not magic.
 
 <Callout type="math" title="When does a combination beat both forecasts?">
 Let the two forecast errors have variances $\sigma_1^2, \sigma_2^2$ and correlation $\rho$. The combined error $w e_1 + (1-w) e_2$ has variance $w^2\sigma_1^2 + (1-w)^2\sigma_2^2 + 2w(1-w)\rho\sigma_1\sigma_2$, minimized at
@@ -283,7 +283,7 @@ A discount chain has thin margins and heavy markdowns: each dollar of unmet dema
 
 <InstructorKit
   minutes={80}
-  data={['RSXFSN', 'MRTSSM448USN', 'ICSA', 'MRTSSM442USN', 'MRTSSM446USN', 'MRTSSM451USN']}
+  data={['RSXFSN', 'MRTSSM448USN', 'ICSA', 'MRTSSM442USN', 'MRTSSM443USN', 'MRTSSM444USN', 'MRTSSM446USN', 'MRTSSM451USN', 'MRTSSM452USN']}
   objectives={[
     'Explain the difference between a prediction interval and a confidence interval, and produce intervals by formula, bootstrap and simulation with `forecast()` and `simulate()`.',
     'Run a rolling-origin **coverage audit** and interpret coverage by horizon and by era.',

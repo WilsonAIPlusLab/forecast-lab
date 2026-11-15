@@ -23,7 +23,7 @@ avg <- ts(tapply(raw$T10Y3M, month, mean), start = c(1982, 1), frequency = 12)  
 eom <- ts(tapply(raw$T10Y3M, month, function(v) tail(v, 1)), start = c(1982, 1), frequency = 12)   # month-end reading
 all.equal(as.numeric(avg), as.numeric(fred("T10Y3M", to = "month")))   # TRUE: matches fred()'s monthly average
 
-#| **Count inverted months.** An *inverted* yield curve (spread below zero) has come before every U.S. recession since the 1950s, with a few false alarms, so analysts watch it closely (Chapter 9 builds a recession model on it). Depending on how you aggregate, you get a different count, and in some months the two rules disagree about whether the curve was inverted at all.
+#| **Count inverted months.** An *inverted* yield curve (spread below zero) turned negative before every U.S. recession since 1969 except one, with a few false alarms, so analysts watch it closely (Chapter 9 builds a recession model on it). Depending on how you aggregate, you get a different count, and in some months the two rules disagree about whether the curve was inverted at all.
 recent <- window(cbind(avg, eom), start = 2019)   # both monthly versions, 2019 onward, as two columns
 c(days_inverted   = sum(raw$T10Y3M[raw$observation_date >= "2019-01-01"] < 0),   # sum() of TRUE/FALSE counts the TRUEs
   months_avg_inv  = sum(recent[, "avg"] < 0),   # [, "avg"] selects the column named avg

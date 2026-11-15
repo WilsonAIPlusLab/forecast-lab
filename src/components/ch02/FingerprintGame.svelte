@@ -9,7 +9,7 @@
     { id: 'MRTSSM445USN', name: 'Grocery stores', why: (f: number[]) => `People eat every month. The shape is almost a circle: only a modest holiday-meal bump in December (+${f[11] - 100}%).` },
     { id: 'MRTSSM447USN', name: 'Gas stations', why: (f: number[]) => `Summer driving season: May through August all sit near ${Math.round((f[4] + f[5] + f[6] + f[7]) / 4)}. Gas-station sales also swing with the price of gasoline, which tends to be higher in summer.` },
     { id: 'MRTSSM4541USN', name: 'E-commerce', why: (f: number[]) => `Two spikes in a row: November (${f[10]}, the Black Friday and Cyber Monday weekend) and December (${f[11]}).` },
-    { id: 'MRTSSM722USN', name: 'Restaurants & bars', why: (f: number[]) => `The flattest fingerprint. Its biggest "season" is February's dip to ${f[1]}, and switch on <b>per day</b> to see how much of that is just a short month.` },
+    { id: 'MRTSSM722USN', name: 'Restaurants & bars', why: (f: number[]) => `The flattest fingerprint. Its biggest "seasons" are the winter dips, ${f[0]} in January and ${f[1]} in February. Switch on <b>per day</b> to see how much of February's dip is just a short month.` },
     { id: 'MRTSSM444USN', name: 'Building materials & garden', why: (f: number[]) => `Spring projects: May peaks at ${f[4]}; winter is dead (${f[0]} in January).` },
   ];
   const MON = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];

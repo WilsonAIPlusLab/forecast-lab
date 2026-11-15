@@ -42,7 +42,9 @@ export function makeSummary(i: SummaryInput): Summary {
   const vsRef = 1 - sc.MAE / res.ref.MAE;
   const refPhrase = featured === 'snaive' ? '' :
     vsRef >= 0 ? `, ${Math.round(vsRef * 100)}% smaller than the “same month last year” rule` : `, ${Math.round(-vsRef * 100)}% larger than the “same month last year” rule`;
-  const who = featured === best
+  const who = res.scores.length === 1
+    ? `we tested only ${modelInfo(featured).label}`
+    : featured === best
     ? `the most accurate of the ${res.scores.length} methods we tested was ${modelInfo(best).label}`
     : `we use ${modelInfo(featured).label} (the most accurate of the ${res.scores.length} methods we tested was ${modelInfo(best).label})`;
   const risk = riskFor(i);

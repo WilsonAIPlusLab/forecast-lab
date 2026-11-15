@@ -29,7 +29,7 @@
   const nSig = $derived(tests.filter((t) => t.p < 0.05).length);
 </script>
 
-<Explorable title="Who helps predict whom? many links fade after 1985"
+<Explorable title="Who helps predict whom? Many links fade after 1985"
   caption={`Each arrow X → Y means: adding past values of X to a two-variable VAR significantly improves forecasts of Y (Granger F-test). Thicker arrows = smaller p-values; dashed = only significant at 10%; no arrow = no evidence. Click a variable to see only its tests. Quarterly data: CPI inflation, unemployment, federal funds rate and the 10-year minus 3-month Treasury spread (FRED: CPIAUCSL, UNRATE, FEDFUNDS, GS10, TB3MS).`}>
   {#snippet controls()}
     <div class="seg" role="group" aria-label="Sample period">

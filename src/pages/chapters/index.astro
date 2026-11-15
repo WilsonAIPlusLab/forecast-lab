@@ -1,6 +1,6 @@
 ---
 import Base from '../../layouts/Base.astro';
-import { chapters, parts } from '../../lib/chapters';
+import { chapters, parts, partId, spell } from '../../lib/chapters';
 import { sparkPath, chapterSeries } from '../../lib/spark';
 const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
 const pages = import.meta.glob('./*.mdx', { eager: true }) as Record<string, any>;
@@ -8,13 +8,14 @@ const fm = Object.fromEntries(Object.values(pages).map((m: any) => [m.frontmatte
 ---
 <Base title="All chapters · Forecast Lab">
   <main id="main" class="idx">
+    <nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href={base}>Home</a></li><li aria-current="page">Chapters</li></ol></nav>
     <header class="idx-h">
       <h1>All chapters</h1>
-      <p class="lede">Sixteen chapters in five parts. Each starts from a real question, ends with something you can show an employer, and comes with an instructor kit.</p>
+      <p class="lede">{spell(chapters.length, true)} chapters in {spell(parts.length)} parts, numbered 0 to {chapters.length - 1}. Each starts from a real question, ends with something you can show an employer, and comes with an instructor kit.</p>
     </header>
     {parts.map((p) => (
-      <section class="idx-part">
-        <h2>{p}</h2>
+      <section class="idx-part" aria-labelledby={partId(p)}>
+        <h2 id={partId(p)}>{p}</h2>
         <ol class="idx-list">
           {chapters.filter((c) => c.part === p).map((c) => {
             const f = fm[c.slug];
@@ -23,7 +24,7 @@ const fm = Object.fromEntries(Object.values(pages).map((m: any) => [m.frontmatte
                 <a href={`${base}chapters/${c.slug}/`} class="row" data-slug={c.slug}>
                   <span class="num">{c.n}</span>
                   <span class="main">
-                    <span class="t">{c.title}<span class="seen" aria-label="visited">✓</span></span>
+                    <span class="t">{c.title}<span class="seen" aria-hidden="true">✓</span><span class="sr-only seen-sr" hidden>(visited)</span></span>
                     <span class="q">{c.question}</span>
                     {f?.build && <span class="b">You will build: {f.build.join(' · ')}</span>}
                     {!f && <span class="b soon">In preparation</span>}
@@ -38,7 +39,7 @@ const fm = Object.fromEntries(Object.values(pages).map((m: any) => [m.frontmatte
     ))}
   </main>
   <script>
-    try { const v = JSON.parse(localStorage.getItem('fl-visited') || '{}'); document.querySelectorAll<HTMLElement>('.row').forEach((r) => { if (v[r.dataset.slug!]) r.classList.add('is-seen'); }); } catch {}
+    try { const v = JSON.parse(localStorage.getItem('fl-visited') || '{}'); document.querySelectorAll<HTMLElement>('.row').forEach((r) => { if (v[r.dataset.slug!]) { r.classList.add('is-seen'); r.querySelector('.seen-sr')?.removeAttribute('hidden'); } }); } catch {}
   </script>
   <style>
     .idx { max-width: 1040px; margin: 0 auto; padding: 3.5rem 1.5rem 0; }

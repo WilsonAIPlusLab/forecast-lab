@@ -1,6 +1,6 @@
 <script lang="ts">
   // Signature explorable 2: a SHAP waterfall for any month, from last month's sales to the forecast.
-  // Data: precomputed natively in R by src/labs/ch12/make_data.R (same model as Lab 12.3).
+  // Data: precomputed natively in R by src/labs/ch12/make_data.R (same model as Lab 13.3).
   import Explorable from '../Explorable.svelte';
   import data from './shap_data.json';
   import './viz';
@@ -74,8 +74,8 @@
   {#snippet controls()}
     <label class="sl">Month <input type="range" min="0" max={iNext} value={idx} oninput={(e) => { animate = false; idx = +(e.target as HTMLInputElement).value; }} aria-label="Forecast month" aria-valuetext={label(cur.date)} /> <b>{short(cur.date)}</b></label>
     <span class="seg" role="group" aria-label="Jump to a month">
-      <button class:on={idx === iDec} onclick={() => pick(iDec)}>December 2025</button>
-      <button class:on={idx === iNext} onclick={() => pick(iNext)}>Next month (Oct 2026)</button>
+      <button class:on={idx === iDec} aria-pressed={idx === iDec} onclick={() => pick(iDec)}>December 2025</button>
+      <button class:on={idx === iNext} aria-pressed={idx === iNext} onclick={() => pick(iNext)}>Next month (Oct 2026)</button>
     </span>
   {/snippet}
   {#snippet aside()}

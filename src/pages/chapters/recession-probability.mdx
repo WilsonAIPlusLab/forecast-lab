@@ -47,9 +47,7 @@ In May 2023 the gap between the 10-year Treasury yield and the 3-month bill rate
 
 ## A forecast for a yes-or-no event
 
-Most targets in this course have been numbers: sales, jobs, inflation. Many business questions are instead <Term def="An outcome with only two possible values, coded 1 (the event happens) and 0 (it does not).">binary outcomes</Term>. Will this customer default? Will the shipment arrive late? Will the economy be in recession a year from now?
-
-[Chapter 5](/chapters/nonlinear-regression/) introduced the tools for such outcomes on bank-marketing data: the logit, odds ratios, marginal effects, confusion matrices and ROC curves. This chapter reviews them briefly and puts them to work on a harder problem: a rare economic event, forecast a year ahead, where the test data must come after the training data.
+[Chapter 5](/chapters/nonlinear-regression/) forecast <Term def="An outcome with only two possible values, coded 1 (the event happens) and 0 (it does not).">binary outcomes</Term> for individual clients: will this client subscribe? It built the tools on bank-marketing data: the logit, odds ratios, marginal effects, confusion matrices and ROC curves. This chapter forecasts a yes/no outcome for the whole economy: **will it be in recession a year from now?** It recaps those tools briefly and puts them to work on a harder problem: a rare event, forecast a year ahead, where the test data must come after the training data.
 
 For a binary outcome, the useful forecast is a probability between 0 and 1. A model that says "30% chance" is not wrong when the event fails to happen; it would be wrong if events it called 30% happened 90% of the time. That idea, called <Term def="A probability forecast is calibrated when events it gives probability p happen about a fraction p of the time.">calibration</Term>, will matter a lot by the end of the chapter.
 
@@ -73,7 +71,7 @@ The NBER dates turning points only once it is confident, often many months later
 </ul>
 </Callout>
 
-The first lab builds the target and tries the simplest possible model: an ordinary regression of the 0/1 target on the spread. This is called the <Term def="An ordinary least-squares regression whose dependent variable is 0 or 1. Its fitted values are read as probabilities.">linear probability model</Term> (LPM).
+The first lab builds the target and tries the simplest possible model, Chapter 5's [linear probability model](/chapters/nonlinear-regression/#why-a-straight-line-breaks) (LPM): an ordinary regression of the 0/1 target on the spread.
 
 <Predict client:load
   question="You fit a straight line through 0/1 data: the higher the spread, the lower the recession probability. What does that line predict when the curve is very steep, say a spread of +4 points?"
@@ -87,11 +85,11 @@ The first lab builds the target and tries the simplest possible model: an ordina
   goal="Construct 'recession 12 months ahead' from USREC, check it by eye, and see the linear probability model predict impossible probabilities." />
 </div>
 
-The LPM never goes above 1 here (its highest fitted value is 0.49), but it goes below 0 in 145 months, as low as −0.16. A probability of −16% is meaningless, and the straight line also says each extra point of spread has the same effect whether the curve is deeply inverted or very steep. We need a curve that bends.
+The LPM never goes above 1 here (its highest fitted value is 0.49), but it goes below 0 in 145 months, as low as −0.16. These are the same flaws Chapter 5 found with bank clients: a probability of −16% is meaningless, and the straight line says each extra point of spread has the same effect whether the curve is deeply inverted or very steep. We need a curve that bends.
 
 ## From a straight line to an S-curve
 
-The <Term def="A regression for a 0/1 outcome in which the probability is the logistic function of a linear index: p = 1 / (1 + e^-(a + b·x)). It always lies between 0 and 1.">logit</Term> model passes a straight-line index $a + b \cdot \text{spread}$ through an S-shaped function that squeezes any number into the range 0 to 1. Instead of least squares, it is fitted by <Term def="Choosing the parameters that make the observed data most probable. For 0/1 data the log-likelihood adds log(p) for every 1 and log(1 − p) for every 0.">maximum likelihood</Term>: the best curve is the one that gives high probabilities to months that were followed by recession and low probabilities to months that were not.
+Recall from Chapter 5 that the [logit](/chapters/nonlinear-regression/#odds-log-odds-and-the-logistic-curve) passes a straight-line index, here $a + b \cdot \text{spread}$, through an S-shaped function that keeps every probability between 0 and 1, and that it is fitted by maximum likelihood: the best curve gives high probabilities to months that were followed by recession and low probabilities to months that were not.
 
 Try it yourself before the computer does it.
 
@@ -101,12 +99,12 @@ Try it yourself before the computer does it.
 
 Three things to notice:
 
-- **The curve slopes down.** A steeper yield curve means a lower chance of recession a year later. If you make the curve flat (steepness 0), it predicts the same probability for every month, and the log-likelihood is at its worst.
+- **The curve slopes down.** A steeper yield curve means a lower chance of recession a year later. Make the curve flat (steepness 0) and it gives every month the same 50% chance, which the log-likelihood punishes heavily: even a flat line at the 12% base rate scores better.
 - **The fitted curve crosses 50% at a spread of about −1.1 points.** Even a mildly inverted curve gives "only" 20 to 40%. Recessions are rare (about 12% of months since 1959 were followed by one 12 months later), so the model needs strong evidence before it calls one likely.
 - **Most dots overlap.** Plenty of months with a negative spread were *not* followed by recession 12 months later. The spread is informative, not decisive.
 
-<Callout type="math" title="Logit, probit and the likelihood">
-The logit model says
+<Callout type="math" title="The recession model in Chapter 5's notation">
+The model is Chapter 5's logit with one predictor and a target dated a year ahead:
 
 $$
 P(y_{t+12} = 1 \mid s_t) = \frac{1}{1 + e^{-(a + b\,s_t)}}
@@ -114,15 +112,7 @@ P(y_{t+12} = 1 \mid s_t) = \frac{1}{1 + e^{-(a + b\,s_t)}}
 \log\frac{p}{1-p} = a + b\,s_t ,
 $$
 
-so the coefficient $b$ is the change in the **log-odds** for a one-point change in the spread $s_t$. The **probit** model replaces the logistic curve with the standard normal cumulative distribution, $p = \Phi(a + b\,s_t)$. The two curves have almost the same shape; logit coefficients are typically about 1.6 to 1.8 times probit ones.
-
-Both are fitted by maximizing the log-likelihood
-
-$$
-\ell(a,b) = \sum_t \Big[ y_t \log p_t + (1 - y_t) \log (1 - p_t) \Big].
-$$
-
-There is no closed-form solution. `glm()` uses iteratively reweighted least squares, which is Newton's method for this problem. The explorer above runs the same algorithm in your browser.
+so $b$ is the change in the **log-odds** for a one-point change in today's spread $s_t$. The probit uses $p = \Phi(a + b\,s_t)$ instead. Both are fitted by maximum likelihood with `glm()`'s IRLS algorithm, which the explorer above also runs; Chapter 5's [math box](/chapters/nonlinear-regression/#odds-log-odds-and-the-logistic-curve) has the log-likelihood and the details. One difference matters here: the rows are months in time order, so neighboring months share most of their information, and the usual `glm()` standard errors are too small, for the same reason OLS standard errors were in [Chapter 8](/chapters/dynamic-regression/).
 </Callout>
 
 ### Fit it with `glm()` and read the coefficients
@@ -134,7 +124,7 @@ In R, a logit is one line: `glm(y ~ x, family = binomial(link = "logit"))`. Chan
   goal="Estimate the yield-curve recession model as a logit and a probit, and translate the coefficients into odds ratios, probabilities and marginal effects." />
 </div>
 
-How to read the output (logit, fitted on January 1959 to October 2025):
+How to read the output (logit, fitted on January 1959 to October 2025). Chapter 5 summarized marginal effects with one average over all clients. With a single predictor whose effect swings this much, it is more useful to report them at a few chosen spreads:
 
 | Quantity | Value | Plain English |
 |---|---|---|
@@ -160,7 +150,7 @@ The probit gives nearly the same probabilities (45%, 25%, 11% and 4% at the same
 
 ## The yield-curve recession model
 
-This model has a pedigree. Arturo Estrella and Gikas Hardouvelis showed in 1991 that the slope of the yield curve predicts U.S. output growth and NBER recessions.<sup>[2](#refs)</sup> Estrella and Frederic Mishkin then compared many financial indicators and found that beyond about two quarters ahead, the yield-curve slope was the best single predictor of recessions, and out of sample it usually did better alone than combined with other variables.<sup>[5](#refs)</sup>
+This model has a pedigree. Arturo Estrella and Gikas Hardouvelis showed in 1991 that the slope of the yield curve predicts U.S. output growth and NBER recessions.<sup>[2](#refs)</sup> Estrella and Frederic Mishkin then compared many financial indicators and found that beyond one quarter ahead, the yield-curve slope was the best single predictor of recessions, and out of sample it usually did better alone than combined with other variables.<sup>[5](#refs)</sup>
 
 The Federal Reserve Bank of New York publishes a monthly recession probability based on this work.<sup>[3](#refs)</sup> Its recipe:
 
@@ -204,14 +194,7 @@ Nobody knows yet, and you should be wary of confident answers in either directio
 
 ## From probability to decision: pick a threshold
 
-A probability is not yet an action. Your CFO wants to know: **do we freeze hiring or not?** To turn a probability into a yes/no warning you choose a <Term def="The probability above which a forecast is treated as a 'yes' (here: warn of recession).">threshold</Term>. Each choice produces a <Term def="A 2×2 table counting hits, misses, false alarms and correct quiet calls for a given threshold.">confusion matrix</Term>:
-
-| | Recession followed | No recession followed |
-|---|---|---|
-| **Warned** | Hit (true positive) | False alarm (false positive) |
-| **No warning** | Miss (false negative) | Correct quiet call (true negative) |
-
-Two rates summarize it. The <Term def="Hits ÷ all months followed by recession. Also called the true positive rate, sensitivity or recall.">hit rate</Term> is the share of pre-recession months you flagged. The <Term def="False alarms ÷ all months not followed by recession. Also called the false positive rate.">false alarm rate</Term> is the share of calm months you flagged by mistake.
+A probability is not yet an action. Your CFO wants to know: **do we freeze hiring or not?** As in Chapter 5's [call list](/chapters/nonlinear-regression/#from-probability-to-decision-the-confusion-matrix), you choose a threshold and read the confusion matrix. Forecasters of economic events use their own words for its cells: a **hit** is a warning followed by recession, a **false alarm** a warning followed by none, a **miss** a recession nobody warned of. The <Term def="Hits ÷ all months followed by recession. Chapter 5 called it recall, or the true positive rate.">hit rate</Term> is the share of pre-recession months you flagged; the <Term def="False alarms ÷ all months not followed by recession. Also called the false positive rate.">false alarm rate</Term> is the share of calm months you flagged by mistake.
 
 The natural first guess, a 50% threshold, is a poor choice for rare events. In sample, only 21 of 802 months ever reached 50%, so the model flagged just **7 of 95** pre-recession months (a 7% hit rate). Lowering the threshold to 20% catches 56% of them, at the price of flagging 14% of calm months.
 
@@ -219,7 +202,7 @@ The natural first guess, a 50% threshold, is a poor choice for rare events. In s
 <ThresholdGame client:load />
 </div>
 
-The <Term def="Receiver operating characteristic curve: hit rate plotted against false alarm rate for every possible threshold.">ROC curve</Term> on the left shows every threshold at once. Sliding the threshold only moves you *along* the curve; a better model shifts the whole curve toward the top-left corner. The cost chart on the right is where the business decision lives: if a missed recession costs your firm five times as much as a false alarm, the cheapest in-sample threshold is about **14%**. At that setting the model catches 74 of 95 pre-recession months and raises false alarms in a quarter of calm ones.
+The ROC curve on the left, met in [Chapter 5](/chapters/nonlinear-regression/#plan-the-campaign-roc-auc-gains-and-lift), shows every threshold at once. Sliding the threshold only moves you *along* the curve; a better model shifts the whole curve toward the top-left corner. The cost chart on the right is where the business decision lives: if a missed recession costs your firm five times as much as a false alarm, the cheapest in-sample threshold is about **14%**. At that setting the model catches 74 of 95 pre-recession months and raises false alarms in a quarter of calm ones.
 
 <Callout type="math" title="Why the best threshold is 1 / (1 + k)">
 Suppose a false alarm costs 1 and a missed recession costs $k$. If you warn, your expected cost is $(1-p) \cdot 1$. If you stay quiet, it is $p \cdot k$. Warning is cheaper when $(1-p) \lt p\,k$, that is, when
@@ -228,7 +211,7 @@ $$
 p \gt \frac{1}{1+k}.
 $$
 
-With $k = 5$, warn above $1/6 \approx 17\%$. This rule assumes the probabilities are well calibrated. The data-driven optimum in the threshold game (about 14% in sample, 16% out of sample) is close but not identical, because the model's probabilities are not perfectly calibrated.
+This is the same break-even logic as Chapter 5's $p^\ast = c/V$: act when the expected cost of acting falls below the expected cost of not acting. There a call cost $c$ whatever happened; here a warning costs something only when no recession follows, which happens with probability $1-p$, so the break-even is $p^\ast = 1/(1+k)$ rather than $1/k$. With $k = 5$, warn above $1/6 \approx 17\%$. This rule assumes the probabilities are well calibrated. The data-driven optimum in the threshold game (about 14% in sample, 16% out of sample) is close but not identical, because the model's probabilities are not perfectly calibrated.
 </Callout>
 
 <Callout type="business" title="Who should choose the threshold?">
@@ -256,7 +239,7 @@ In sample, the forecasts below 20% are well calibrated: months given about 15% w
 
 ## The honest test: out of sample
 
-Everything so far was scored on the same months the model was fitted to. As Chapter 3 insisted, that flatters any model. So freeze the model at the end of 1999 and forecast 2000 onward, a period with three recessions and one long inversion that the model has never seen. (The last training rows, dated 1999, have targets in 2000, so no test outcome leaks into the fit. A strict real-time forecaster would also have lacked those 2000 outcomes, so the test is still slightly kind to the model.)
+Everything so far was scored on the same months the model was fitted to. As [Chapter 3](/chapters/benchmarks/) insisted, that flatters any model. So freeze the model at the end of 1999 and forecast 2000 onward, a period with three recessions and one long inversion that the model has never seen. (The last training rows, dated 1999, have targets in 2000, so no test outcome leaks into the fit. A strict real-time forecaster would also have lacked those 2000 outcomes, so the test is still slightly kind to the model.)
 
 <Predict client:load
   question="On the Brier score, does the 1999 yield-curve model beat a constant forecast of the base rate over the test period January 2000 to October 2025?"
@@ -287,7 +270,7 @@ Two lessons:
 
 ## Can other indicators help?
 
-The yield curve is only one signal. Three others are popular: the <Term def="Moody's Baa corporate bond yield minus the 10-year Treasury yield (FRED: BAA10Y). It widens when investors fear defaults.">credit spread</Term> (`BAA10Y`), initial jobless claims (`ICSA`, seasonally adjusted, the subject of Chapter 8) and University of Michigan consumer sentiment (`UMCSENT`, not seasonally adjusted). Adding them to a logit is easy: `glm(y ~ spread + baa + claims, ...)`. Whether they *help* is an out-of-sample question. Because the credit spread starts in 1986, this test trains on 1986–2005 and evaluates on 2006 onward, and it asks the question at two horizons.
+The yield curve is only one signal. Three others are popular: the <Term def="Moody's Baa corporate bond yield minus the 10-year Treasury yield (FRED: BAA10Y). It widens when investors fear defaults.">credit spread</Term> (`BAA10Y`), initial jobless claims (`ICSA`, seasonally adjusted, the subject of [Chapter 8](/chapters/dynamic-regression/)) and University of Michigan consumer sentiment (`UMCSENT`, not seasonally adjusted). Adding them to a logit is easy: `glm(y ~ spread + baa + claims, ...)`. Whether they *help* is an out-of-sample question. Because the credit spread starts in 1986, this test trains on 1986–2005 and evaluates on 2006 onward, and it asks the question at two horizons.
 
 <div class="breakout">
 <CodeLab client:load id="ch08-predictors" title="Do credit spreads, claims or sentiment add anything?" r={predR} py={predPy} setup={setupR} pySetup={setupPy} pyPackages={['statsmodels', 'scikit-learn']}
@@ -333,7 +316,7 @@ The New York Fed's target asks whether the economy is in recession in month *t* 
   data={['GS10', 'TB3MS', 'USREC', 'BAA10Y', 'ICSA', 'UMCSENT']}
   objectives={[
     'Construct a forward-looking binary target from the NBER recession indicator and explain why its latest values are provisional.',
-    'Explain why the linear probability model is unsuitable for 0/1 targets, and estimate logit and probit models with `glm()`.',
+    'Apply the logit/probit tools of Chapter 5 to a rare, time-ordered event: show the linear probability model\'s impossible probabilities on recession data, and estimate logit and probit models with `glm()`.',
     'Interpret logit coefficients as odds ratios and as marginal effects at a chosen value, and compute predicted probabilities.',
     'Turn probabilities into decisions with a threshold, using a confusion matrix and a cost ratio.',
     'Evaluate probability forecasts with ROC/AUC, the Brier score against climatology, and a calibration table, in and out of sample.'
@@ -372,7 +355,7 @@ The New York Fed's target asks whether the economy is in recession in month *t* 
 4. National Bureau of Economic Research. Business Cycle Dating Committee announcements. [nber.org](https://www.nber.org/research/business-cycle-dating/business-cycle-dating-committee-announcements)
 5. Estrella, A., & Mishkin, F. S. (1998). Predicting U.S. recessions: Financial variables as leading indicators. *Review of Economics and Statistics*, 80(1), 45–61. See also Estrella, A., & Mishkin, F. S. (1996). The yield curve as a predictor of U.S. recessions. *Current Issues in Economics and Finance*, 2(7). Federal Reserve Bank of New York.
 6. Estrella, A., & Trubin, M. R. (2006). The yield curve as a leading indicator: Some practical issues. *Current Issues in Economics and Finance*, 12(5). Federal Reserve Bank of New York.
-7. Neely, C. J. (2023, September 7). What is the probability of a recession? The message from yield spreads. *On the Economy*, Federal Reserve Bank of St. Louis.
+7. Neely, C. J. (2023, September 7). What is the probability of a recession? The message from yield spreads. *On the Economy*, Federal Reserve Bank of St. Louis. [stlouisfed.org](https://www.stlouisfed.org/on-the-economy/2023/sep/what-probability-recession-message-yield-spreads)
 8. Engstrom, E. C., & Sharpe, S. A. (2019). The near-term forward yield spread as a leading indicator: A less distorted mirror. *Financial Analysts Journal*, 75(4), 37–49.
 9. Brier, G. W. (1950). Verification of forecasts expressed in terms of probability. *Monthly Weather Review*, 78(1), 1–3.
 

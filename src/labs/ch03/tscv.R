@@ -12,7 +12,7 @@ mae_snaive <- colMeans(abs(e_snaive), na.rm = TRUE)   # MAE for horizons 1 to 12
 mae_drift  <- colMeans(abs(e_drift),  na.rm = TRUE)
 round(rbind(`Seasonal naive` = mae_snaive, Drift = mae_drift))   # one row per method, one column per horizon
 
-#| **Plot error against horizon.** This is how professionals report accuracy: not one number, but a curve. Seasonal naive is flat at about 14 billion dollars; drift misses by two to three times as much until horizon 12, where it briefly improves because the last observation is from the same month a year earlier.
+#| **Plot error against horizon.** This is how professionals report accuracy: not one number, but a curve. Seasonal naive is flat at about 14 billion dollars; drift misses by roughly two to three times as much until horizon 12, where it briefly improves because the last observation is from the same month a year earlier.
 viz_lines(1:12, `Seasonal naive` = mae_snaive, Drift = mae_drift,   # x = months ahead, one line per method
           xlab = "months ahead", ylab = "MAE ($ millions)", zero = TRUE,   # zero = TRUE starts the y-axis at 0
           title = "Seasonal naive beats drift at every horizon")

@@ -17,7 +17,7 @@ def tscv(method, min_train):                  # matrix of errors: one row per or
     return errs
 
 e_snaive, e_drift = tscv(snaive, 12), tscv(drift, 2)   # minimum training sizes: 12 and 2 values
-e_snaive.shape                                # (rows, columns) = (origins, horizons)
+print(e_snaive.shape)                         # (rows, columns) = (origins, horizons)
 
 #| **MAE at each horizon**: average the absolute errors down each column, ignoring the empty (`NaN`) cells near the end of the data.
 mae_snaive = np.nanmean(np.abs(e_snaive), axis=0)   # axis=0 = average down each column
@@ -28,3 +28,14 @@ print(pd.DataFrame({"Seasonal naive": mae_snaive, "Drift": mae_drift}, index=ran
 viz_lines(range(1, 13), **{"Seasonal naive": mae_snaive}, Drift=mae_drift, xlab="months ahead",   # one line per method
           # zero=True starts the y-axis at 0
           ylab="MAE ($ millions)", zero=True, title="Seasonal naive beats drift at every horizon")
+
+#| **Is the difference real, or luck?** The Diebold–Mariano test, written out by hand to match R's `dm.test()`: compare the squared one-step-ahead errors, scale the average gap by its standard error, apply the small-sample correction, and read the p-value from a t distribution.
+from scipy import stats                       # t distribution for the p-value
+e1, e2 = e_snaive[:, 0], e_drift[:, 0]        # [:, 0] = first column: the one-step-ahead errors
+ok = ~np.isnan(e1) & ~np.isnan(e2)            # origins where both methods have an error
+d = e1[ok]**2 - e2[ok]**2                     # loss differential: squared error 1 minus squared error 2
+n = len(d)
+dm = d.mean() / np.sqrt(d.var() / n)          # mean gap / its standard error (var() divides by n, like R)
+dm *= np.sqrt((n - 1) / n)                    # Harvey-Leybourne-Newbold small-sample correction for h = 1
+p = 2 * stats.t.cdf(-abs(dm), df=n - 1)       # two-sided p-value
+print(f"DM = {dm:.2f}, p-value = {p:.6f}")

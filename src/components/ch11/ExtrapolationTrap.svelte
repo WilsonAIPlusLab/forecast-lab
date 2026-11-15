@@ -84,8 +84,8 @@
 <Explorable title="The extrapolation trap: a forest on levels hits an invisible ceiling" caption="A random forest (100 trees, three lags as features) forecasts U.S. e-commerce sales 36 months ahead. Switch between training it on the <b>level</b> ($) and on the <b>monthly growth rate</b> (%). Drag the <b>forecast origin</b> anywhere: on levels, the forecast never rises above the dashed red line, the highest value in the training data. Data: FRED MRTSSM4541USS, $ billions, seasonally adjusted.">
   {#snippet controls()}
     <div class="seg" role="group" aria-label="What the forest is trained to predict">
-      <button class:on={mode === 'level'} onclick={() => (mode = 'level')}>Forecast the level</button>
-      <button class:on={mode === 'growth'} onclick={() => (mode = 'growth')}>Forecast the growth rate</button>
+      <button class:on={mode === 'level'} aria-pressed={mode === 'level'} onclick={() => (mode = 'level')}>Forecast the level</button>
+      <button class:on={mode === 'growth'} aria-pressed={mode === 'growth'} onclick={() => (mode = 'growth')}>Forecast the growth rate</button>
     </div>
     {#if data.length}
       <label class="sl">Forecast origin <input type="range" min={minO} max={maxO} bind:value={dragO} onchange={() => (origin = dragO)} aria-valuetext={ym(data[dragO].date)} /> <b>{ym(data[dragO].date)}</b></label>

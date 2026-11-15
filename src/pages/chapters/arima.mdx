@@ -110,8 +110,8 @@ The game uses two formal tests, and the most important fact about them is that *
 
 | Test | R function | Null hypothesis | A small p-value (< 0.05) means… |
 |---|---|---|---|
-| Augmented Dickey–Fuller (ADF) | `adf.test()` | The series has a unit root | Evidence of stationarity |
-| KPSS | `kpss.test()` | The series is stationary | Evidence of a unit root |
+| Augmented Dickey–Fuller (ADF)<sup>[2](#refs)</sup> | `adf.test()` | The series has a unit root | Evidence of stationarity |
+| KPSS<sup>[3](#refs)</sup> | `kpss.test()` | The series is stationary | Evidence of a unit root |
 
 Because the nulls are opposite, use the tests together. When ADF rejects and KPSS does not, both point to stationary. When KPSS rejects and ADF does not, both point to a unit root. When they disagree, the data cannot settle the question, and you need judgment. The function `ndiffs()` from the forecast package automates the common recipe: it applies KPSS, differences, and repeats until the test stops rejecting, then tells you how many differences it took.
 
@@ -176,7 +176,7 @@ Two building blocks are new here. An **AR(p)** model regresses today on the last
 | MA(q) | **Cuts off after lag q** | Tails off |
 | ARMA(p, q) | Tails off after lag q | Tails off after lag p |
 
-This is the heart of the <Term def="The model-building approach of Box and Jenkins (1970): make the series stationary, identify candidate ARMA orders from the ACF and PACF, estimate, check the residuals, then forecast.">Box–Jenkins method</Term>: make the series stationary, match its ACF and PACF to a fingerprint, estimate a few candidates, check the residuals, then forecast.<sup>[1](#refs)</sup> In practice the sample fingerprints are noisy (the open circles in the gallery), so treat them as a way to shortlist two or three candidates, not to pick one.
+This is the heart of the <Term def="The model-building approach of Box and Jenkins (1970): make the series stationary, identify candidate ARMA orders from the ACF and PACF, estimate, check the residuals, then forecast.">Box–Jenkins method</Term>: make the series stationary, match its ACF and PACF to a fingerprint, estimate a few candidates, check the residuals, then forecast.<sup>[1, 11](#refs)</sup> In practice the sample fingerprints are noisy (the open circles in the gallery), so treat them as a way to shortlist two or three candidates, not to pick one.
 
 <Predict client:load kind="check"
   question="The sample ACF of a stationary series has significant spikes at lags 1 and 2 and nothing after. The PACF decays gradually. Which model fits the fingerprint?"
@@ -229,7 +229,7 @@ What the lab shows, with data from January 2000 to September 2026:
 - The ACF fingerprint pointed to **ARIMA(0,1,1)**, and `auto.arima()` agrees exactly. Its estimated θ is −0.82. In plain words, the forecast is a weighted average of past inflation that puts 18% weight on the newest month and lets older months fade gradually. That is simple exponential smoothing from Chapter 6, written as an ARIMA.
 - The stationary alternative, **ARMA(1,1) with a mean**, estimates φ = 0.96 and a mean of 2.2%. A half-life of about **18 months** means it, too, sees inflation as very persistent, but not permanent.
 - The tests cannot referee. On inflation since 2000, ADF just rejects a unit root (p = 0.049) while KPSS rejects stationarity (p ≤ 0.01). `ndiffs()` says d = 1 using KPSS, and d = 0 using ADF.
-- The residuals pass the <Term def="A test of whether a group of autocorrelations is jointly zero. Applied to residuals, its null is 'no autocorrelation left', so a large p-value is good news.">Ljung–Box test</Term> (p = 0.27, 24 lags): only 1 of 36 residual autocorrelations falls outside the band, about what chance alone produces.
+- The residuals pass the <Term def="A test of whether a group of autocorrelations is jointly zero. Applied to residuals, its null is 'no autocorrelation left', so a large p-value is good news.">Ljung–Box test</Term><sup>[10](#refs)</sup> (p = 0.27, 24 lags): only 1 of 36 residual autocorrelations falls outside the band, about what chance alone produces.
 
 <Callout type="pitfall" title="Never compare AICc across different d">
 `auto.arima()` uses AICc to choose p and q **after** fixing d. Differencing changes the data the likelihood is computed on, so an ARIMA(0,1,1) and an ARMA(1,1) for the same series are not on the same AICc scale. To compare models with different d, compare their **out-of-sample forecasts**, which is exactly what the next section does.

@@ -66,7 +66,7 @@
 <Explorable title="The hierarchy machine: make 13 forecasts add up" caption={`Every box is a forecast of retail sales for one month of the test period (seasonally adjusted, $ billions per month). Each series gets a damped-Holt model fit through ${res ? monthName(res.lastTrain) : 'the training period'}. The code lab uses ets(), so its numbers differ a little. Pick a method: <b>Base</b> forecasts each series on its own, so the parts don't add up (red gap). The other four methods force coherence in different ways. Box color and sign show the % miss against what actually happened. Data: FRED (RSAFS, RSFSXMV, RSMVPD + 9 categories).`}>
   {#snippet controls()}
     <div class="seg" role="group" aria-label="Method">
-      {#each METHODS as m}<button class:on={method === m.k} onclick={() => (method = m.k)}>{m.label}</button>{/each}
+      {#each METHODS as m}<button class:on={method === m.k} aria-pressed={method === m.k} onclick={() => (method = m.k)}>{m.label}</button>{/each}
     </div>
     {#if res}<label class="sl">Month <input type="range" min="1" max={H} bind:value={hz} aria-valuetext={`${hz} months ahead`} /> <b>{monthName(res.testDates[hz - 1])}</b></label>{/if}
   {/snippet}

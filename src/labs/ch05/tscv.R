@@ -8,12 +8,12 @@ ets(window(retail, end = c(2017, 12)))$method   # model chosen on 2012-2017 only
 #| **Wrap the model in a forecasting function.** `tsCV()` needs a function that takes the data so far and a horizon `h`, and returns a forecast. Ours re-estimates the ETS(M,A,M) chosen above at every origin, exactly as you would in production.
 f_ets <- function(x, h) forecast(ets(x, model = "MAM"), h = h)   # x = data up to the origin
 
-#| **Roll the origin forward.** `initial = 72` means the first forecast is made with six years of data; after that the origin moves one month at a time. The ETS fit is repeated at every origin, which is why this line takes a few seconds.
+#| **Roll the origin forward.** `initial = 72` keeps the first six years for fitting only, so the first forecast origin comes right after them; after that the origin moves one month at a time. The ETS fit is repeated at every origin, which is why this line takes a few seconds.
 # rolling-origin cross-validation: a matrix of errors, one row per origin, one column per horizon 1-12
 e_ets    <- tsCV(retail, f_ets,  h = 12, initial = 72)
 e_snaive <- tsCV(retail, snaive, h = 12, initial = 72)   # same test for the seasonal naive benchmark
 
-#| **Error by horizon.** MAE in $ millions at 1 to 12 months ahead. ETS's error is 30% to 50% below seasonal naive's at every horizon (about 8.0 billion dollars against 15.6 billion one month ahead). With 96 months of data and a 72-month first window, each horizon is scored on only 12 to 23 forecasts, so treat small wiggles as noise.
+#| **Error by horizon.** MAE in $ millions at 1 to 12 months ahead. ETS's error is about 30% to 50% below seasonal naive's at every horizon (about 8.0 billion dollars against 15.6 billion one month ahead). With 96 months of data and a 72-month first window, each horizon is scored on only 12 to 23 forecasts, so treat small wiggles as noise.
 # colMeans(): average absolute error in each column (horizon), skipping missing values
 mae <- rbind(ETS = colMeans(abs(e_ets), na.rm = TRUE),
              `Seasonal naive` = colMeans(abs(e_snaive), na.rm = TRUE))

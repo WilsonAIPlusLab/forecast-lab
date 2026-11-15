@@ -30,7 +30,7 @@ import exCheckPy from '../../labs/ch14/exercise_check.py?raw';
 
 <p class="lede">Your manager stops by your desk on a Friday: “What will retail sales look like next September, and how sure are you? I need something for Monday's planning meeting.” She does not want a residual plot or an AICc table. She wants one number, a range she can plan around, a sentence on why she should trust it, and a warning if something could go badly wrong. This chapter is about producing exactly that, quickly and honestly.</p>
 
-You already have every tool you need. In the earlier chapters you built benchmarks, smoothing models, ARIMA, regressions, tree ensembles, intervals and a scorecard. What separates a class exercise from a forecast an employer will actually use is the **workflow** around those tools: a fixed sequence of steps, honest evaluation, and communication aimed at the person making the decision. In this capstone lab you will run that workflow end to end, first in a dashboard, then in code.
+You already have every tool you need. In the earlier chapters you built benchmarks, smoothing models, ARIMA, regressions, tree ensembles, intervals and a scorecard. What separates a class exercise from a forecast an employer will actually use is the **workflow** around those tools: a fixed sequence of steps, honest evaluation, and communication aimed at the person making the decision. In this closing chapter you will run that workflow end to end, first in a dashboard, then in code.
 
 <KeyIdea>A professional forecast is a number, a range, a track record and a risk, delivered to someone who has to make a decision. The model is only one ingredient.</KeyIdea>
 
@@ -256,7 +256,7 @@ When it passes, go one step further: paste your summary into the Studio's style 
   ]}
   discussion={[
     'The Studio’s range for retail sales is lopsided: far more room below the forecast than above. Is that a feature or a bug? What would a normal-distribution interval hide?',
-    'On the unemployment rate, naive beats every smoothing model. Would you still ship a smoothing model to look sophisticated? What would you tell a manager who asks “why are we paying you to copy last month’s number?”',
+    'On the unemployment rate, no smoothing model beats naive (SES and Holt simply copy it). Would you still ship a smoothing model to look sophisticated? What would you tell a manager who asks “why are we paying you to copy last month’s number?”',
     'A sales director wants to raise your forecast by 3% “to be ambitious”. Using the evidence on judgmental adjustments, how do you respond?'
   ]}
   misconceptions={[

@@ -94,7 +94,7 @@
         <div class="stat"><span class="stat-v">{model.f.r2.toFixed(3)}</span><span class="stat-l"><b>R²</b> on the log scale: share of the variation explained</span></div>
         <div class="stat"><span class="stat-v">±{(100 * model.f.sigma).toFixed(1)}%</span><span class="stat-l"><b>Typical miss</b> (residual standard error, in log points ≈ %)</span></div>
         <div class="stat"><span class="stat-v">{model.f.p}</span><span class="stat-l">Coefficients estimated</span></div>
-        {#if model.covid !== null}<p class="note">The pulse dummy says April 2020 ran <b>{model.covid.toFixed(0)}%</b> below what trend and season predict.</p>{/if}
+        {#if model.covid !== null}<p class="note">The pulse dummy says April 2020 ran <b>{Math.abs(model.covid).toFixed(0)}%</b> {model.covid < 0 ? 'below' : 'above'} what trend and season predict.</p>{/if}
         <p class="note muted">Why 11 dummies, not 12? January is the baseline inside the intercept. A 12th dummy would duplicate the intercept exactly: the <i>dummy variable trap</i>.</p>
       </div>
     {/if}

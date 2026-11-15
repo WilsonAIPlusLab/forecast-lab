@@ -8,6 +8,7 @@
 
   // Split conformal, step by step: calibration errors → quantile → band → check on the next 12 months.
   const spec: Spec = { m: 12, trend: true, season: true };
+  const ord = (k: number) => k + (k % 100 >= 11 && k % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][k % 10] ?? 'th');
   let base: { dates: Date[]; y: number[]; f: number[]; start: number } | null = $state.raw(null);
   let n = $state(36);
   let level = $state(80);
@@ -54,7 +55,7 @@
         Plot.rectY(res.cal, Plot.binX({ y: 'count' }, { x: 's', thresholds: 20, fill: (d: any) => (d.s <= res.q ? 'in' : 'out'), insetLeft: 0.5, insetRight: 0.5 } as any)),
         Plot.ruleY([0], { stroke: C.borderStrong }),
         finite ? Plot.ruleX([res.q], { stroke: C.forecast, strokeWidth: 3 }) : null,
-        finite ? Plot.text([res.q], { x: (d: any) => d, frameAnchor: 'top', dy: -16, dx: 6, textAnchor: 'start', text: () => `q = ${res.q.toFixed(2)}% (the ${res.k}th smallest of ${n})`, fill: C.text, fontSize: 12, fontWeight: 600, stroke: C.surface, strokeWidth: 3, paintOrder: 'stroke' } as any) : null,
+        finite ? Plot.text([res.q], { x: (d: any) => d, frameAnchor: 'top', dy: -16, dx: 6, textAnchor: 'start', text: () => `q = ${res.q.toFixed(2)}% (the ${ord(res.k)} smallest of ${n})`, fill: C.text, fontSize: 12, fontWeight: 600, stroke: C.surface, strokeWidth: 3, paintOrder: 'stroke' } as any) : null,
       ].filter(Boolean) as any,
       color: { domain: ['in', 'out'], range: [C.s[0], C.muted] },
     }));
@@ -88,7 +89,7 @@
         {#if Number.isFinite(res.q)}
           <p>Band: forecast ± <b>{res.q.toFixed(2)}%</b>.</p>
         {:else}
-          <p class="warn">With n = {n}, the {level}% rule asks for the {res.k}th smallest of {n} misses, which does not exist: the band is infinite. Small calibration sets cannot support high levels.</p>
+          <p class="warn">With n = {n}, the {level}% rule asks for the {ord(res.k)} smallest of {n} misses, which does not exist: the band is infinite. Small calibration sets cannot support high levels.</p>
         {/if}
         <p class="hint">The guarantee is about the long run: over many calibrate-then-test repetitions, the band covers at least {level}% of the time, if past and future misses are exchangeable. Any single year can miss more.</p>
       </div>

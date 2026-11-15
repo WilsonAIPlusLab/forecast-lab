@@ -97,11 +97,11 @@
 <Explorable title="A forest is a crowd of noisy trees whose average is steady" caption="Each thin line is one tree's one-month-ahead forecast for 2023 onward. Every tree was grown on a different <b>bootstrap sample</b> of 2010–2022 months, so each has its own opinion. The bold line is their <b>average</b>, the forest's forecast. Slide the number of trees up from 1 and watch the spread wash out and the error fall. Switch to <b>all 4 features</b> to see plain bagging: its trees are more alike, so averaging helps a little less. Features: growth 1, 2 and 12 months ago, and the calendar month.">
   {#snippet controls()}
     <div class="seg" role="group" aria-label="Series">
-      {#each Object.entries(SER) as [id, s]}<button class:on={sid === id} onclick={() => (sid = id as Sid)}>{s.label}</button>{/each}
+      {#each Object.entries(SER) as [id, s]}<button class:on={sid === id} aria-pressed={sid === id} onclick={() => (sid = id as Sid)}>{s.label}</button>{/each}
     </div>
     <div class="seg" role="group" aria-label="Features each split may consider">
-      <button class:on={mtry === 2} onclick={() => (mtry = 2)}>2 random features per split</button>
-      <button class:on={mtry === 4} onclick={() => (mtry = 4)}>All 4 (bagging)</button>
+      <button class:on={mtry === 2} aria-pressed={mtry === 2} onclick={() => (mtry = 2)}>2 random features per split</button>
+      <button class:on={mtry === 4} aria-pressed={mtry === 4} onclick={() => (mtry = 4)}>All 4 (bagging)</button>
     </div>
     <label class="sl">Trees <input type="range" min="1" max={NT} bind:value={k} aria-valuetext={`${k} trees`} /> <b>{k}</b></label>
   {/snippet}

@@ -85,7 +85,7 @@
   const pct = (v: number) => `${Math.round(100 * v)}%`;
 </script>
 
-<Explorable title="Two unrelated random walks, one 'significant' regression" caption="Each click draws two <b>independent</b> random walks of 100 steps, x and y, and regresses y on x. The fitted line is red when |t| &gt; 2 (the usual cutoff for 'significant' at about 5%) and green otherwise. The histogram keeps every regression you have run; the black line marks the current one. Then tick <b>Difference both</b> to regress the month-to-month changes instead. Simulated data, seeded so everyone sees the same sequence.">
+<Explorable title="Two unrelated random walks, one 'significant' regression" caption="Each click draws two <b>independent</b> random walks of 100 steps, x and y, and regresses y on x. The fitted line is red when |t| &gt; 2 (the usual cutoff for 'significant' at about 5%) and green otherwise. The histogram keeps every regression you have run; the black line marks the current one. Then tick <b>Difference both</b> to regress the step-to-step changes instead. Simulated data, seeded so everyone sees the same sequence.">
   {#snippet controls()}
     <button class="btn btn-sm" onclick={() => simulate(1)}>New pair</button>
     <button class="btn btn-ghost btn-sm" onclick={() => simulate(100)}>Run 100 more</button>

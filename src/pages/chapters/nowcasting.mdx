@@ -48,7 +48,7 @@ Forecasting the present sounds like a contradiction. It isn't. Official statisti
 | The problem | Example | Why ordinary regression struggles | Tool in this chapter |
 |---|---|---|---|
 | **Many predictors** (*p* large relative to *n*) | 20 or 200 monthly indicators, but only ~400 months of history | Too many coefficients to estimate. The fit chases noise. | Principal components and factor models |
-| **Many series** | 13 retail categories, or 30,000 store × product series | You can't hand-build 30,000 models. Their forecasts must add up. | Loops over lists, hierarchical reconciliation |
+| **Many series** | 13 retail series (11 categories and two totals), or 30,000 store × product series | You can't hand-build 30,000 models. Their forecasts must add up. | Loops over lists, hierarchical reconciliation |
 | **High frequency, mixed timing** | Weekly claims, daily spreads, monthly payrolls, quarterly GDP | Series arrive on different days and at different frequencies | Bridge equations, the release calendar |
 
 ## The release calendar and the ragged edge
@@ -75,6 +75,8 @@ The simplest nowcasting tool is a <Term def="A regression that links a low-frequ
 1. **Aggregate** the fast indicator to the target's frequency. For example, average the weekly claims in each month.
 2. **Regress** the target on the aggregated indicator, using past months.
 3. **Update** the nowcast each time a new weekly print arrives, using the partial-month average.
+
+[Chapter 8](/chapters/dynamic-regression/) found that claims add almost nothing to a one-month-ahead payroll forecast in calm years, but that a same-month nowcast cut the error by about 10% in the Great Recession. A bridge equation turns that nowcast into a tool you update every Thursday.
 
 Our target is the monthly change in payrolls (thousands of jobs, SA). The predictors are last month's change and the change in average weekly claims from last month. Before you play with it, make a prediction about the most famous month in the data.
 
@@ -121,7 +123,7 @@ The verdict in numbers: over 2023–2026 the bridge model's mean absolute miss i
 Two shortcuts in this lab make the evaluation look better than real life:
 <ul>
 <li>We use <strong>today's revised</strong> payrolls and claims. On the day of a nowcast, you would have had first prints and older seasonal factors.</li>
-<li>Researchers who care about this use <em>real-time vintages</em>: what was published on each date. The St. Louis Fed's ALFRED database stores them.</li>
+<li>Researchers who care about this use <em>real-time vintages</em>: what was published on each date. The St. Louis Fed's ALFRED database stores them ([Chapter 1](/chapters/time-series-data/)).</li>
 </ul>
 A model that looks great on revised data can disappoint in real time. Say which kind of data you used.
 </Callout>

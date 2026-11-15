@@ -108,7 +108,7 @@
         </tbody>
       </table>
       <p class="note">The shaded zeros are <b>assumed</b>, not estimated. That triangle of zeros is the identification.</p>
-      <p class="verdict" aria-live="polite">{VERDICT[pos]}{#if sameAsBase && pos === 'last' && swap} <b>Identical to the baseline</b>: swapping the variables above the Fed leaves the policy shock unchanged.{/if}{#if pos === 'first' && swap} <b>Same as before the swap</b>: only the Fed’s position matters for its own shock.{/if}</p>
+      <p class="verdict" aria-live="polite">{VERDICT[pos]}{#if sameAsBase && pos === 'last' && swap}{' '}<b>Identical to the baseline</b>: swapping the variables above the Fed leaves the policy shock unchanged.{/if}{#if pos === 'first' && swap}{' '}<b>Same as before the swap</b>: only the Fed’s position matters for its own shock.{/if}</p>
       <p class="note">Residual correlations: inflation–funds rate {corr[0][2].toFixed(2)}, unemployment–funds rate {corr[1][2].toFixed(2)}. With zero correlations, every ordering would give the same answer.</p>
     </div>
   {/snippet}

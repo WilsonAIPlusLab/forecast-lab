@@ -74,14 +74,14 @@
 <div class="hf">
   <div class="hf-ctrl">
     <div class="seg" role="group" aria-label="Series">
-      {#each SERIES as x}<button class:on={sel.id === x.id} onclick={() => (sel = x)}>{x.label}</button>{/each}
+      {#each SERIES as x}<button type="button" class:on={sel.id === x.id} aria-pressed={sel.id === x.id} onclick={() => (sel = x)}>{x.label}</button>{/each}
     </div>
     {#if s}
       <label class="sl">Stand at <input type="range" min={36} max={s.data.length - 2} bind:value={originIdx} oninput={() => (reveal = false)} aria-label="Forecast origin date" /> <b>{ym(s.data[originIdx].date)}</b></label>
     {/if}
     <button class="btn btn-primary btn-sm" onclick={() => (reveal = !reveal)} disabled={!model || !model.actual.length}>{reveal ? 'Hide the truth' : 'Reveal what happened'}</button>
   </div>
-  <div bind:this={el} class="hf-chart" aria-label="Forecast fan chart of the selected series"></div>
+  <div bind:this={el} class="hf-chart" role="img" aria-label={`Forecast fan chart: ${sel.label}, two years ahead from ${s?.data[originIdx] ? ym(s.data[originIdx].date) : "the chosen date"}`}></div>
   <div class="hf-note" aria-live="polite">
     {#if reveal && covered !== null}
       Reality fell inside the 80% band in <b>{covered}%</b> of the {model?.actual.length} months shown.

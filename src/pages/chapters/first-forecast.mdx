@@ -37,7 +37,7 @@ A common result: people get the trend about right and the seasonal pattern wrong
 The box below is a real R session running **inside your browser**. Nothing to install, no account. Press **▶ Run**. The first run downloads R (about 15 MB, cached afterwards), so give it a few seconds.
 
 <div class="breakout">
-<CodeLab client:load id="ch00-first" title="Forecast U.S. retail sales" r={firstR} py={firstPy} packages={['forecast']} pyPackages={['statsmodels']} goal="Produce a 24-month forecast with uncertainty bands, in six lines of code." />
+<CodeLab client:load id="ch00-first" title="Forecast U.S. retail sales" r={firstR} py={firstPy} packages={['forecast']} pyPackages={['statsmodels']} goal="Produce a 24-month forecast with uncertainty bands, in a few lines of code." />
 </div>
 
 Now press **⏯ Step through**. The code runs one piece at a time, and the panel explains each line and shows every object R creates, with a tiny chart of its values.
@@ -132,7 +132,7 @@ With the bundled data, the printed output reads `ARIMA(2,0,2)(0,1,1)[12] with dr
 
 1. Collect the numbers in a quick poll and show the distribution next to the model's error.
 2. Ask the students who beat the model what they did. Usually they copied last year's seasonal pattern, which is the seasonal naive method of Chapter 3. Here that strategy genuinely wins: copying 2022 month by month misses 2023 by about \$8 billion a month on average, while the explorable's Holt-Winters model misses by about \$14 billion.
-3. Then run the six-line lab together and change `h` and the series live.
+3. Then run the short lab together and change `h` and the series live.
 
 *Expected result:* most hand-drawn forecasts miss the December peak and January drop. A flat line at the 2022 average misses by about \$25 billion a month, about twice the model's error, so smooth drawings lose. Students who copied last year's shape can beat the model. That sets up the course: models are useful because they are disciplined about patterns people overlook, and Chapter 3 shows that a simple benchmark is sometimes hard to beat.
 

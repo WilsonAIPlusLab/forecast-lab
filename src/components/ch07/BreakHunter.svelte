@@ -118,7 +118,7 @@
           {#if which === 'annual'}
             The peak clears the bar: average job growth was about <b>2.2%</b> a year through 2000 and about <b>0.7%</b> after. Slide to 2008: the Great Recession is a deep dip, but not a lasting change in the average.
           {:else}
-            The F-statistic is ordinary everywhere except <b>one month</b>. That is the signature of an extreme <b>outlier</b> (March 2020: claims up 241% in the monthly average), not of a new long-lasting relationship.
+            The F-statistic is ordinary everywhere except <b>one month</b>. That is the signature of an extreme <b>outlier</b> (March 2020, when the monthly average of claims rose about elevenfold), not of a new long-lasting relationship.
           {/if}
         </p>
       </div>

@@ -1,7 +1,7 @@
 // STL: Seasonal-Trend decomposition by Loess (Cleveland, Cleveland, McRae & Terpenning, 1990).
 // A line-by-line port of the netlib Fortran routines (stl.f) that R's stats::stl() calls,
 // including the "jump" interpolation, so results match R's stl() to rounding error
-// (verified natively against R 4.4 for RSXFSN; see the chapter's report).
+// (verified against R 4.4 on log RSXFSN from 2005: components agree to 12 decimal places).
 
 const nextOdd = (x: number) => { const r = Math.round(x); return r % 2 === 0 ? r + 1 : r; };
 

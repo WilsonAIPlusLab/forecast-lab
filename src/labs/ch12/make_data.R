@@ -1,13 +1,13 @@
 # Generates the precomputed data behind the Chapter 13 explorables (not a student lab).
 # Run from the site folder:  "/c/Program Files/R/R-4.4.3/bin/Rscript.exe" src/labs/ch12/make_data.R
 # Writes src/components/ch12/shap_data.json and src/components/ch12/global_local.json.
-# Models and settings are exactly those of Labs 12.3 (SHAP) and 12.4 (global vs local), so the numbers match.
+# Models and settings are exactly those of Labs 13.3 (SHAP) and 13.4 (global vs local), so the numbers match.
 site <- normalizePath("."); setwd(file.path(site, "public"))
 source("r/course.R")
 source(file.path(site, "src/labs/ch12/features_setup.R"))
 out_dir <- file.path(site, "src/components/ch12")
 
-# ── 1. SHAP values from the tuned model (Lab 12.3) ─────────────────────────
+# ── 1. SHAP values from the tuned model (Lab 13.3) ─────────────────────────
 params <- list(eta = 0.1, max_depth = 2, tree_method = "exact", nthread = 1)
 fit <- xgb.train(params = params, nrounds = 38, data = xgb.DMatrix(as.matrix(train[, features]), label = train$growth))
 full <- d[!is.na(d$growth), ]
@@ -36,7 +36,7 @@ shap_data <- list(
               x = lapply(features, function(f) bees[[f]])))
 jsonlite::write_json(shap_data, file.path(out_dir, "shap_data.json"), auto_unbox = TRUE, digits = 6, null = "null", na = "null")
 
-# ── 2. Global vs local across history lengths (Lab 12.4) ───────────────────
+# ── 2. Global vs local across history lengths (Lab 13.4) ───────────────────
 cats <- c(`Motor vehicles` = "441", Furniture = "442", Electronics = "443", `Building materials` = "444",
           `Food & beverage stores` = "445", `Health & personal care` = "446", `Gas stations` = "447",
           Clothing = "448", `Sporting goods & hobby` = "451", `General merchandise` = "452",

@@ -75,7 +75,7 @@
       <div class="stat"><span class="stat-v">{f1(m.RMSE)}</span><span class="stat-l"><b>RMSE</b>: squares errors first, so big misses dominate</span></div>
       <div class="stat"><span class="stat-v">{f1(m.MAPE)}%</span><span class="stat-l"><b>MAPE</b>: miss as a % of the actual value</span></div>
       <div class="stat"><span class="stat-v" class:neg={Math.abs(m.ME) > 2}>{m.ME > 0 ? '+' : ''}{f1(m.ME)}</span><span class="stat-l"><b>ME (bias)</b>: positive means you forecast too low on average</span></div>
-      <div class="ratio">RMSE ÷ MAE = <b>{(m.RMSE / Math.max(m.MAE, 1e-9)).toFixed(2)}</b><br /><span>1.00 means all misses are equal; higher means a few big ones.</span></div>
+      <div class="ratio">RMSE ÷ MAE = <b>{m.MAE > 0 ? (m.RMSE / m.MAE).toFixed(2) : '—'}</b><br /><span>1.00 means all misses are equal; higher means a few big ones.</span></div>
     </div>
   {/snippet}
   <div bind:this={el}></div>

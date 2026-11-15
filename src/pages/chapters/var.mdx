@@ -117,7 +117,7 @@ Granger tests say *whether* there is a link. An <Term def="The path a variable f
   question="The VAR is hit by a surprise **increase** in the funds rate. What does inflation do in the **first two quarters**?"
   options={['Falls right away', 'Barely moves', 'Rises']}
   answer={2}
-  explain="It rises: by 0.28 percentage points one quarter later, and the 90% band (0.09 to 0.43) excludes zero. Only after that does inflation drift lower. This is the famous **price puzzle**; we explain it below. Unemployment, meanwhile, barely moves for a year."
+  explain="It rises: by 0.28 percentage points one quarter later, and the 90% band in the explorable below (0.09 to 0.43) excludes zero. Only after that does inflation drift lower. This is the famous **price puzzle**; we explain it below. Unemployment, meanwhile, barely moves for a year."
 />
 
 <div class="breakout">
@@ -130,7 +130,7 @@ Read the funds-rate shock carefully, because this is the chapter's question. A s
 - **Inflation:** up 0.28 points in the next quarter, then, from about the sixth quarter on, roughly 0.1 point *below* baseline. That later decline is not statistically distinguishable from zero in this small VAR.
 - **The funds rate itself:** the hike fades by half within two quarters and has almost disappeared after three years (0.04 points left).
 
-Stock and Watson find the same slow build with these three variables, using a structural VAR in which the Fed follows a Taylor rule: after a one-point hike, inflation eventually falls by about 0.3 points and unemployment rises by about 0.2 points, with most of the action in the third year.<sup>[3](#refs)</sup>
+Stock and Watson find the same slow build with these three variables, using a structural VAR in which the Fed follows a backward-looking Taylor rule: after a one-point hike, inflation eventually falls by about 0.3 points and unemployment rises by about 0.2 points, with most of the action in the third year.<sup>[3](#refs)</sup>
 
 <Callout type="pitfall" title="The price puzzle: why a hike seems to raise inflation">
 In the early 1990s Christopher Sims noticed that small VARs often show prices *rising* after a monetary tightening.<sup>[5](#refs)</sup> His explanation: the Fed is forward-looking. It raises rates when it sees inflation coming, using information (commodity prices, surveys, staff forecasts) that a three-variable VAR does not contain. The VAR cannot tell a "hike because inflation is coming" apart from a "surprise hike", so some of the inflation that was coming anyway gets blamed on the hike. The standard remedy is to add commodity prices to the VAR. Try it: add `400 * diff(log(q("PPIACO")))` as a fourth variable before `ffr`. In our sample this shrinks the puzzle only a little (0.28 to 0.25 points), a reminder that a small VAR's "policy shock" is not a clean experiment.
