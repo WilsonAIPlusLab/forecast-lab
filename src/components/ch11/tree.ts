@@ -1,4 +1,4 @@
-// Chapter 11: a small, dependency-free CART regression tree + random forest for the explorables.
+// Chapter 12: a small, dependency-free CART regression tree + random forest for the explorables.
 // Splits minimise the sum of squared errors (SSE), exactly the rule rpart / randomForest use for regression.
 
 export type Rng = () => number;

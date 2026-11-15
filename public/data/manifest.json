@@ -709,5 +709,83 @@
   "n": 2063,
   "start": "1854-12-01",
   "end": "2026-10-01"
+ },
+ "bank_marketing": {
+  "file": "bank_marketing.csv",
+  "cols": [
+   "age",
+   "job",
+   "marital",
+   "education",
+   "default",
+   "housing",
+   "loan",
+   "contact",
+   "month",
+   "day_of_week",
+   "duration",
+   "campaign",
+   "pdays",
+   "previous",
+   "poutcome",
+   "emp_var_rate",
+   "cons_price_idx",
+   "cons_conf_idx",
+   "euribor3m",
+   "nr_employed",
+   "y"
+  ],
+  "n": 4119,
+  "lazy": true,
+  "source": "UCI Bank Marketing (Moro, Cortez & Rita 2014), 4,119 clients, CC BY 4.0"
+ },
+ "bike_day": {
+  "file": "bike_day.csv",
+  "cols": [
+   "instant",
+   "dteday",
+   "season",
+   "yr",
+   "mnth",
+   "holiday",
+   "weekday",
+   "workingday",
+   "weathersit",
+   "temp",
+   "atemp",
+   "hum",
+   "windspeed",
+   "casual",
+   "registered",
+   "cnt"
+  ],
+  "n": 731,
+  "lazy": true,
+  "source": "UCI Bike Sharing, Capital Bikeshare daily 2011-12 (Fanaee-T & Gama 2013), CC BY 4.0"
+ },
+ "bike_hour": {
+  "file": "bike_hour.csv",
+  "cols": [
+   "instant",
+   "dteday",
+   "season",
+   "yr",
+   "mnth",
+   "hr",
+   "holiday",
+   "weekday",
+   "workingday",
+   "weathersit",
+   "temp",
+   "atemp",
+   "hum",
+   "windspeed",
+   "casual",
+   "registered",
+   "cnt"
+  ],
+  "n": 17379,
+  "lazy": true,
+  "source": "UCI Bike Sharing, Capital Bikeshare hourly 2011-12 (Fanaee-T & Gama 2013), CC BY 4.0"
  }
 }

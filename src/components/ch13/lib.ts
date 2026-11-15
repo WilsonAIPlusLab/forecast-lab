@@ -1,4 +1,4 @@
-// Chapter 13 helpers: small linear algebra (OLS, PCA), date utilities, data builders.
+// Chapter 14 helpers: small linear algebra (OLS, PCA), date utilities, data builders.
 // Everything here runs in the browser on bundled FRED CSVs, so explorables respond instantly.
 import { loadSeries, holt, type Pt } from '../../lib/ts';
 

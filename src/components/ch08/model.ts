@@ -1,4 +1,4 @@
-// Chapter 8 shared data + binary-outcome toolkit (pure JS, instant).
+// Chapter 9 shared data + binary-outcome toolkit (pure JS, instant).
 // Mirrors the labs: spread = GS10 − TB3MS (monthly averages, pct. points), target = USREC at t + 12.
 import { loadSeries } from '../../lib/ts';
 

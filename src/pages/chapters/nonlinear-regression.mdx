@@ -1,0 +1,544 @@
+---
+layout: ../../layouts/Chapter.astro
+slug: nonlinear-regression
+minutes: 75
+build:
+  - A campaign targeting plan for a real bank (gain curve, lift and profit) that says whom to call and what it will earn
+  - A full classification scorecard built by hand (confusion matrix, precision, recall, F1, ROC/AUC, gains) and a leakage audit
+  - A bike-demand forecast with count-model prediction intervals and a coverage audit that exposes the Poisson trap
+skills: ['glm(family = binomial)', logit, probit, odds ratio, marginal effect, confusion matrix, precision/recall, ROC/AUC, gain & lift, 'glm(family = poisson)', IRR, overdispersion, quasipoisson, glm.nb]
+---
+import CodeLab from '../../components/CodeLab.svelte';
+import Callout from '../../components/Callout.astro';
+import KeyIdea from '../../components/KeyIdea.astro';
+import Predict from '../../components/Predict.svelte';
+import Term from '../../components/Term.astro';
+import InstructorKit from '../../components/InstructorKit.astro';
+import LineBreaks from '../../components/nonlinear/LineBreaks.svelte';
+import OddsTranslator from '../../components/nonlinear/OddsTranslator.svelte';
+import MarginalEffects from '../../components/nonlinear/MarginalEffects.svelte';
+import CampaignPlanner from '../../components/nonlinear/CampaignPlanner.svelte';
+import CountsLab from '../../components/nonlinear/CountsLab.svelte';
+import BikeForecast from '../../components/nonlinear/BikeForecast.svelte';
+import setupBankR from '../../labs/nonlinear/setup_bank.R?raw';
+import setupBankPy from '../../labs/nonlinear/setup_bank.py?raw';
+import lpmR from '../../labs/nonlinear/lpm.R?raw';
+import lpmPy from '../../labs/nonlinear/lpm.py?raw';
+import oddsR from '../../labs/nonlinear/odds.R?raw';
+import oddsPy from '../../labs/nonlinear/odds.py?raw';
+import classifyR from '../../labs/nonlinear/classify.R?raw';
+import classifyPy from '../../labs/nonlinear/classify.py?raw';
+import leakR from '../../labs/nonlinear/leakage.R?raw';
+import leakPy from '../../labs/nonlinear/leakage.py?raw';
+import countsR from '../../labs/nonlinear/counts.R?raw';
+import countsPy from '../../labs/nonlinear/counts.py?raw';
+import bikefcR from '../../labs/nonlinear/bikefc.R?raw';
+import bikefcPy from '../../labs/nonlinear/bikefc.py?raw';
+import exLogitR from '../../labs/nonlinear/ex_logit.R?raw';
+import exLogitSolR from '../../labs/nonlinear/ex_logit_solution.R?raw';
+import exLogitCheckR from '../../labs/nonlinear/ex_logit_check.R?raw';
+import exLogitPy from '../../labs/nonlinear/ex_logit.py?raw';
+import exLogitSolPy from '../../labs/nonlinear/ex_logit_solution.py?raw';
+import exLogitCheckPy from '../../labs/nonlinear/ex_logit_check.py?raw';
+import exPoisR from '../../labs/nonlinear/ex_pois.R?raw';
+import exPoisSolR from '../../labs/nonlinear/ex_pois_solution.R?raw';
+import exPoisCheckR from '../../labs/nonlinear/ex_pois_check.R?raw';
+import exPoisPy from '../../labs/nonlinear/ex_pois.py?raw';
+import exPoisSolPy from '../../labs/nonlinear/ex_pois_solution.py?raw';
+import exPoisCheckPy from '../../labs/nonlinear/ex_pois_check.py?raw';
+
+<p class="lede">Two managers, two forecasts. A bank's marketing lead has a list of clients and a budget for phone calls: <strong>who is likely to say yes to a term deposit, and how far down the list should the team call?</strong> A bike-share operations manager must put bikes and staff in place for tomorrow: <strong>how many rentals should she expect, and how sure can she be?</strong> Neither answer is a number on a smooth scale. The first is yes or no. The second is a count: 0, 1, 2, … bikes. Chapter 4's straight line handles both badly. This chapter bends it.</p>
+
+You will work with two real, openly licensed datasets. The first comes from a Portuguese bank's telephone marketing campaigns, run between May 2008 and November 2010 and published by Moro, Cortez and Rita.<sup>[1](#refs)</sup> The second is two years of rentals from Capital Bikeshare in Washington, D.C., 2011–2012, published by Fanaee-T and Gama.<sup>[2](#refs)</sup> Logistic regression gets most of the chapter, because yes/no forecasts are everywhere in business: will this customer buy, churn, default, click? Poisson regression then does the same job for counts.
+
+<KeyIdea>Keep the regression's straight line, but put it inside a curve. For a yes/no outcome the line predicts the <strong>log-odds</strong> and the logistic curve turns it into a probability; for a count the line predicts the <strong>log</strong> of the expected count and the exponential turns it into a positive number.</KeyIdea>
+
+## Part 1. Will this client say yes?
+
+The bank file holds **4,119 clients**, a 10% random sample that the dataset's authors drew from the full file of 41,188 contacts.<sup>[1](#refs)</sup> For each client you know facts available *before* the call (age, job, the phone type, how many calls this campaign has made to the client, counting this one, the outcome of any previous campaign, and the economic climate that day, such as the 3-month <Term def="The Euro Interbank Offered Rate: the average interest rate at which large European banks lend to one another. The 3-month Euribor is a benchmark for short-term euro interest rates.">Euribor</Term> interest rate) and one outcome, `y`: did the client subscribe to a term deposit? Only **451 of 4,119 (10.9%)** did.
+
+<Callout type="pitfall" title="No dates, so no time split">
+Chapter 3 insisted that the test set must come <em>after</em> the training set. This file has no dates: UCI drew the sample at random from a file ordered by date, so the row order carries no information about time.<sup>[1](#refs)</sup> The honest substitute is a <strong>stratified</strong> split: set aside 30% of the subscribers and 30% of the non-subscribers as a test set, fit on the rest, and treat the test clients as "the next campaign's call list". That answers <em>"how well will the model rank new clients from the same campaigns?"</em> It is kinder than a real next-campaign forecast, in which the economy (and the bank's script) may have changed. Keep that caveat in mind whenever you read a test score below.
+</Callout>
+
+### Why a straight line breaks
+
+The obvious first move is Chapter 4's: code yes as 1 and no as 0 and run ordinary least squares. The fitted value is then read as the probability of a yes. This is the <Term def="An ordinary least-squares regression whose dependent variable is 0 or 1. Its fitted values are read as probabilities.">linear probability model</Term> (LPM). It is simple, and its slopes are easy to read: "one more point of Euribor lowers the chance of a yes by 5 percentage points." So what goes wrong?
+
+<Predict client:load
+  question="A straight line is fitted through 0/1 data on clients. Can it predict a probability **below 0%** for some clients, even though no client can be less likely than certain not to subscribe?"
+  options={['No, least squares keeps fitted values between the smallest and largest y', 'Yes: a straight line has no floor or ceiling', 'Only if the sample is very small']}
+  answer={1}
+  explain="A straight line keeps going. Fitted on the five pre-call facts used below, the LPM gives **70** of the 2,882 training clients a negative chance of saying yes, as low as −8.3%. In the explorer, switch to **+ month & weekday** and 507 of the 4,119 clients get an impossible probability."
+/>
+
+<div class="breakout">
+<LineBreaks client:load />
+</div>
+
+The explorer shows the three problems that every econometrics text lists for the LPM:<sup>[6](#refs)</sup>
+
+1. **Forecasts outside [0, 1].** Fitted to all 4,119 clients with the five pre-call facts, the LPM gives 47 of them a negative probability; add the month and weekday of the call and the count jumps to 507. The logit, whatever you give it, never leaves the interval.
+2. **Heteroskedasticity by construction.** A 0/1 outcome with probability $p$ has variance $p(1-p)$. Clients with different $p$ have different error variances, so the usual OLS standard errors are wrong (robust ones are needed).
+3. **Constant marginal effects.** A straight line says a given change in a predictor moves the probability by the same amount for every client. The gold dots say otherwise: the share of yeses creeps up among low-score clients and climbs steeply among high-score ones, just as the S-curve does.
+
+Now in code. The lab fits the LPM, a **logit** and a **probit** with the same five pre-call facts on the training clients, and counts the impossible predictions.
+
+<div class="breakout">
+<CodeLab client:load id="nl-lpm" title="LPM vs logit vs probit on bank clients" r={lpmR} py={lpmPy}
+  pyPackages={['statsmodels', 'scikit-learn']}
+  goal="Fit three models for a 0/1 outcome, count the predictions outside [0, 1], and compare how well each ranks the test clients." />
+</div>
+
+The lab ends with a surprise worth remembering. On the 1,237 test clients, the three models *rank* clients almost identically: the share of (subscriber, non-subscriber) pairs put in the right order is 0.733 for the LPM, 0.735 for the logit and 0.735 for the probit. The LPM's flaw is not whom it puts first. It is that its outputs are not usable as probabilities, and probabilities are what a business plan multiplies by money.
+
+<Callout type="math" title="The linear probability model and its variance">
+For a 0/1 outcome, $E[y \mid x] = P(y = 1 \mid x)$, so OLS of $y$ on $x$ models the probability directly:
+
+$$
+P(y_i = 1 \mid x_i) = \beta_0 + \beta_1 x_{1i} + \dots + \beta_k x_{ki}.
+$$
+
+Because $y_i$ is Bernoulli, $\operatorname{Var}(y_i \mid x_i) = p_i(1 - p_i)$, which changes from client to client: the errors are heteroskedastic by construction. Nothing in the formula stops $\hat p_i$ from leaving $[0, 1]$, and $\partial p / \partial x_j = \beta_j$ is the same at every point.
+</Callout>
+
+### Odds, log-odds and the logistic curve
+
+The fix is to let the straight line predict something that *can* run from $-\infty$ to $+\infty$, then translate it back into a probability. That something is the <Term def="log(p / (1 − p)), also called the logit. Probability 0.5 is log-odds 0; probabilities near 0 or 1 have large negative or positive log-odds.">log-odds</Term>. Three scales say the same thing:
+
+- **Probability** $p$: between 0 and 1. A 20% chance.
+- **<Term def="p / (1 − p): how many times more likely the event is to happen than not. Probability 0.2 is odds of 0.25, or 1 to 4.">Odds</Term>** $p/(1-p)$: between 0 and $\infty$. A 20% chance is odds of 0.25, "1 to 4". Gamblers and epidemiologists talk this way.
+- **Log-odds** $\log\frac{p}{1-p}$: any number. A 20% chance is $\log 0.25 = -1.39$.
+
+The **logistic function** $p = \frac{1}{1 + e^{-z}}$ runs the translation backward: it takes any log-odds $z$ and returns a probability between 0 and 1. That is the S-curve.
+
+The logistic regression (or **logit**) model puts the straight line on the log-odds scale. Each coefficient therefore *adds* a fixed amount to the log-odds, which *multiplies* the odds by a fixed factor $e^{b}$, the <Term def="exp(b): the factor by which the odds p/(1 − p) are multiplied when the predictor rises by one unit, holding the others fixed.">odds ratio</Term>. What it does to the probability depends on where you start.
+
+<Predict client:load
+  question="A 40-year-old client, reached on a mobile phone, never contacted before, Euribor at 4.9%: the model gives her a **5.6%** chance of saying yes. A client identical except that the bank's *previous* campaign with her ended in success has **6.4 times the odds**. What is her probability?"
+  options={['About 36% (6.4 × 5.6%)', 'About 28%', 'About 12%', 'About 6.4%']}
+  answer={1}
+  explain="Multiply the **odds**, not the probability. 5.6% is odds of 0.056/0.944 ≈ 0.059. Times 6.4 gives odds of about 0.38, which is a probability of 0.38/1.38 ≈ **28%** (the lab prints 27.7%). Multiplying the probability by 6.4 would overshoot, and for a client starting at 20% it would give an impossible 128%."
+/>
+
+<div class="breakout">
+<OddsTranslator client:load />
+</div>
+
+<Callout type="math" title="The logit model and its likelihood">
+The logit model says
+
+$$
+P(y_i = 1 \mid x_i) = p_i = \frac{1}{1 + e^{-(\beta_0 + \beta_1 x_{1i} + \dots + \beta_k x_{ki})}}
+\quad\Longleftrightarrow\quad
+\log\frac{p_i}{1 - p_i} = \beta_0 + \beta_1 x_{1i} + \dots + \beta_k x_{ki}.
+$$
+
+Raising $x_j$ by one unit adds $\beta_j$ to the log-odds, so it multiplies the odds by the **odds ratio**
+
+$$
+\text{OR}_j = \frac{\text{odds}(x_j + 1)}{\text{odds}(x_j)} = e^{\beta_j}.
+$$
+
+The coefficients are chosen by **maximum likelihood**: make the observed yeses and noes as probable as possible. The log-likelihood is
+
+$$
+\ell(\beta) = \sum_{i=1}^{n} \Big[ y_i \log p_i + (1 - y_i)\log(1 - p_i) \Big].
+$$
+
+It has no closed-form maximum. R's `glm()` uses iteratively reweighted least squares (IRLS), a version of Newton's method; the explorers on this page run the same algorithm in your browser and match `glm()` to at least six decimals. The **probit** model replaces the logistic curve with the normal cumulative distribution, $p_i = \Phi(x_i'\beta)$; its coefficients are smaller, typically by a factor of about 1.6 to 1.8, and its probabilities are nearly identical.<sup>[4](#refs)</sup>
+</Callout>
+
+### Fit it with `glm()` and read the odds ratios
+
+<div class="breakout">
+<CodeLab client:load id="nl-logit" title="Odds ratios, confidence intervals and marginal effects" r={oddsR} py={oddsPy} setup={setupBankR} pySetup={setupBankPy}
+  pyPackages={['statsmodels']}
+  goal="Fit the logit with glm(), turn coefficients into odds ratios with 95% intervals, and compute average marginal effects by hand." />
+</div>
+
+Here is the output as a marketing analyst would put it in a memo (fitted on 2,882 training clients):
+
+| Pre-call fact | Odds ratio | 95% interval | In words, holding the other facts fixed |
+|---|---|---|---|
+| Previous campaign: success (vs never contacted) | **6.41** | 4.04 to 10.17 | The single strongest signal: about six times the odds |
+| Previous campaign: failure (vs never contacted) | 0.77 | 0.53 to 1.10 | Interval includes 1: no clear difference |
+| Euribor rate, per percentage point | 0.66 | 0.60 to 0.71 | Each point higher cuts the odds by about a third |
+| Calls to this client in this campaign (counting the last one), per call | 0.91 | 0.84 to 0.99 | Each extra call goes with about 9% lower odds (but see the leakage section) |
+| Landline instead of mobile | 0.68 | 0.47 to 0.97 | About a third lower odds on a landline |
+| Age, per year | 1.020 | 1.009 to 1.031 | Ten years older: $1.020^{10} \approx 1.21$, about 21% higher odds |
+
+<Callout type="pitfall" title="An odds ratio is an association, not a lever">
+The Euribor odds ratio does not mean the bank can raise subscriptions by lowering interest rates. The calls in this file happened at two very different rate levels (near 1% and near 5%; the marginal-effects explorer below shows the gap), and many other things differed between those periods: the economy, the competition, how the bank chose whom to call. As in Chapter 4, a coefficient describes how the outcome moved with a predictor in this sample. It is useful for ranking clients; it is not a controlled experiment.
+</Callout>
+
+### Marginal effects are not constant
+
+Managers ask in percentage points, not odds: *"how much does one more point of Euribor change the chance of a yes?"* For a logit the answer depends on where you stand on the S-curve. Drag the tangent.
+
+<div class="breakout">
+<MarginalEffects client:load />
+</div>
+
+For a never-contacted 40-year-old on a mobile phone, one more point of Euribor lowers the chance of a yes by about 8 percentage points when rates are near 0.7% (where her probability is 26%), but by only about 2 points near 4.9% (where it is 5.6%). Same coefficient, $b = -0.421$; very different effects.
+
+Two summaries are common, and they can disagree. The <Term def="The average, over all clients in the sample, of each client's own marginal effect b·p(1 − p). The usual way to report a logit effect in percentage points.">average marginal effect</Term> (AME) computes each client's slope and averages them. The <Term def="The marginal effect computed once, for a hypothetical client whose every predictor is at its sample mean.">marginal effect at the mean</Term> (MEM) computes the slope for one hypothetical "average client". For Euribor the AME is **−3.41** percentage points per point and the MEM is **−2.92**; individual clients' effects range from about −10.5 to −0.1. The mean rate, 3.61%, sits in the empty gap between the two clusters of calls (only 2 of 4,119 calls were made at rates between 2% and 4%), and the "average client" is 3.6% "past success". The MEM describes a client who does not exist, which is why most applied work reports the AME.
+
+For a yes/no predictor, compute a *discrete change* instead: switching every training client from "never contacted" to "past success" raises the predicted probability by **25.7 percentage points** on average.
+
+<Callout type="math" title="The marginal effect p(1 − p)β, and the divide-by-4 rule">
+Differentiate the logistic curve with respect to $x_j$:
+
+$$
+\frac{\partial p_i}{\partial x_{ji}} = \beta_j\, p_i (1 - p_i).
+$$
+
+The factor $p(1-p)$ is largest at $p = 0.5$, where it equals $1/4$. So $\beta_j / 4$ is the **largest** possible marginal effect, a quick upper bound known as the divide-by-4 rule.<sup>[9](#refs)</sup> The two summaries are
+
+$$
+\text{AME}_j = \frac{1}{n}\sum_{i=1}^{n} \beta_j\, \hat p_i (1 - \hat p_i),
+\qquad
+\text{MEM}_j = \beta_j\, \bar p (1 - \bar p), \quad \bar p = \Lambda(\bar x'\hat\beta),
+$$
+
+where $\Lambda$ is the logistic function. For a 0/1 predictor, use the discrete change $\frac{1}{n}\sum_i \big[\hat p_i(x_j = 1) - \hat p_i(x_j = 0)\big]$.
+</Callout>
+
+<Predict client:load kind="check"
+  question="A logit coefficient is −0.42 per point of Euribor. What is the **largest** change in probability one more point could cause, for any client?"
+  options={['−42 percentage points', 'About −10.5 percentage points', 'About −4.2 percentage points', 'It cannot be bounded']}
+  answer={1}
+  explain="By the divide-by-4 rule, the slope βp(1 − p) is steepest at p = 0.5, where it equals β/4 = −0.42/4 ≈ −0.105, about **−10.5 percentage points**. Most clients in this file have probabilities near 5–15%, far from 0.5, so their effects are much smaller: the AME is −3.4 points."
+/>
+
+### From probability to decision: the confusion matrix
+
+A probability is not yet a call list. To act, you pick a <Term def="The probability above which a client is classified as a 'yes' (here: gets a phone call).">threshold</Term> and call everyone above it. Each threshold produces a <Term def="A 2×2 table that counts true positives, false positives, false negatives and true negatives for one threshold.">confusion matrix</Term>:
+
+| | Actually subscribed | Actually said no |
+|---|---|---|
+| **Predicted yes (called)** | True positive (TP): a reached buyer | False positive (FP): a wasted call |
+| **Predicted no (not called)** | False negative (FN): a missed buyer | True negative (TN): a call rightly skipped |
+
+Five metrics summarize it:
+
+| Metric | Formula | The question it answers |
+|---|---|---|
+| **Accuracy** | (TP + TN) / all | What share of clients did we classify correctly? |
+| **Precision** | TP / (TP + FP) | Of the clients we called, what share subscribed? |
+| **Recall** (sensitivity) | TP / (TP + FN) | Of all the subscribers, what share did we reach? |
+| **Specificity** | TN / (TN + FP) | Of all the non-subscribers, what share did we leave alone? |
+| **F1** | $2 \cdot \frac{\text{precision} \cdot \text{recall}}{\text{precision} + \text{recall}}$ | One number that is high only if both precision and recall are |
+
+<Predict client:load
+  question="A model that **never** predicts a subscription, for any client, is scored on the 1,237 test clients. What is its accuracy?"
+  options={['About 11%', 'About 50%', 'About 89%', 'It cannot be computed']}
+  answer={2}
+  explain="**89.0%**: 1,101 of the 1,237 test clients said no, and 'always no' gets every one of them right. It also finds zero subscribers and earns nothing. This is the **accuracy paradox**: when one outcome is rare, accuracy rewards ignoring it. Our logit at the default 0.5 threshold scores 90.1%, barely better, while missing 110 of the 136 subscribers."
+/>
+
+<div class="breakout">
+<CodeLab client:load id="nl-classify" title="Confusion matrix, metrics, ROC/AUC and a gain table, by hand" r={classifyR} py={classifyPy} setup={setupBankR} pySetup={setupBankPy}
+  pyPackages={['statsmodels', 'scikit-learn']}
+  goal="Score the logit on the test clients at two thresholds, expose the accuracy paradox, trace the ROC curve, compute AUC and a decile gain table, and check how much AUC varies across splits." />
+</div>
+
+| Rule (1,237 test clients) | Called | TP | Accuracy | Precision | Recall | F1 | Profit |
+|---|---|---|---|---|---|---|---|
+| Logit, threshold 0.5 | 38 | 26 | **90.1%** | **68.4%** | 19.1% | 0.299 | \$1,110 |
+| Logit, threshold 0.10 | 400 | 93 | 71.7% | 23.2% | **68.4%** | **0.347** | **\$2,650** |
+| Call everyone | 1,237 | 136 | 11.0% | 11.0% | 100% | 0.198 | \$615 |
+| Always say no | 0 | 0 | 89.0% | — | 0% | — | \$0 |
+
+The 0.5 threshold wins on accuracy and precision and loses on the thing the business cares about. The profit column assumes, for illustration, that a call costs \$5 and a new deposit is worth \$50 to the bank. Then a call pays off when $p \times 50 \gt 5$, that is, when $p \gt 0.10$: a threshold set by economics, not by statistics.
+
+<Callout type="business" title="Choose the threshold from costs, not habit">
+With a cost $c$ per call and a value $V$ per success, call a client when $p \cdot V \gt c$, so the break-even threshold is $p^\ast = c / V$. The 50% default is right only if a missed buyer and a wasted call cost the same, which is almost never true. Chapter 9 uses the same logic for recession warnings, where the costs are a false alarm and a missed recession.
+</Callout>
+
+### Plan the campaign: ROC, AUC, gains and lift
+
+A threshold is one point. To see every possible threshold at once, rank the clients from most to least promising and walk down the list. Two curves come out of that walk:
+
+- The <Term def="Receiver operating characteristic curve: true-positive rate (recall) against false-positive rate (1 − specificity) for every threshold.">ROC curve</Term> plots the share of buyers reached against the share of non-buyers called. The area under it, the <Term def="Area under the ROC curve: the probability that a randomly chosen subscriber gets a higher score than a randomly chosen non-subscriber. 0.5 = coin flip, 1 = perfect ranking.">AUC</Term>, is the probability that a random subscriber outranks a random non-subscriber.
+- The <Term def="Cumulative share of all positives (buyers) found when you act on the top x% of the ranked list. Also called a cumulative gains or lift chart.">gain curve</Term> plots the share of buyers reached against the share of the *whole list* called. That is the chart a marketing manager reads: "call 30% of the list, reach 65% of the buyers". <Term def="Gain divided by the share called: how many times better than random calling. Lift 2 at 30% means the top 30% holds twice its share of buyers.">Lift</Term> divides that gain by the share called.
+
+<div class="breakout">
+<CampaignPlanner client:load />
+</div>
+
+What the planner shows for the honest, before-the-call model:
+
+- **A call budget is a threshold.** "Call the top 20%" is the same decision as "call everyone with a predicted probability of at least 17.8%".
+- **Gains.** Calling the top 10% of the list reaches 33% of subscribers (lift 3.3); the top 20% reaches 53% (lift 2.6); the top 30% reaches 65% (lift 2.2).
+- **Profit.** At \$5 per call and \$50 per deposit, profit peaks at **\$2,675** by calling the top 31% of the list (385 clients, cut-off probability 11.8%, close to the 10% break-even). Calling everyone earns \$615.
+- **AUC 0.735**, Gini 0.470. Credit-scoring teams often report the <Term def="2 × AUC − 1: a rescaling of AUC so that 0 is random ranking and 1 is perfect. Common in credit scoring.">Gini coefficient</Term> instead of AUC; it carries the same information.
+
+<Callout type="pitfall" title="One test set is one draw">
+Our test set holds only 136 subscribers. The classification lab reruns the whole experiment on 50 random stratified splits: the middle 90% of test AUCs runs from **0.732 to 0.793** (median 0.759). Our deterministic split happens to sit near the bottom of that range. Report a range, as Chapter 3 recommended for time-series cross-validation.
+</Callout>
+
+<Callout type="math" title="ROC, AUC, gains and Gini in formulas">
+Sort clients by $\hat p$ from highest to lowest, and let $\text{TP}(k)$ be the number of subscribers among the top $k$. With $n_1$ subscribers and $n_0$ non-subscribers:
+
+$$
+\text{TPR}(k) = \frac{\text{TP}(k)}{n_1}, \qquad \text{FPR}(k) = \frac{k - \text{TP}(k)}{n_0}, \qquad \text{Gain}(k) = \text{TPR}(k), \qquad \text{Lift}(k) = \frac{\text{TPR}(k)}{k/n}.
+$$
+
+The ROC curve plots TPR against FPR; the gain curve plots TPR against $k/n$. The AUC equals the Mann–Whitney probability that a random positive outranks a random negative:<sup>[7](#refs)</sup>
+
+$$
+\text{AUC} = P(\hat p_{\text{yes}} \gt \hat p_{\text{no}}) = \frac{\sum_{i:\,y_i=1} r_i - n_1(n_1+1)/2}{n_1\, n_0},
+$$
+
+where $r_i$ is client $i$'s rank among all scores (lowest = 1). The Gini coefficient is $2\,\text{AUC} - 1$.
+</Callout>
+
+### Too good to be true: the leakage trap
+
+The bank's file has one more column we have not used: `duration`, the length of the call in seconds. Add it to the model and see what happens.
+
+<Predict client:load
+  question="The honest model's test AUC is 0.735. You add one column, the **length of the call**, and refit. What happens to the test AUC?"
+  options={['It barely moves', 'It rises to about 0.78', 'It jumps above 0.9', 'It falls, because the model overfits']}
+  answer={2}
+  explain="It jumps to **0.915**. A long call is partly a *record* of a yes: agreeing to a deposit takes a conversation, and not one of the 407 calls shorter than a minute ended in a subscription. But the call's length is unknown when you decide whom to call. The 'miracle' model cannot be used for the decision it was built for."
+/>
+
+<div class="breakout">
+<CodeLab client:load id="nl-leak" title="The leakage audit: what call duration does to AUC" r={leakR} py={leakPy} setup={setupBankR} pySetup={setupBankPy}
+  pyPackages={['statsmodels', 'scikit-learn']}
+  goal="Add the after-the-call variable duration to the logit, watch the test AUC jump from 0.735 to 0.915, and explain why the model is useless for targeting." />
+</div>
+
+The dataset's own documentation says it plainly: `duration` "highly affects the output target", is not known before a call is made, and should be included only for benchmark purposes and discarded for a realistic predictive model.<sup>[1](#refs)</sup> The median subscriber's call lasted 458 seconds against 165 for everyone else. Switch the campaign planner to **+ call duration** and every metric improves; that improvement is fake. This is the cross-sectional version of Chapter 3's look-ahead leakage.<sup>[10](#refs)</sup>
+
+**Before you trust any predictor, ask one question: would I know this value at the moment I make the forecast?** If not, it is leakage, however good the AUC looks.
+
+Leakage can also be quieter. Each row records a client's *last* call, and `campaign` counts the calls to that client, the last one included. A client who says yes is not called again, while one who keeps saying no may be called many times, so a high count partly records earlier refusals. When you decide whether to dial, you do know how many calls you have made, so the column passes the test. But its odds ratio of 0.91 reflects how the bank stopped calling as well as how persistence works, so do not read it as "each extra call lowers the chance".
+
+## Part 2. How many bikes tomorrow?
+
+Now the second manager. Capital Bikeshare's daily file has **731 days** (January 1, 2011 to December 31, 2012); the hourly file has one row for each hour with data, 17,379 in all. `cnt` counts every rental, casual and registered.<sup>[2](#refs)</sup> Counts have three features that a bell curve lacks: they are whole numbers, they cannot be negative, and their spread grows with their level. A quiet hour at 4 a.m. varies by a few bikes; a rush hour varies by hundreds.
+
+### Counts are different
+
+The <Term def="A distribution for counts of events in a fixed interval: P(Y = k) = e^(−λ) λ^k / k!. Its mean and variance both equal λ.">Poisson distribution</Term> is the starting point for counts. It has a single parameter, λ, which is both its **mean** and its **variance**. That second fact is a strong assumption, and you can check it against real data.
+
+<div class="breakout">
+<CountsLab client:load />
+</div>
+
+At 4 a.m. on working days the Poisson curve fits well: the average is 5.4 bikes an hour and the variance is only 1.8 times the mean. At 8 a.m. the variance is 73 times the mean, and at 5 p.m. almost 100 times. No single λ can describe rush hours: some are rainy, some are sunny, some fall in a busy tourist week, and the system grew between 2011 and 2012. When the variance exceeds the mean like this, the counts are <Term def="Variance larger than a Poisson model allows (variance > mean). Very common in business counts; it makes Poisson standard errors and intervals too narrow.">overdispersed</Term>.
+
+<Callout type="math" title="The Poisson distribution">
+A count $Y$ follows a Poisson distribution with rate $\lambda \gt 0$ when
+
+$$
+P(Y = k) = \frac{e^{-\lambda}\lambda^{k}}{k!}, \qquad k = 0, 1, 2, \dots
+$$
+
+and then $E[Y] = \operatorname{Var}(Y) = \lambda$. It arises as the number of independent, rare events in a fixed window, such as the number of bikes taken from a quiet station in one hour.
+</Callout>
+
+### Poisson regression: a log link and multiplicative effects
+
+Poisson regression lets λ depend on predictors. It models the **log** of the expected count as a straight line, so the expected count $\mu = e^{\text{line}}$ is always positive, and each coefficient *multiplies* expected rentals by $e^{b}$, the <Term def="exp(b) in a count model: the factor by which the expected count is multiplied when the predictor rises by one unit. Also called a rate ratio.">incidence-rate ratio</Term> (IRR). We fit January 2011 to August 2012 and keep September to December 2012 for the forecast test.
+
+<div class="breakout">
+<CodeLab client:load id="nl-poisson" title="Poisson regression, overdispersion, quasi-Poisson and negative binomial" r={countsR} py={countsPy}
+  packages={['MASS']} pyPackages={['statsmodels']}
+  goal="Fit a Poisson regression of daily rentals, read incidence-rate ratios, run the dispersion check, and refit with quasi-Poisson and negative-binomial models." />
+</div>
+
+Read the IRRs like percentages:
+
+| Predictor | IRR (Poisson) | Meaning, other things equal |
+|---|---|---|
+| Year 2012 (vs 2011) | 1.556 | 2012 days ran about 56% above 2011 days: the system was growing |
+| Rain or snow (vs clear) | 0.513 | Expected rentals roughly halve |
+| Mist (vs clear) | 0.908 | About 9% fewer rentals |
+| Fall (vs winter) | 1.391 | About 39% more rentals than a winter day at the same temperature and weather |
+| Holiday | 0.918 | About 8% fewer |
+| Working day | 1.013 | Barely different: commuters on weekdays, leisure riders at weekends |
+
+<Callout type="math" title="Poisson regression and its log-likelihood">
+The model is
+
+$$
+Y_i \sim \text{Poisson}(\mu_i), \qquad \log \mu_i = \beta_0 + \beta_1 x_{1i} + \dots + \beta_k x_{ki},
+$$
+
+so $\mu_i = e^{x_i'\beta}$ and raising $x_j$ by one unit multiplies $\mu_i$ by $\text{IRR}_j = e^{\beta_j}$. The coefficients maximize
+
+$$
+\ell(\beta) = \sum_{i=1}^{n} \Big[ y_i \log \mu_i - \mu_i - \log(y_i!) \Big],
+$$
+
+again by IRLS in `glm()`. When counts are observed over different exposures $t_i$ (hours open, stores, population), model the rate instead: $\log \mu_i = \log t_i + x_i'\beta$, written `offset(log(t))` in an R formula. The last step of the lab shows why that matters here: on October 29, 2012 only one hour of data was recorded.<sup>[5](#refs)</sup>
+</Callout>
+
+### Overdispersion: check it, then fix it
+
+The mean of daily rentals in the training period is 4,267; the variance is 3.40 million, about 800 times larger. Predictors explain much of that, but not nearly all. The **dispersion statistic** asks how much is left:
+
+<Predict client:load
+  question="After fitting the Poisson regression, the dispersion statistic is about **100**. Roughly how much too small are the Poisson standard errors?"
+  options={['About 100 times', 'About 10 times', 'About 2 times', 'They are fine; dispersion only affects the coefficients']}
+  answer={1}
+  explain="Standard errors scale with the **square root** of the dispersion: √100 = **10**. The lab finds a dispersion of 99.7, and the quasi-Poisson standard errors are 9.99 times the Poisson ones. The coefficients themselves are unchanged; only their precision (and any interval built on it) was overstated."
+/>
+
+Two standard fixes, both in the lab:
+
+- **Quasi-Poisson** keeps the Poisson coefficients and multiplies every standard error by $\sqrt{\phi}$, about 10 here. It changes the inference, not the forecasts.
+- **Negative binomial** (`MASS::glm.nb`) adds a parameter θ so that the variance grows faster than the mean: $\operatorname{Var} = \mu + \mu^2/\theta$. Here θ = 27.2. Its IRRs stay close to Poisson's (2012: 1.62; rain or snow: 0.52), and its AIC falls from 69,121 to 9,793: an enormous improvement in fit.
+
+At 4 a.m. on working days, by contrast, the same check gives a dispersion of about 1.7. Small counts with little hidden variation are where the plain Poisson model is at home.<sup>[3](#refs)</sup>
+
+<Callout type="math" title="Dispersion statistic, quasi-Poisson and the negative binomial">
+With fitted means $\hat\mu_i$, $n$ observations and $k + 1$ coefficients, the Pearson dispersion statistic is
+
+$$
+\hat\phi = \frac{1}{n - k - 1}\sum_{i=1}^{n} \frac{(y_i - \hat\mu_i)^2}{\hat\mu_i}.
+$$
+
+Under a correct Poisson model $\hat\phi \approx 1$. **Quasi-Poisson** assumes $\operatorname{Var}(Y_i) = \phi\,\mu_i$ and inflates standard errors by $\sqrt{\hat\phi}$. The **negative binomial** (NB2) model assumes
+
+$$
+\operatorname{Var}(Y_i) = \mu_i + \frac{\mu_i^2}{\theta},
+$$
+
+which arises if each day's Poisson rate is itself multiplied by a gamma-distributed "busyness" shock. As $\theta \to \infty$ it collapses to Poisson. Which variance shape fits better is an empirical question.<sup>[3](#refs)</sup><sup>[11](#refs)</sup>
+</Callout>
+
+### Forecast tomorrow's rentals, with honest intervals
+
+Here is where overdispersion stops being a statistics footnote and becomes a business problem. Both models forecast each day of September to December 2012. Their point forecasts are almost the same. Their **prediction intervals** are not.
+
+<div class="breakout">
+<BikeForecast client:load />
+</div>
+
+<div class="breakout">
+<CodeLab client:load id="nl-bikefc" title="Forecast 122 held-out days and audit interval coverage" r={bikefcR} py={bikefcPy}
+  packages={['MASS']} pyPackages={['statsmodels', 'scipy']}
+  goal="Forecast September–December 2012 with Poisson and negative-binomial models, build 80% and 95% intervals from qpois() and qnbinom(), and count how often they contain the truth." />
+</div>
+
+| Sep–Dec 2012 (122 days) | MAE (bikes/day) | 80% interval covers | 95% interval covers | Median 95% width |
+|---|---|---|---|---|
+| Poisson | 677 | **9.8%** | **12.3%** | 297 |
+| Negative binomial | 673 | 86.1% | 89.3% | 4,567 |
+| Naive (yesterday's count) | 916 | — | — | — |
+
+Both regressions beat the naive benchmark by about 240 bikes a day. But the Poisson "95%" interval caught the actual count on only 12% of days. On a typical day it is about 300 bikes wide, because a Poisson model with a mean near 5,800 has a standard deviation of only about 76. A manager who staffed to the top of that interval would be caught short most days. The negative-binomial interval is about 15 times wider and covers 89% of days: not perfect, but close to honest. Its misses are telling: Hurricane Sandy, when Capital Bikeshare shut down on October 29–30, 2012,<sup>[8](#refs)</sup> Thanksgiving weekend and the Christmas holidays. No weather-and-calendar model saw those coming.
+
+<Callout type="pitfall" title="These intervals are still too kind">
+The test gave each model the <em>actual</em> weather of each test day, as if the weather forecast were perfect: an ex-post forecast, in Chapter 4's language. Real weather forecasts miss, and the intervals also ignore uncertainty in the estimated coefficients. A real deployment would be a little less accurate and should have somewhat wider intervals. Chapter 11 returns to coverage audits and to methods that calibrate intervals from past errors.
+</Callout>
+
+<KeyIdea>Before you trust a count model's intervals, compare the variance with the mean. If the dispersion statistic is far above 1, Poisson intervals will be far too narrow; use a negative binomial (or quasi-Poisson) model and audit the coverage out of sample.</KeyIdea>
+
+## Your turn
+
+Two short exercises, one for each half of the chapter. Fill in the blanks (`______`) and press **Run & check**.
+
+The marketing team can afford to call only 20% of the next list. How many subscribers will it reach, and how many of its calls will succeed?
+
+<div class="breakout">
+<CodeLab client:load id="nl-ex-logit" exercise title="Exercise: the top-20% call list" r={exLogitR} solution={exLogitSolR} check={exLogitCheckR}
+  py={exLogitPy} solutionPy={exLogitSolPy} checkPy={exLogitCheckPy} setup={setupBankR} pySetup={setupBankPy}
+  pyPackages={['statsmodels']}
+  goal="Fit the logit, predict probabilities for the test clients, call the top 20%, and compute recall and precision."
+  hints={['A logit is a glm() with family = binomial (Python: smf.logit).', 'predict() returns log-odds unless you ask for type = "response" (Python: .predict()).', 'Recall divides the subscribers you reached by all subscribers: sum(test$yes == 1).']} />
+</div>
+
+Is the morning rush hour Poisson? Check the dispersion of 8 a.m. rentals on working days.
+
+<div class="breakout">
+<CodeLab client:load id="nl-ex-pois" exercise title="Exercise: is the 8 a.m. rush Poisson?" r={exPoisR} solution={exPoisSolR} check={exPoisCheckR}
+  py={exPoisPy} solutionPy={exPoisSolPy} checkPy={exPoisCheckPy} pyPackages={['statsmodels']}
+  goal="Fit a Poisson regression to 8 a.m. working-day rentals and compute the dispersion statistic."
+  hints={['A count model is a glm() with family = poisson (Python: sm.families.Poisson).', 'Use Pearson residuals, residuals(m, type = "pearson"), and divide their sum of squares by df.residual(m) (Python: m.pearson_chi2 / m.df_resid).']} />
+</div>
+
+## Chapter checklist
+
+- A straight line through 0/1 data (the **LPM**) can forecast probabilities below 0 or above 1, has heteroskedastic errors by construction and forces constant effects. It still ranks reasonably well.
+- The **logit** puts the line on the **log-odds** scale: `glm(y ~ x, family = binomial)`. Read $e^{b}$ as an **odds ratio**, and report effects in percentage points as **average marginal effects**, $b\,p(1-p)$ averaged over clients. The **probit** gives nearly the same probabilities.
+- A threshold turns probabilities into actions. Report **precision, recall, specificity and F1**, not just accuracy, which rewards ignoring a rare outcome (the **accuracy paradox**). Set the threshold from costs: call when $p \gt c/V$.
+- **ROC/AUC** measures ranking; **gain and lift** charts translate ranking into "call x% of the list, reach y% of buyers". Score on held-out data and report a range across splits.
+- Ask of every predictor: **would I know it at forecast time?** Call duration fails, and its AUC of 0.915 is leakage.
+- For counts, use **Poisson regression** with a log link and read $e^{b}$ as an **incidence-rate ratio**. Check the **dispersion statistic**; if it is far above 1, use **quasi-Poisson** for inference or a **negative binomial** for forecasts, and **audit interval coverage** out of sample.
+
+<InstructorKit
+  minutes={80}
+  objectives={[
+    'Explain the three problems of the linear probability model and show predictions outside [0, 1] on real data.',
+    'Fit logit and probit models with `glm()`, convert coefficients to **odds ratios** with confidence intervals, and move between probability, odds and log-odds.',
+    'Compute and interpret **average marginal effects** and explain why they differ from the marginal effect at the mean.',
+    'Build a confusion matrix at a chosen threshold and compute accuracy, precision, recall, specificity and F1; explain the **accuracy paradox** and set a cost-based threshold.',
+    'Trace ROC and gain curves by hand, compute AUC, lift and Gini, and turn a gain curve into a targeting decision with a budget.',
+    'Detect **leakage** by asking whether a predictor is known at forecast time.',
+    'Fit Poisson regression, interpret **incidence-rate ratios**, test for overdispersion, refit with quasi-Poisson and negative binomial, and audit prediction-interval coverage out of sample.'
+  ]}
+  discussion={[
+    'A vendor reports 92% accuracy for a model that predicts which customers will churn, when 9% of customers churn each year. What two numbers would you ask for before being impressed?',
+    'The Euribor odds ratio is 0.66 per point. Should the bank call more clients when interest rates fall? What else changed between low-rate and high-rate periods?',
+    'Your bike-demand model has a perfect point forecast record on average, but its 95% intervals cover only 12% of days. Who in the company is hurt by that, and how?'
+  ]}
+  misconceptions={[
+    '“An odds ratio of 6.4 means 6.4 times the probability.” It multiplies the odds; a 5.6% chance becomes about 28%, not 36%.',
+    '“A logit coefficient is the change in probability.” It is the change in log-odds; the probability effect is b·p(1 − p) and depends on the client.',
+    '“High accuracy means a good classifier.” With an 11% base rate, always saying no is 89% accurate and finds nobody.',
+    '“A higher AUC is always better.” Not if it comes from a variable you will not have at decision time, like call duration.',
+    '“Poisson is the count model.” Its variance equals its mean; business counts are usually overdispersed, and Poisson intervals are then far too narrow.'
+  ]}
+>
+
+**Campaign war room (30 minutes), then a bike desk (15 minutes).** Teams of three. Data files: [bank_marketing.csv](/data/bank_marketing.csv), [bike_day.csv](/data/bike_day.csv), [bike_hour.csv](/data/bike_hour.csv).
+
+1. **Predict (5 min).** Give each team a cost per call and a value per deposit: A = \$5 and \$50, B = \$5 and \$100, C = \$8 and \$40, D = \$5 and \$30. Before touching code, each team writes down what share of the list it expects to call and whether calling everyone would make money.
+2. **Plan (15 min).** Teams run the classification lab, then change the `profit` line (or use the campaign planner for team A) to find the share of the list that maximizes profit on the test clients.
+3. **Brief (10 min).** Each team presents one slide: the break-even probability $c/V$, the share called, expected subscribers, profit, and one sentence on why calling everyone is or is not a good idea.
+4. **Bike desk (15 min).** Run the forecast lab. Each team states how many bikes it would plan for on a typical fall weekday at the top of the Poisson 95% interval and of the negative-binomial one, and how often each plan would have fallen short.
+
+*Expected results (five-fact logit, 1,237 test clients):*
+
+| Team | Cost, value | Break-even $p$ | Best share called | Subscribers reached | Profit | Call everyone |
+|---|---|---|---|---|---|---|
+| A | \$5, \$50 | 0.10 | 31% (385 calls) | 92 | \$2,675 | \$615 |
+| B | \$5, \$100 | 0.05 | 82% (1,020 calls) | 128 | \$7,700 | \$7,415 |
+| C | \$8, \$40 | 0.20 | 18% (224 calls) | 70 | \$1,008 | −\$4,456 |
+| D | \$5, \$30 | 0.17 | 21% (258 calls) | 76 | \$990 | −\$2,105 |
+
+In every case the profit-maximizing cut-off probability lands near $c/V$ (11.8%, 3.4%, 18.5% and 17.6%). Higher value per deposit pushes the team to call much more of the list; for teams C and D, calling everyone loses money. For the bike desk: the Poisson 95% interval covered 12% of test days and the negative binomial 89%; median widths were 297 and about 4,567 bikes. Use the gap to discuss who pays for an over-confident interval.
+
+**Variations.** (a) Add `month` to the logit (it is known before the call: the campaign schedule) and compare test AUC. (b) Replace the logit with a probit and confirm that the gain table barely changes. (c) In the Poisson lab, add `offset(log(hours))` using hours recorded per day from the hourly file.
+
+</InstructorKit>
+
+<div class="refs" id="refs">
+
+**References**
+
+1. Moro, S., Cortez, P., & Rita, P. (2014). A data-driven approach to predict the success of bank telemarketing. *Decision Support Systems*, 62, 22–31. Data: Moro, S., Rita, P., & Cortez, P. (2014). Bank Marketing [Dataset]. UCI Machine Learning Repository, CC BY 4.0. [doi.org/10.24432/C5K306](https://doi.org/10.24432/C5K306). The *bank-additional* files' documentation describes the 10% random sample, the May 2008–November 2010 date range and the warning that `duration` should be discarded for realistic prediction.
+2. Fanaee-T, H., & Gama, J. (2014). Event labeling combining ensemble detectors and background knowledge. *Progress in Artificial Intelligence*, 2(2–3), 113–127. Data: Fanaee-T, H. (2013). Bike Sharing [Dataset]. UCI Machine Learning Repository, CC BY 4.0. [doi.org/10.24432/C5W894](https://doi.org/10.24432/C5W894). Temperatures in the files are normalized; the UCI documentation gives two different scalings, so this chapter reads one unit of `temp10` as roughly 4 to 5 °C.
+3. Cameron, A. C., & Trivedi, P. K. (2013). *Regression Analysis of Count Data* (2nd ed.). Cambridge University Press.
+4. Agresti, A. (2013). *Categorical Data Analysis* (3rd ed.). Wiley.
+5. Hosmer, D. W., Lemeshow, S., & Sturdivant, R. X. (2013). *Applied Logistic Regression* (3rd ed.). Wiley.
+6. Stock, J. H., & Watson, M. W. (2019). *Introduction to Econometrics* (4th ed.). Pearson. Chapter 11: Regression with a Binary Dependent Variable.
+7. Fawcett, T. (2006). An introduction to ROC analysis. *Pattern Recognition Letters*, 27(8), 861–874.
+8. Capital Bikeshare's Hurricane Sandy shutdown, which began at about 1 a.m. on Monday, October 29, 2012: Georgetown Patch, list of D.C. closures during Hurricane Sandy (October 2012), [patch.com](https://patch.com/district-columbia/georgetown/what-is-open-closed-in-d-c-during-hurricane-sandy); ARLnow (October 31, 2012), on the system's return to service, [arlnow.com](https://www.arlnow.com/2012/10/31/bikeshare-fares-well-but-cyclists-cautioned-of-hazards/). The hourly file records only one hour of rentals on October 29 and eleven on October 30.
+9. Gelman, A., & Hill, J. (2007). *Data Analysis Using Regression and Multilevel/Hierarchical Models*. Cambridge University Press. Section 5.2 (the divide-by-4 rule).
+10. Kaufman, S., Rosset, S., Perlich, C., & Stitelman, O. (2012). Leakage in data mining: Formulation, detection, and avoidance. *ACM Transactions on Knowledge Discovery from Data*, 6(4), 15.
+11. Ver Hoef, J. M., & Boveng, P. L. (2007). Quasi-Poisson vs. negative binomial regression: How should we model overdispersed count data? *Ecology*, 88(11), 2766–2772.
+
+</div>
+
+<style>{`
+  .refs { font-size: .86rem; color: var(--text-2); margin-top: 3rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+  .ch-body table { margin: 1.4rem 0 2rem; font-size: .88rem; }
+  .ch-body td { vertical-align: top; font-variant-numeric: tabular-nums; }
+`}</style>

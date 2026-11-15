@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Chapter 11 · Explorable 3: the extrapolation trap. A random forest on the LEVEL of a trending
+  // Chapter 12 · Explorable 3: the extrapolation trap. A random forest on the LEVEL of a trending
   // series cannot forecast above its training maximum; the same forest on GROWTH RATES can.
   import { onMount } from 'svelte';
   import * as Plot from '@observablehq/plot';

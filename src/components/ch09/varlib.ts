@@ -1,4 +1,4 @@
-// Chapter 9 shared helpers: precomputed VAR results (from build_data.R), variable metadata,
+// Chapter 10 shared helpers: precomputed VAR results (from build_data.R), variable metadata,
 // and two custom chart types for the labs ("ch09-irf", "ch09-fevd").
 import * as Plot from '@observablehq/plot';
 import raw from './var_data.json';
@@ -15,7 +15,7 @@ export interface VarData {
 }
 export const D = raw as unknown as VarData;
 
-/** Colour slot per variable, consistent across every Chapter 9 figure (never the only cue: always labelled). */
+/** Colour slot per variable, consistent across every Chapter 10 figure (never the only cue: always labelled). */
 const SLOT: Record<VarKey, number> = { infl: 1, unemp: 0, ffr: 2, spread: 5 };
 export const col = (k: string) => C.s[SLOT[k as VarKey] ?? 4];
 export const META: Record<VarKey, { label: string; short: string; unit: string; noun: string }> = {

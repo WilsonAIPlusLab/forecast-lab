@@ -21,6 +21,7 @@ export const chapterSeries: Record<string, { id: string; yoy?: boolean; start?: 
   decomposition: { id: 'MRTSSM448USN', start: '2012-01-01' },
   benchmarks: { id: 'HOUSTNSA', start: '2012-01-01' },
   regression: { id: 'MORTGAGE30US', start: '2000-01-01' },
+  'nonlinear-regression': { id: 'USREC', start: '1960-01-01' },
   'exponential-smoothing': { id: 'MRTSSM4541USN', start: '2010-01-01' },
   arima: { id: 'CPILFESL', yoy: true },
   'dynamic-regression': { id: 'ICSA', start: '2000-01-01' },

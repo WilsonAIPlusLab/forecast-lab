@@ -87,7 +87,7 @@ The explorer used the <Term def="The correlation between one series and lagged o
 </div>
 
 <Callout type="tip" title="Make it yours">
-Swap `"ICSA"` for `"PERMIT"` (building permits are already monthly, so `to = "month"` changes nothing). The peak moves to a 9-month lead with a **positive** correlation, because more permits mean more jobs. Then try the yield-curve spread: replace the whole `claims_yoy` line with `claims_yoy <- window(fred("T10Y3M", to = "month"), start = c(1990, 1), end = c(2019, 12))` (a spread can be negative, so no logs). The strongest correlation is now at **k = +9** and negative: within ±18 months the spread mostly *follows* job growth. Its reputation as a recession signal rests on longer horizons, which is where Chapter 8 picks it up.
+Swap `"ICSA"` for `"PERMIT"` (building permits are already monthly, so `to = "month"` changes nothing). The peak moves to a 9-month lead with a **positive** correlation, because more permits mean more jobs. Then try the yield-curve spread: replace the whole `claims_yoy` line with `claims_yoy <- window(fred("T10Y3M", to = "month"), start = c(1990, 1), end = c(2019, 12))` (a spread can be negative, so no logs). The strongest correlation is now at **k = +9** and negative: within ±18 months the spread mostly *follows* job growth. Its reputation as a recession signal rests on longer horizons, which is where Chapter 9 picks it up.
 </Callout>
 
 ## From correlation to a model: distributed lags
@@ -167,7 +167,7 @@ The last chart in the lab is the most unsettling: the false-alarm rate climbs fr
 Two ways out:
 
 - **Difference both series**, as we did with job gains and claims growth in this chapter. Changes of random walks are white noise, and the t-test works again.
-- **Test for <Term def="Two random-walk series are cointegrated if some combination of them is stationary: they wander, but together, tied by a long-run equilibrium.">cointegration</Term>.** Sometimes two wandering series really are tied together (consumption and income, or a stock's price in two markets). Differencing would throw away that long-run link. Chapter 9 shows how to test for it and model it with an error-correction model.
+- **Test for <Term def="Two random-walk series are cointegrated if some combination of them is stationary: they wander, but together, tied by a long-run equilibrium.">cointegration</Term>.** Sometimes two wandering series really are tied together (consumption and income, or a stock's price in two markets). Differencing would throw away that long-run link. Chapter 10 shows how to test for it and model it with an error-correction model.
 
 ## Structural breaks: when the relationship changes
 
@@ -278,7 +278,7 @@ Fill in the two blanks (`______`) and press **Run & check**.
 - Classify indicators by **timing**: leading, coincident, lagging. Find the lead with the **cross-correlation function** and confirm it by shifting the series.
 - Write **ADL models** with `dynlm(y ~ L(y, 1:p) + L(x, 0:q))`, and read the **impact**, **dynamic** and **long-run multipliers**.
 - Time-series errors are autocorrelated: report **Newey–West** standard errors, add lags, or use **regression with ARIMA errors**.
-- Never regress one **random walk** on another in levels: difference both, or test for **cointegration** (Chapter 9).
+- Never regress one **random walk** on another in levels: difference both, or test for **cointegration** (Chapter 10).
 - Test for **structural breaks** with Chow (known date) or **sup-F** and `breakpoints()` (unknown date). Treat COVID as outliers with pulse dummies or exclusion, and say so.
 - Judge an indicator **out of sample**, against an AR benchmark, using only data **known at forecast time**.
 

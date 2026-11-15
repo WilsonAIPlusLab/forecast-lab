@@ -24,7 +24,7 @@ fit <- xgb.train(params = list(eta = best$eta, max_depth = best$max_depth, tree_
 f_xgb <- test$lag1 * (1 + predict(fit, X(test)) / 100)
 
 #| **Three rivals on exactly the same months:**
-#| - **Random forest** (Chapter 11) on the same features, with `randomForest`. It refuses missing values, so we fill the one gap (November 2025's lagged unemployment rate) with the month before. XGBoost needed no such fix.
+#| - **Random forest** (Chapter 12) on the same features, with `randomForest`. It refuses missing values, so we fill the one gap (November 2025's lagged unemployment rate) with the month before. XGBoost needed no such fix.
 #| - **ETS(M,A,M)**, the model `ets()` selects automatically for this series (drop `model = "MAM"` to check; it is just slower). We fit it on data through 2022, then run it forward over the test months *without re-estimating*. Its fitted values are one-month-ahead forecasts, just like ours.
 #| - **Seasonal naive**: same month last year.
 suppressPackageStartupMessages(library(randomForest)); library(forecast)

@@ -1,6 +1,6 @@
 # Forecast Lab
 
-An interactive, code-first website for **ECON 3371 Economic & Business Forecasting**: 15 chapters, real U.S. data, and R and Python code that runs in the browser (webR and Pyodide), with step-through explanations, instant explorables, auto-checked exercises and an instructor kit for each chapter.
+An interactive, code-first website for **ECON 3371 Economic & Business Forecasting**: 16 chapters, real U.S. data, and R and Python code that runs in the browser (webR and Pyodide), with step-through explanations, instant explorables, auto-checked exercises and an instructor kit for each chapter.
 
 ## Run it locally
 
@@ -28,7 +28,7 @@ To build for a custom domain at the root, run `SITE=https://your.domain npm run 
 | `src/components/` | Shared pieces: `CodeLab`, `Explorable`, `Callout`, `KeyIdea`, `Predict`, `Term`, `InstructorKit` |
 | `src/lib/` | Runtimes (`runtime/r.ts`, `runtime/py.ts`), chart renderer (`viz/render.ts`), JS time-series toolkit (`ts.ts`) |
 | `public/r/course.R`, `public/py/course.py` | Helpers available in every lab: `fred()`, `viz_*()`, `check_that()` |
-| `public/data/` | 71 bundled data series (CSV) and `manifest.json` |
+| `public/data/` | 71 FRED/CFS series plus 3 UCI teaching datasets (CSV) and `manifest.json` |
 | `AUTHORING.md` | How to write or edit a chapter to the site's standard |
 | `DATA_CATALOG.md` | Every bundled series, with units and seasonal adjustment |
 

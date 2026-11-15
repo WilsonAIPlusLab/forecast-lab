@@ -1,4 +1,4 @@
-# Generates the precomputed data behind the Chapter 12 explorables (not a student lab).
+# Generates the precomputed data behind the Chapter 13 explorables (not a student lab).
 # Run from the site folder:  "/c/Program Files/R/R-4.4.3/bin/Rscript.exe" src/labs/ch12/make_data.R
 # Writes src/components/ch12/shap_data.json and src/components/ch12/global_local.json.
 # Models and settings are exactly those of Labs 12.3 (SHAP) and 12.4 (global vs local), so the numbers match.

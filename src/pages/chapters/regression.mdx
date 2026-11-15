@@ -151,7 +151,7 @@ With an intercept in the model, use <strong>11</strong> monthly dummies, not 12.
 The result is worth a pause. December runs about **25%** above January, and February is about 2% *below* it (fewer shopping days). April 2020 came in about 24% below what trend and season predict. On the 2024-onward test period the regression's MAE is about \$13.0 billion against \$27.0 billion for seasonal naive (MASE 0.56 against 1.17): calendar terms alone cut the benchmark's error by more than half. The R tab also compares **Fourier terms**: pairs of sine and cosine waves (`fourier(train, K)`) that describe the seasonal shape with fewer coefficients. Retail's December spike is so sharp that it needs the full set (K = 6), which is identical to the 11 dummies. For smooth seasonal patterns, or weekly data with 52 "seasons", a small K saves many coefficients.
 
 <Callout type="tip" title="Make it yours">
-In the seasonal lab, change `"RSXFSN"` to `"HOUSTNSA"` (housing starts, NSA). Then look at the Breusch–Godfrey test at the end: its tiny p-value says the residuals come in long runs. A straight trend cannot follow a housing cycle. Chapter 7 handles this properly with regression with ARIMA errors.
+In the seasonal lab, change `"RSXFSN"` to `"HOUSTNSA"` (housing starts, NSA). Then look at the Breusch–Godfrey test at the end: its tiny p-value says the residuals come in long runs. A straight trend cannot follow a housing cycle. Chapter 8 handles this properly with regression with ARIMA errors.
 </Callout>
 
 ## The forecasting trap: you need tomorrow's drivers
@@ -160,7 +160,7 @@ Here is the catch that separates regression *analysis* from regression *forecast
 
 - An **ex-post** forecast plugs in the drivers' actual values after they are known. It tests whether the *relationship* held up, but no one could have made it at the time.
 - An **ex-ante** forecast uses only what was known at the forecast date: forecasts of the drivers (or scenarios). This is the only kind you can hand your boss.
-- Some predictors are **known in advance** and avoid the problem: trend, calendar dummies, holidays, planned price changes, or a driver that leads sales by several months (Chapter 7).
+- Some predictors are **known in advance** and avoid the problem: trend, calendar dummies, holidays, planned price changes, or a driver that leads sales by several months (Chapter 8).
 
 <Predict client:load
   question="Fit the car-sales model on data through December 2023 and forecast January 2024 to October 2026. Which forecast has the lowest error?"
@@ -203,7 +203,7 @@ Three things to notice:
   goal="Forecast car sales for 12 months under three driver scenarios and plot them side by side with prediction intervals." />
 </div>
 
-In the lab's baseline, with every driver frozen at its October 2026 value, the model forecasts **15.7 million** cars a year. "Gas hits \$5" gives 15.3 million by the end of the year. "Squeeze" (gas at \$5, unemployment drifting up to 5.5%, mortgage rates at 8%) ends the year at 13.8 million, 1.2 million below baseline on average over the year. Notice also that the baseline sits *below* October's actual 16.0 million: a static regression forecast jumps straight to its fitted line and ignores the fact that sales have been running above it. Dynamic regression (Chapter 7) fixes that.
+In the lab's baseline, with every driver frozen at its October 2026 value, the model forecasts **15.7 million** cars a year. "Gas hits \$5" gives 15.3 million by the end of the year. "Squeeze" (gas at \$5, unemployment drifting up to 5.5%, mortgage rates at 8%) ends the year at 13.8 million, 1.2 million below baseline on average over the year. Notice also that the baseline sits *below* October's actual 16.0 million: a static regression forecast jumps straight to its fitted line and ignores the fact that sales have been running above it. Dynamic regression (Chapter 8) fixes that.
 
 <Callout type="business" title="How to present scenarios">
 Give each scenario a name and a one-line story ("Squeeze: \$5 gas, a softening job market, 8% mortgages"). Show the scenarios on one chart, report the gap from baseline in units the audience uses (cars, dollars, jobs), and always show the band. Make sure each scenario is internally consistent: rates rarely fall while unemployment stays low and gas soars.
@@ -271,7 +271,7 @@ Leave-one-out CV for OLS needs no refitting: $\text{CV} = \frac{1}{T}\sum_t \lef
 <ul>
 <li><strong>Ex-post flattery.</strong> Testing with the drivers' true future values hides the hardest part of the job.</li>
 <li><strong>In-sample flattery.</strong> R², t-statistics and even AIC are computed on the data used for fitting. Only out-of-sample tests measure forecasting skill.</li>
-<li><strong>Autocorrelated residuals.</strong> In time series they are the norm. They make standard errors and prediction intervals too narrow. Use Newey–West for inference now, and dynamic regression (Chapter 7) for forecasting.</li>
+<li><strong>Autocorrelated residuals.</strong> In time series they are the norm. They make standard errors and prediction intervals too narrow. Use Newey–West for inference now, and dynamic regression (Chapter 8) for forecasting.</li>
 </ul>
 </Callout>
 

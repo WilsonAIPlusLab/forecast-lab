@@ -1,4 +1,4 @@
-// Chapter 7 custom chart types, emitted from R/Python with viz_custom("ch07-…", …).
+// Chapter 8 custom chart types, emitted from R/Python with viz_custom("ch07-…", …).
 // Imported for its side effect by every ch07 Svelte component, so the types are registered on page load.
 import * as Plot from '@observablehq/plot';
 import { registerViz } from '../../lib/viz/render';

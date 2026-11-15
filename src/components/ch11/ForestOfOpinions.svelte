@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Chapter 11 · Explorable 4: a forest of opinions. Each bootstrap tree gives its own one-month-ahead
+  // Chapter 12 · Explorable 4: a forest of opinions. Each bootstrap tree gives its own one-month-ahead
   // forecast (thin lines); the forest's forecast is their average (bold). More trees -> less variance.
   import { onMount } from 'svelte';
   import * as Plot from '@observablehq/plot';

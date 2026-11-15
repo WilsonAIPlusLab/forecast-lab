@@ -51,7 +51,7 @@ Two steps deserve a second look because students skip them most often:
 
 Below is a complete forecasting dashboard. It runs entirely in your browser in a fraction of a second, without R. It follows steps 3 to 9 of the pipeline:
 
-- **Benchmark and candidate models.** Three benchmarks (naive, seasonal naive, drift) and four exponential smoothing models from [Chapter 5](/chapters/exponential-smoothing/), plus an equal-weight combination.<sup>[2](#refs)</sup>
+- **Benchmark and candidate models.** Three benchmarks (naive, seasonal naive, drift) and four exponential smoothing models from [Chapter 6](/chapters/exponential-smoothing/), plus an equal-weight combination.<sup>[2](#refs)</sup>
 - **Rolling-origin evaluation.** Every method is re-fitted at each of the last 48 months before the cut-off and asked to forecast 1 to *h* months ahead ([Chapter 3](/chapters/benchmarks/)).<sup>[1](#refs)</sup> The scorecard averages the errors over horizons; the lower chart shows them horizon by horizon.
 - **Intervals.** The fan chart's ranges are built from the charted method's own past errors (more on this below).
 - **Communication.** An executive summary writes itself from the numbers, with buttons to copy it, download the chart as a slide-ready PNG, or copy a link to the exact view.
@@ -80,7 +80,7 @@ $$
 \Big[\;\hat y_{T+h\mid T} + q_{0.10}(e_{\cdot,h}),\;\; \hat y_{T+h\mid T} + q_{0.90}(e_{\cdot,h})\;\Big],
 $$
 
-where $q_p$ is the $p$-th sample quantile (R's default, type 7), and the 50% range uses $q_{0.25}$ and $q_{0.75}$. Nothing here assumes normal errors or a correct model, which is the appeal. The price: it assumes the next year's errors look like the last four years' errors, and with 25 to 48 errors per horizon the band edges are rough. That is why the Studio shows no 95% range: it would rest on the one or two most extreme misses. [Chapter 10](/chapters/uncertainty/) develops the same idea further as *conformal* prediction.
+where $q_p$ is the $p$-th sample quantile (R's default, type 7), and the 50% range uses $q_{0.25}$ and $q_{0.75}$. Nothing here assumes normal errors or a correct model, which is the appeal. The price: it assumes the next year's errors look like the last four years' errors, and with 25 to 48 errors per horizon the band edges are rough. That is why the Studio shows no 95% range: it would rest on the one or two most extreme misses. [Chapter 11](/chapters/uncertainty/) develops the same idea further as *conformal* prediction.
 
 Each smoothing model's parameters are re-estimated at every origin by minimizing one-step squared errors with the Nelder–Mead method, so no origin ever sees data from its own future. The parameter limits match R's `ets()` ($\beta \le \alpha$, $\gamma \le 1 - \alpha$, damping between 0.8 and 0.98), but `ets()` maximizes a likelihood rather than minimizing squared errors, so its estimates can differ a little. The MASE column divides each method's MAE by the in-sample seasonal naive MAE, as R's `accuracy()` does.
 </Callout>
@@ -209,7 +209,7 @@ The lab below computes the same tracking signal in R. Here keeping the parameter
 
 Two habits separate forecasts people trust from forecasts that quietly cause damage.
 
-**Reproducibility.** Anyone, including you in six months, should be able to rerun your forecast and get the same numbers. In practice that means: one script from raw data to final chart (no copy-pasting into spreadsheets); the series ID and the date you pulled the data written into the output, because economic data get revised; package versions recorded (the stamp in the lab above); and `set.seed()` before anything random, such as a random forest or simulated paths ([Chapter 11](/chapters/random-forests/)). Save the data file you used next to the script.
+**Reproducibility.** Anyone, including you in six months, should be able to rerun your forecast and get the same numbers. In practice that means: one script from raw data to final chart (no copy-pasting into spreadsheets); the series ID and the date you pulled the data written into the output, because economic data get revised; package versions recorded (the stamp in the lab above); and `set.seed()` before anything random, such as a random forest or simulated paths ([Chapter 12](/chapters/random-forests/)). Save the data file you used next to the script.
 
 **Honesty about uncertainty.** A forecast influences real decisions about inventory, hiring and budgets. Three rules keep you on the right side:
 

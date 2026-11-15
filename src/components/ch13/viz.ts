@@ -1,4 +1,4 @@
-// Chapter 13 custom chart for code labs: nowcast vs outcome scatter with the 45-degree "perfect nowcast" line.
+// Chapter 14 custom chart for code labs: nowcast vs outcome scatter with the 45-degree "perfect nowcast" line.
 // Emit from R:  viz_custom("ch13-scatter45", x = , y = , labels = , xlab = , ylab = , title = , source = )
 import * as Plot from '@observablehq/plot';
 import { registerViz } from '../../lib/viz/render';

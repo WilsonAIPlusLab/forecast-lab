@@ -1,0 +1,102 @@
+---
+// Signature hero for Chapter 5: curves for 0/1 outcomes and for counts.
+// Left: real bank clients (yes = top row, no = bottom row) placed by their logit score (log-odds from the chapter's
+// five pre-call facts, fitted by glm() on all 4,119 clients). A least-squares straight line through the same 0/1 data
+// is drawn first and overshoots below 0%, then the logistic S-curve p = 1/(1 + e^-score) replaces it.
+// Right: real 4 a.m. working-day bike rentals per hour (2011–12) as a histogram, with the Poisson curve at the same mean.
+import fs from 'node:fs';
+import path from 'node:path';
+
+const csv = (f: string) => fs.readFileSync(path.resolve(process.cwd(), 'public/data', f), 'utf8').trim().split(/\r?\n/);
+// bank clients: score = logit index from glm(yes ~ age + contact + campaign + poutcome + euribor3m), all clients
+const bank = csv('bank_marketing.csv').slice(1).map((l) => l.split(',')).map((c) => ({
+  x: -1.21081075 + 0.01331647 * +c[0] - 0.33054641 * (c[7] === 'telephone' ? 1 : 0) - 0.07835967 * +c[11]
+     - 0.30049762 * (c[14] === 'failure' ? 1 : 0) + 1.86635126 * (c[14] === 'success' ? 1 : 0) - 0.41851815 * +c[18],
+  y: c[20] === 'yes' ? 1 : 0 }));
+// least-squares line of yes on the score (R: lm(yes ~ score)); the S-curve is plogis(score) itself
+const LA = 0.3997494, LB = 0.1171540, A = 0, B = 1;
+// hourly rentals at 4 a.m. on working days
+const hourly = csv('bike_hour.csv').slice(1).map((l) => l.split(',')).filter((c) => c[5] === '4' && c[8] === '1').map((c) => +c[16]);
+const mean = hourly.reduce((s, v) => s + v, 0) / hourly.length;
+const K = 16;
+const hist = Array.from({ length: K + 1 }, (_, k) => hourly.filter((v) => (k < K ? v === k : v >= K)).length / hourly.length);
+let lf = 0; const pois = Array.from({ length: K + 1 }, (_, k) => { if (k > 0) lf += Math.log(k); return Math.exp(k * Math.log(mean) - mean - lf); });
+
+// left panel geometry
+const LX0 = 28, LX1 = 290, TOP = 70, BOT = 270; // p = 1 at TOP, p = 0 at BOT
+const XMIN = -6, XMAX = 3;
+const lx = (v: number) => LX0 + ((v - XMIN) / (XMAX - XMIN)) * (LX1 - LX0);
+const ly = (p: number) => BOT - p * (BOT - TOP);
+// deterministic sample of clients for the dot rows
+const sample = bank.filter((d, i) => d.y === 1 ? i % 4 === 0 : i % 25 === 0);
+const dots = sample.filter((d) => d.x > XMIN && d.x < XMAX).map((d, i) => ({ cx: lx(d.x) + (((i * 37) % 11) - 5) * 0.9, cy: ly(d.y) + (d.y ? -1 : 1) * (((i * 53) % 9) + 2), y: d.y, i }));
+const lpm = `M${lx(XMIN).toFixed(1)},${ly(LA + LB * XMIN).toFixed(1)} L${lx(XMAX).toFixed(1)},${ly(LA + LB * XMAX).toFixed(1)}`;
+const cross = -LA / LB;
+const over = `M${lx(XMIN).toFixed(1)},${ly(LA + LB * XMIN).toFixed(1)} L${lx(cross).toFixed(1)},${ly(0).toFixed(1)}`;
+const S = Array.from({ length: 90 }, (_, i) => { const v = XMIN + (i * (XMAX - XMIN)) / 89; return `${i ? 'L' : 'M'}${lx(v).toFixed(1)},${ly(1 / (1 + Math.exp(-(A + B * v)))).toFixed(1)}`; }).join('');
+
+// right panel geometry
+const RX0 = 330, RX1 = 504, RB = 270, RT = 96;
+const bw = (RX1 - RX0) / (K + 1);
+const hmax = Math.max(...hist, ...pois);
+const ry = (v: number) => RB - (v / hmax) * (RB - RT);
+const poisPath = pois.map((v, k) => `${k ? 'L' : 'M'}${(RX0 + (k + 0.5) * bw).toFixed(1)},${ry(v).toFixed(1)}`).join('');
+---
+<svg viewBox="0 0 520 330" class="nh" role="img" aria-label={`Left: bank clients who said yes (top row) or no (bottom row), placed by a model score; a straight line overshoots below zero while a logistic S-curve stays between 0 and 1. Right: hourly bike rentals at 4 a.m. on working days, with a Poisson distribution of mean ${mean.toFixed(1)} drawn over the histogram.`}>
+  <!-- left: 0/1 outcomes -->
+  <text x={LX0} y="30" class="ttl">Will this client say yes?</text>
+  <text x={LX0} y="48" class="sub">0/1 outcome · probability must stay in [0, 1]</text>
+  <rect x={LX0} y={BOT} width={LX1 - LX0} height="34" class="danger-zone" />
+  <line x1={LX0} x2={LX1} y1={ly(1)} y2={ly(1)} class="axis" />
+  <line x1={LX0} x2={LX1} y1={ly(0)} y2={ly(0)} class="axis" />
+  <text x={LX0 - 6} y={ly(1) + 4} class="tick" text-anchor="end">1</text>
+  <text x={LX0 - 6} y={ly(0) + 4} class="tick" text-anchor="end">0</text>
+  <g class="dots">
+    {dots.map((d) => <circle cx={d.cx} cy={d.cy} r="2.3" class={d.y ? 'yes' : 'no'} style={`--d:${(0.15 + (d.i % 40) * 0.012).toFixed(2)}s`} />)}
+  </g>
+  <path d={lpm} class="lpm" pathLength="1" />
+  <path d={over} class="overshoot" pathLength="1" />
+  <text x={lx(XMIN) + 4} y={ly(LA + LB * XMIN) + 16} class="lbl-bad">straight line: below 0%</text>
+  <path d={S} class="scurve" pathLength="1" />
+  <text x={lx(1.2) - 8} y={ly(1 / (1 + Math.exp(-1.2))) + 4} class="lbl-s" text-anchor="end">S-curve</text>
+  <text x={(LX0 + LX1) / 2} y="322" class="axl" text-anchor="middle">client score from five pre-call facts →</text>
+
+  <!-- right: counts -->
+  <text x={RX0} y="30" class="ttl">How many bikes this hour?</text>
+  <text x={RX0} y="48" class="sub">count outcome · 0, 1, 2, …</text>
+  <line x1={RX0} x2={RX1} y1={RB} y2={RB} class="axis" />
+  {hist.map((v, k) => <rect x={RX0 + k * bw + 1} y={ry(v)} width={bw - 2} height={RB - ry(v)} rx="2" class="bar" style={`--d:${(2.0 + k * 0.05).toFixed(2)}s`} />)}
+  <path d={poisPath} class="pois" pathLength="1" />
+  {[0, 5, 10, 15].map((k) => <text x={RX0 + (k + 0.5) * bw} y={RB + 16} class="tick" text-anchor="middle">{k}</text>)}
+  <text x={RX0 + (Math.round(mean) + 1.5) * bw} y={ry(Math.max(hist[Math.round(mean)], pois[Math.round(mean)])) - 10} class="lbl-p">Poisson, λ = {mean.toFixed(1)}</text>
+  <text x={(RX0 + RX1) / 2} y="322" class="axl" text-anchor="middle">bikes rented at 4 a.m., working days</text>
+</svg>
+<style>
+  .nh { max-width: 560px; }
+  .ttl { font: 650 15px var(--font-ui); fill: var(--text); }
+  .sub { font: 500 12px var(--font-ui); fill: var(--muted); }
+  .tick, .axl { font: 500 12px var(--font-ui); fill: var(--muted); }
+  .axis { stroke: var(--border-strong); stroke-width: 1.2; }
+  .danger-zone { fill: var(--danger); opacity: .1; }
+  .dots circle { opacity: 0; animation: fade .5s var(--d) forwards; }
+  .yes { fill: var(--c-actual); } .no { fill: var(--muted); }
+  .lpm, .overshoot, .scurve, .pois { fill: none; stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: 1; }
+  .lpm { stroke: var(--c-s6); stroke-width: 2.2; animation: draw .8s .7s cubic-bezier(.65,0,.35,1) forwards, dim .5s 2.4s forwards; }
+  .overshoot { stroke: var(--danger); stroke-width: 3.2; animation: draw .3s 1.45s ease-out forwards; }
+  .scurve { stroke: var(--c-fitted); stroke-width: 3; animation: draw 1s 1.7s cubic-bezier(.65,0,.35,1) forwards; }
+  .lbl-bad { font: 650 12px var(--font-ui); fill: var(--danger); opacity: 0; animation: fade .4s 1.7s forwards; }
+  .lbl-s { font: 700 12px var(--font-ui); fill: var(--c-fitted); opacity: 0; animation: fade .4s 2.6s forwards; }
+  .bar { fill: var(--c-actual); opacity: .55; transform-box: fill-box; transform-origin: bottom; transform: scaleY(0); animation: grow .6s var(--d) cubic-bezier(.2,.8,.2,1) forwards; }
+  .pois { stroke: var(--c-forecast); stroke-width: 2.6; animation: draw .9s 2.7s cubic-bezier(.65,0,.35,1) forwards; }
+  .lbl-p { font: 700 12px var(--font-ui); fill: var(--c-forecast); opacity: 0; animation: fade .4s 3.3s forwards; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  @keyframes fade { to { opacity: 1; } }
+  @keyframes dim { to { opacity: .35; } }
+  @keyframes grow { to { transform: scaleY(1); } }
+  @media (prefers-reduced-motion: reduce) {
+    .dots circle, .lbl-bad, .lbl-s, .lbl-p { animation: none; opacity: 1; }
+    .lpm, .overshoot, .scurve, .pois { animation: none; stroke-dashoffset: 0; }
+    .lpm { opacity: .35; }
+    .bar { animation: none; transform: none; }
+  }
+</style>

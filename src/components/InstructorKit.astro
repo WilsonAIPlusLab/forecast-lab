@@ -4,6 +4,12 @@
 interface Props { objectives: string[]; discussion?: string[]; misconceptions?: string[]; minutes?: number; data?: string[] }
 const { objectives, discussion = [], misconceptions = [], minutes, data = [] } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
+const srcLink = (id: string) => {
+  const uci: Record<string, string> = { bank_marketing: 'https://archive.ics.uci.edu/dataset/222/bank+marketing', bike_day: 'https://archive.ics.uci.edu/dataset/275/bike+sharing+dataset', bike_hour: 'https://archive.ics.uci.edu/dataset/275/bike+sharing+dataset' };
+  const href = uci[id] ?? (id === 'DIVISIA_M4' ? 'https://centerforfinancialstability.org/amfm.php' : `https://fred.stlouisfed.org/series/${id}`);
+  const label = uci[id] ? 'UCI page' : id === 'DIVISIA_M4' ? 'CFS page' : 'FRED page';
+  return { href, label };
+};
 const inline = (s: string) => s.replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
 ---
 <section class="kit" aria-labelledby="kit-h">
@@ -32,7 +38,7 @@ const inline = (s: string) => s.replace(/`([^`]+)`/g, '<code>$1</code>').replace
     {data.length > 0 && (
       <div class="kit-card">
         <h3>Data used</h3>
-        <ul>{data.map((id) => <li><a href={`${base}data/${id}.csv`} download>{id}.csv</a> <span class="muted">· <a href={`https://fred.stlouisfed.org/series/${id}`} target="_blank" rel="noopener">FRED page</a></span></li>)}</ul>
+        <ul>{data.map((id) => <li><a href={`${base}data/${id}.csv`} download>{id}.csv</a> <span class="muted">· <a href={srcLink(id).href} target="_blank" rel="noopener">{srcLink(id).label}</a></span></li>)}</ul>
       </div>
     )}
   </div>

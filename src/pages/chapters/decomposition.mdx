@@ -162,7 +162,7 @@ The **SA** and **NSA** labels on FRED series matter. <Term def="Not seasonally a
 
 - The **Census Bureau** adjusts retail sales with **X-13ARIMA-SEATS**, its own seasonal adjustment program. The adjustment covers seasonal variation and also **trading-day and holiday differences**, but not price changes.<sup>[3](#refs),[4](#refs)</sup>
 - The **Bureau of Labor Statistics** also uses X-13ARIMA-SEATS, for the CPI and for the payroll employment survey.<sup>[5](#refs),[6](#refs)</sup>
-- X-13 fits an ARIMA model (Chapter 6) to **extend the series with forecasts** before filtering. That reduces the end-point problem you saw with `decompose()`.<sup>[4](#refs)</sup>
+- X-13 fits an ARIMA model (Chapter 7) to **extend the series with forecasts** before filtering. That reduces the end-point problem you saw with `decompose()`.<sup>[4](#refs)</sup>
 - Adjustment is **concurrent**: every new month re-estimates the factors, so recent seasonally adjusted values get revised.<sup>[3](#refs)</sup>
 - Some series are also **annualized**. `HOUST` (housing starts, SA) is a seasonally adjusted *annual rate*: the monthly pace multiplied by 12. `HOUSTNSA` is the raw monthly count. Divide `HOUST` by 12 before comparing the two.
 
@@ -238,13 +238,13 @@ For December 2025, the raw change is +11.8%. A typical December over the previou
 Some methods want a series with no trend and no seasonality. You can get one in two ways, and the next lab compares them.
 
 - **Regression on time** fits a deterministic trend plus month dummies (Chapter 4) and keeps the residuals.
-- **Differencing** subtracts the value 12 months earlier, leaving year-over-year growth. ARIMA models (Chapter 6) are built on this idea.
+- **Differencing** subtracts the value 12 months earlier, leaving year-over-year growth. ARIMA models (Chapter 7) are built on this idea.
 
 <div class="breakout">
 <CodeLab client:load id="ch02-detrend" title="Detrend by regression or by differencing" r={detrendR} py={detrendPy} packages={['forecast']} pyPackages={['statsmodels']} goal="Remove trend and seasonality from log retail sales twice, by regression and by differencing, and compare what is left." />
 </div>
 
-From 2010 to 2019 the regression finds trend growth of 0.30% per month, about **3.7% per year**, and puts a typical December about 25 log points (roughly 28%) above January. The regression residuals stay above or below zero for years at a time (2010 averages −3.2%, 2014 +1.9%), because a straight line cannot follow a trend that bends. Chapter 6 shows when differencing is the better choice.
+From 2010 to 2019 the regression finds trend growth of 0.30% per month, about **3.7% per year**, and puts a typical December about 25 log points (roughly 28%) above January. The regression residuals stay above or below zero for years at a time (2010 averages −3.2%, 2014 +1.9%), because a straight line cannot follow a trend that bends. Chapter 7 shows when differencing is the better choice.
 
 ## Your turn
 

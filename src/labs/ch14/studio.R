@@ -4,13 +4,13 @@ y <- fred("RSXFSN", start = 2010) / 1000
 h <- 12
 origins <- seq(length(y) - 48, length(y) - 4, by = 4)
 
-#| **Choose the model forms using only data before the first origin.** `ets()` picks the exponential-smoothing form by AICc ([Chapter 5](/chapters/exponential-smoothing/)); we limit it to multiplicative errors and seasonality (`"MZM"`) to keep it quick. `auto.arima()` picks the ARIMA orders ([Chapter 6](/chapters/arima/)). Because `pre` ends at the first origin, nothing we evaluate later has been seen during model selection.
+#| **Choose the model forms using only data before the first origin.** `ets()` picks the exponential-smoothing form by AICc ([Chapter 6](/chapters/exponential-smoothing/)); we limit it to multiplicative errors and seasonality (`"MZM"`) to keep it quick. `auto.arima()` picks the ARIMA orders ([Chapter 7](/chapters/arima/)). Because `pre` ends at the first origin, nothing we evaluate later has been seen during model selection.
 pre <- window(y, end = time(y)[origins[1]])
 e_form <- ets(pre, model = "MZM")
 a_form <- auto.arima(pre, stepwise = TRUE, approximation = TRUE)
 c(ETS = e_form$method, ARIMA = as.character(a_form))
 
-#| **Four forecasting functions.** Each takes the data up to an origin, **re-estimates** its parameters on that data alone, and returns `h` forecasts. The combination is the plain average of ETS and ARIMA ([Chapter 10](/chapters/uncertainty/)).
+#| **Four forecasting functions.** Each takes the data up to an origin, **re-estimates** its parameters on that data alone, and returns `h` forecasts. The combination is the plain average of ETS and ARIMA ([Chapter 11](/chapters/uncertainty/)).
 f <- list(`Seasonal naive` = function(x) snaive(x, h = h)$mean,
           Drift = function(x) rwf(x, h = h, drift = TRUE)$mean,
           ETS = function(x) forecast(ets(x, model = paste(e_form$components[1:3], collapse = ""),

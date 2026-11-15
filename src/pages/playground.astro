@@ -50,8 +50,8 @@ print(fit.params)
       </div>
       <div>
         <h2>Bundled data ({ids.length} series)</h2>
-        <div class="ids">{ids.map((id) => <a href={id === 'DIVISIA_M4' ? 'https://centerforfinancialstability.org/amfm.php' : `https://fred.stlouisfed.org/series/${id}`} target="_blank" rel="noopener" title={`${manifest[id].start} to ${manifest[id].end}`}><code>{id}</code></a>)}</div>
-        <p class="muted small">Hover over an ID for its date range; click to open its source page (FRED, or the Center for Financial Stability for DIVISIA_M4). Load with <code>fred("ID")</code>.</p>
+        <div class="ids">{ids.map((id) => <a href={manifest[id].lazy ? (id.startsWith('bank') ? 'https://archive.ics.uci.edu/dataset/222/bank+marketing' : 'https://archive.ics.uci.edu/dataset/275/bike+sharing+dataset') : id === 'DIVISIA_M4' ? 'https://centerforfinancialstability.org/amfm.php' : `https://fred.stlouisfed.org/series/${id}`} target="_blank" rel="noopener" title={manifest[id].lazy ? `${manifest[id].n} rows · read.csv("data/${manifest[id].file}")` : `${manifest[id].start} to ${manifest[id].end}`}><code>{id}</code></a>)}</div>
+        <p class="muted small">Hover over an ID for its date range; click to open its source page (FRED, or the Center for Financial Stability for DIVISIA_M4). Load FRED series with <code>fred("ID")</code>; the three UCI datasets (<code>bank_marketing</code>, <code>bike_day</code>, <code>bike_hour</code>) with <code>read.csv("data/bike_day.csv")</code>.</p>
       </div>
     </section>
   </main>

@@ -49,6 +49,10 @@ def _clean(o):
 
 
 def _push(spec):
+    import inspect
+    fr = inspect.currentframe().f_back
+    if fr is not None and fr.f_locals.get("source") is not None:
+        spec["source"] = fr.f_locals["source"]
     if spec.get("type") not in ("check", "kpi", "table") and "source" not in spec:
         spec["source"] = _source()
     _queue.append(_clean(spec))
@@ -141,7 +145,7 @@ def _ser(s, name="series"):
 
 
 # ── charts ───────────────────────────────────────────────────────
-def viz_ts(*series, title=None, subtitle=None, ylab=None, recessions=False, facet=False, log=False, **named):
+def viz_ts(*series, title=None, subtitle=None, ylab=None, recessions=False, facet=False, log=False, source=None, **named):
     items = [_ser(s, getattr(s, "name", None) or f"series{i+1}") for i, s in enumerate(series)]
     items += [_ser(s, k) for k, s in named.items()]
     rec = None
@@ -151,7 +155,7 @@ def viz_ts(*series, title=None, subtitle=None, ylab=None, recessions=False, face
     _push(dict(type="ts", title=title, subtitle=subtitle, ylab=ylab, series=items, recessions=rec, facet=facet, log=log))
 
 
-def viz_forecast(history, mean, lower=None, upper=None, actual=None, title=None, subtitle=None, method=None, levels=("95%",), fitted=None, from_=None):
+def viz_forecast(history, mean, lower=None, upper=None, actual=None, title=None, subtitle=None, method=None, levels=("95%",), fitted=None, from_=None, source=None):
     """history/mean/actual: Series. lower/upper: Series or list of Series (one per level)."""
     if from_ is not None:
         history = history[history.index >= pd.Timestamp(str(from_))]
@@ -168,14 +172,14 @@ def viz_forecast(history, mean, lower=None, upper=None, actual=None, title=None,
     _push(spec)
 
 
-def viz_compare(history=None, actual=None, title=None, subtitle=None, **models):
+def viz_compare(history=None, actual=None, title=None, subtitle=None, source=None, **models):
     _push(dict(type="compare", title=title, subtitle=subtitle,
                history=_ser(history, "history") if history is not None else None,
                actual=_ser(actual, "actual") if actual is not None else None,
                models=[_ser(v, k) for k, v in models.items()]))
 
 
-def viz_table(df, title=None, subtitle=None, highlight=None, digits=3, lower_is_better=True):
+def viz_table(df, title=None, subtitle=None, highlight=None, digits=3, lower_is_better=True, source=None):
     df = pd.DataFrame(df)
     if not isinstance(df.index, pd.RangeIndex):
         df = df.reset_index().rename(columns={"index": "Model"})
@@ -184,30 +188,30 @@ def viz_table(df, title=None, subtitle=None, highlight=None, digits=3, lower_is_
                rows=df.astype(object).where(pd.notna(df), None).values.tolist(), highlight=highlight, lower_is_better=lower_is_better))
 
 
-def viz_bars(values, labels=None, title=None, subtitle=None, xlab=None, sort=True, highlight=None):
+def viz_bars(values, labels=None, title=None, subtitle=None, xlab=None, sort=True, highlight=None, source=None):
     s = pd.Series(values)
     _push(dict(type="bars", title=title, subtitle=subtitle, xlab=xlab, labels=[str(l) for l in (labels if labels is not None else s.index)],
                values=s.astype(float).tolist(), sort=sort, highlight=highlight))
 
 
-def viz_scatter(x, y, title=None, subtitle=None, xlab=None, ylab=None, fit=True, labels=None):
+def viz_scatter(x, y, title=None, subtitle=None, xlab=None, ylab=None, fit=True, labels=None, source=None):
     _push(dict(type="scatter", title=title, subtitle=subtitle, xlab=xlab or getattr(x, "name", "x"), ylab=ylab or getattr(y, "name", "y"),
                x=pd.Series(x).astype(float).tolist(), y=pd.Series(y).astype(float).tolist(), fit=fit, labels=labels))
 
 
-def viz_lines(x, title=None, subtitle=None, xlab=None, ylab=None, zero=False, **ys):
+def viz_lines(x, title=None, subtitle=None, xlab=None, ylab=None, zero=False, source=None, **ys):
     _push(dict(type="lines", title=title, subtitle=subtitle, xlab=xlab, ylab=ylab, zero=zero, x=list(np.asarray(x, dtype=float)),
                series=[dict(name=k, value=list(np.asarray(v, dtype=float))) for k, v in ys.items()]))
 
 
-def viz_acf(x, lag_max=36, kind="acf", title=None):
+def viz_acf(x, lag_max=36, kind="acf", title=None, source=None):
     from statsmodels.tsa.stattools import acf, pacf
     x = pd.Series(x).dropna()
     v = acf(x, nlags=lag_max) if kind == "acf" else pacf(x, nlags=lag_max)
     _push(dict(type="acf", kind=kind.upper(), title=title, lag=list(range(1, lag_max + 1)), value=list(v[1:]), ci=1.96 / np.sqrt(len(x))))
 
 
-def viz_decomp(res, title=None):
+def viz_decomp(res, title=None, source=None):
     """res: statsmodels STL(...).fit() or seasonal_decompose(...) result."""
     parts = {"data": res.observed, "trend": res.trend, "seasonal": res.seasonal, "remainder": res.resid}
     _push(dict(type="decomp", title=title, parts=[_ser(v, k) for k, v in parts.items()]))

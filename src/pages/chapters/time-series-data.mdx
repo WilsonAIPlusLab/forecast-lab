@@ -57,7 +57,7 @@ Forecasters write this compactly as $\hat y_{T+h \mid T}$: the forecast of $y$ a
 Two distinctions trip up beginners.
 
 - **A forecast is not a target or a plan.** "We will sell 10,000 units" might be a sales goal. The forecast is what you expect to happen if nothing changes; the plan is what you decide to do about it.<sup>[1](#refs)</sup>
-- **Forecasting is not explaining.** To explain *why* unemployment rose, you need causes. To forecast it, any reliable signal will do, even one that causes nothing. Jobless claims do not cause unemployment, but they move first, so they help forecast it (you will test exactly this in Chapter 7).
+- **Forecasting is not explaining.** To explain *why* unemployment rose, you need causes. To forecast it, any reliable signal will do, even one that causes nothing. Jobless claims do not cause unemployment, but they move first, so they help forecast it (you will test exactly this in Chapter 8).
 
 <Predict client:load kind="check"
   question="Which of these is a complete forecast?"
@@ -83,7 +83,7 @@ Economic data come in three shapes. The difference decides which methods you can
 <DataShapes client:load />
 </div>
 
-Click **Restaurants & bars** and look at the 2020 column of the panel: sales fell 16.9% while nonstore (mostly online) sales rose 29.2%. No single cross-section or single time series shows that contrast as clearly as the panel does. Most of this course works with time series. Chapter 13 returns to panels, when you forecast hundreds of related series at once.
+Click **Restaurants & bars** and look at the 2020 column of the panel: sales fell 16.9% while nonstore (mostly online) sales rose 29.2%. No single cross-section or single time series shows that contrast as clearly as the panel does. Most of this course works with time series. Chapter 14 returns to panels, when you forecast hundreds of related series at once.
 
 ## Time series in R and Python
 
@@ -215,7 +215,7 @@ For GDP, the Bureau of Economic Analysis (BEA) publishes an *advance* estimate r
 Each published version of a series is called a <Term def="The version of a data series as it was published on a particular date. Real-time forecast evaluation uses the vintage that was available at each forecast origin.">vintage</Term>. The St. Louis Fed keeps every vintage of many FRED series in <Term def="Archival FRED: the St. Louis Fed's archive of past vintages of FRED series, at alfred.stlouisfed.org.">ALFRED</Term>.<sup>[8](#refs)</sup>
 
 <Callout type="pitfall" title="Revisions are a hidden form of look-ahead leakage">
-If you test a forecasting model on today's revised data, you give it cleaner numbers than any forecaster had at the time. For a fair "how would this have done in 2009?" test, use the vintage available at each forecast origin. Chapter 3 shows how leakage flatters a model; Chapter 7 runs a real-time out-of-sample test.
+If you test a forecasting model on today's revised data, you give it cleaner numbers than any forecaster had at the time. For a fair "how would this have done in 2009?" test, use the vintage available at each forecast origin. Chapter 3 shows how leakage flatters a model; Chapter 8 runs a real-time out-of-sample test.
 </Callout>
 
 ## Where the data come from

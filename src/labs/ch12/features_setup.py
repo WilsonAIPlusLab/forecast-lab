@@ -1,4 +1,4 @@
-# Hidden setup shared by the Chapter 12 Python labs: builds the supervised feature table.
+# Hidden setup shared by the Chapter 13 Python labs: builds the supervised feature table.
 # (Lab 12.1 builds the same table step by step, with explanations.)
 import xgboost as xgb
 

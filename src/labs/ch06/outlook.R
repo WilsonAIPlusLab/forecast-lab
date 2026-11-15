@@ -7,7 +7,7 @@ yoy <- 100 * (pce / stats::lag(pce, -12) - 1)       # 12-month inflation, %
 #| **Three contenders, plus a benchmark.**
 #| - `auto.arima()` picks **ARIMA(0,2,1)**: twice-differenced log prices, i.e. the IMA model for inflation from the previous lab.
 #| - **ARIMA(1,1,1) with drift**: inflation is stationary and drifts back to its mean.
-#| - **ETS(A,A,N)**: Holt's linear trend method from Chapter 5, applied to log prices.
+#| - **ETS(A,A,N)**: Holt's linear trend method from Chapter 6, applied to log prices.
 #| - The benchmark: *inflation over the next 12 months will equal inflation over the last 12* (Atkeson & Ohanian, 2001).
 fit_auto <- auto.arima(lp)
 fit_auto

@@ -7,6 +7,16 @@ let py: any = null;
 let initPromise: Promise<any> | null = null;
 let queue: Promise<any> = Promise.resolve();
 const loaded = new Set<string>();
+let lazyFiles = new Set<string>();
+const fetchedLazy = new Set<string>();
+async function ensureLazyData(code: string) {
+  const want = [...code.matchAll(/data\/([A-Za-z0-9_]+\.csv)/g)].map((m) => m[1]).filter((f) => lazyFiles.has(f) && !fetchedLazy.has(f));
+  for (const f of want) {
+    const buf = new Uint8Array(await (await fetch(BASE + 'data/' + f)).arrayBuffer());
+    py.FS.writeFile('/home/pyodide/data/' + f, buf);
+    fetchedLazy.add(f);
+  }
+}
 function serial<T>(fn: () => Promise<T>): Promise<T> { const p = queue.then(fn, fn); queue = p.catch(() => {}); return p; }
 
 async function init() {
@@ -19,7 +29,8 @@ async function init() {
   setStatus('py', { message: 'Loading course data…', progress: 0.7 });
   const manifest = await (await fetch(BASE + 'data/manifest.json')).json();
   try { py.FS.mkdir('/home/pyodide/data'); } catch {}
-  await Promise.all(Object.values(manifest).map(async (m: any) => {
+  lazyFiles = new Set(Object.values(manifest).filter((m: any) => m.lazy).map((m: any) => m.file));
+  await Promise.all(Object.values(manifest).filter((m: any) => !m.lazy).map(async (m: any) => {
     const buf = new Uint8Array(await (await fetch(BASE + 'data/' + m.file)).arrayBuffer());
     py.FS.writeFile('/home/pyodide/data/' + m.file, buf);
   }));
@@ -67,6 +78,7 @@ export async function runPy(code: string, opts: { packages?: string[] } = {}): P
   await startPy();
   if (opts.packages?.length) await ensurePyPackages(opts.packages);
   return serial(async () => {
+    await ensureLazyData(code);
     setStatus('py', { state: 'busy', message: 'Running Python…' });
     const t0 = performance.now();
     const out: RunOutput = { lines: [], images: [], viz: [], ok: true, ms: 0 };
@@ -106,4 +118,4 @@ export async function resetEnvPy() {
   if (!py) return;
   await serial(async () => py.runPython('for _k in [k for k in list(globals()) if not k.startswith("_") and k not in course._KEEP]: del globals()[_k]\ncourse._hash.clear()'));
 }
-export async function restartPy() { initPromise = null; py = null; loaded.clear(); queue = Promise.resolve(); setStatus('py', { state: 'idle', message: 'Python restarted', progress: 0 }); return startPy(); }
+export async function restartPy() { initPromise = null; py = null; loaded.clear(); fetchedLazy.clear(); queue = Promise.resolve(); setStatus('py', { state: 'idle', message: 'Python restarted', progress: 0 }); return startPy(); }

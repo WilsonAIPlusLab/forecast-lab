@@ -30,7 +30,7 @@ scores <- rbind(`Trend + season regression` = accuracy(fc, test)["Test set", c("
 viz_table(scores, highlight = c("MAE", "RMSE", "MAPE", "MASE"), digits = 2,
           title = "Retail sales scorecard, test period 2024 onward")
 
-#| **Residual diagnostics.** `checkresiduals()` runs the Breusch–Godfrey test for autocorrelation in regression residuals. A tiny p-value says the misses come in long runs: a straight trend cannot follow the post-2021 surge in prices and spending. Chapter 7 fixes this with *dynamic regression* (regression with ARIMA errors).
+#| **Residual diagnostics.** `checkresiduals()` runs the Breusch–Godfrey test for autocorrelation in regression residuals. A tiny p-value says the misses come in long runs: a straight trend cannot follow the post-2021 surge in prices and spending. Chapter 8 fixes this with *dynamic regression* (regression with ARIMA errors).
 checkresiduals(fit, plot = FALSE)
 
 #| **Fourier terms: a smoother way to model the calendar.** Instead of 11 dummies, `fourier(train, K)` adds K pairs of sine and cosine waves with periods of 12, 6, 4, … months. Small K gives a smooth seasonal shape with few coefficients; K = 6 reproduces the dummies exactly. `CV()` scores each version; lower AICc and BIC are better. (Its leave-one-out `CV` column is `Inf` here: leaving out April 2020 leaves the pulse dummy with no data at all. A pulse dummy and leave-one-out CV do not mix.)

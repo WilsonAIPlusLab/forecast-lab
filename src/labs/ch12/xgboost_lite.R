@@ -1,4 +1,4 @@
-# Browser fallback for Chapter 12 (hidden setup; not shown to students).
+# Browser fallback for Chapter 13 (hidden setup; not shown to students).
 # xgboost's compiled code cannot yet load in webR (WebAssembly link error: it needs shared memory).
 # When the real package is unavailable, this attaches a small pure-R re-implementation of the parts of
 # the xgboost API the labs use, as "package:xgboost", so `library(xgboost)` and the lab code run unchanged.

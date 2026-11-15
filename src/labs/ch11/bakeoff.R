@@ -5,7 +5,7 @@ train_y <- window(retail, end = c(2022, 12))
 test_y  <- window(retail, start = c(2023, 1))
 h       <- length(test_y)
 
-#| **The statistical contestants.** Seasonal naive is the benchmark to beat. `ets()` picks an exponential-smoothing model automatically (Chapter 5).
+#| **The statistical contestants.** Seasonal naive is the benchmark to beat. `ets()` picks an exponential-smoothing model automatically (Chapter 6).
 f_snaive <- snaive(train_y, h = h)$mean
 f_ets    <- forecast(ets(train_y), h = h)$mean
 
@@ -56,7 +56,7 @@ board <- rbind(`Seasonal naive` = score(f_snaive), ETS = score(f_ets),
                `ETS + forest average` = score((f_ets + f_rf) / 2))
 round(board, 2)
 
-#| **The scorecard.** Green marks the best value in each column. Read it honestly: which row wins on MAE, and by how much? Look at the **ME** (bias) column too: ETS over-forecasts and the forest under-forecasts, by similar amounts. That is why the last row, a simple 50/50 average of the two (forecast combination, Chapter 10), does better than either.
+#| **The scorecard.** Green marks the best value in each column. Read it honestly: which row wins on MAE, and by how much? Look at the **ME** (bias) column too: ETS over-forecasts and the forest under-forecasts, by similar amounts. That is why the last row, a simple 50/50 average of the two (forecast combination, Chapter 11), does better than either.
 viz_table(board, highlight = c("MAE", "RMSE", "MAPE", "MASE"), digits = 2,
           title = "ML vs ETS bake-off: retail sales, test period 2023 onward")
 viz_compare(history = window(train_y, start = 2020), actual = test_y,

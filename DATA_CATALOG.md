@@ -54,3 +54,13 @@ SA = seasonally adjusted, NSA = not seasonally adjusted. **Always state SA/NSA c
 | GASREGW | Regular gasoline price | W (Mon) | $/gallon | NSA |
 | DCOILWTICO | WTI crude oil | D | $/barrel | NSA |
 | EXUSEU | US $ per euro | M | $ | — |
+
+## Non-FRED teaching datasets (loaded lazily: the runtime fetches them when a lab mentions `data/<file>.csv`)
+
+Read with `read.csv("data/bank_marketing.csv")` (R) or `pd.read_csv("data/bank_marketing.csv")` (Python); `fred()` is for FRED series only.
+
+| File | Dataset | Rows | Notes |
+|---|---|---|---|
+| bank_marketing.csv | UCI Bank Marketing, *bank-additional* 10% sample (Moro, Cortez & Rita 2014), CC BY 4.0 | 4,119 clients | Portuguese bank phone campaigns, May 2008–Nov 2010. Target `y` = subscribed a term deposit (yes 11%). Columns renamed with `_` instead of `.` (emp_var_rate, cons_price_idx, cons_conf_idx, euribor3m, nr_employed). **`duration` (call length) is only known after the call: using it to predict `y` is leakage.** `pdays = 999` means never contacted before. |
+| bike_day.csv | UCI Bike Sharing, Capital Bikeshare (Washington DC) daily, 2011–2012 (Fanaee-T & Gama 2013), CC BY 4.0 | 731 days | `cnt` = total rentals (casual + registered); `temp`, `atemp`, `hum`, `windspeed` are normalized to roughly 0–1. The dataset's Readme says temp = °C/41, atemp = °C/50, hum = %/100, windspeed = /67, while the UCI web page describes a min-max scaling (temp from −8 to 39 °C); treat them as indexes and say so if you convert to °C; `weathersit` 1 clear … 4 heavy rain; season 1 = winter. |
+| bike_hour.csv | Same, hourly | 17,379 hours | `hr` 0–23; counts are small overnight (good for Poisson), large at rush hour. |

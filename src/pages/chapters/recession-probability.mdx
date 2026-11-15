@@ -47,7 +47,9 @@ In May 2023 the gap between the 10-year Treasury yield and the 3-month bill rate
 
 ## A forecast for a yes-or-no event
 
-So far every target in this course has been a number: sales, jobs, inflation. Many business questions are instead <Term def="An outcome with only two possible values, coded 1 (the event happens) and 0 (it does not).">binary outcomes</Term>. Will this customer default? Will the shipment arrive late? Will the economy be in recession a year from now?
+Most targets in this course have been numbers: sales, jobs, inflation. Many business questions are instead <Term def="An outcome with only two possible values, coded 1 (the event happens) and 0 (it does not).">binary outcomes</Term>. Will this customer default? Will the shipment arrive late? Will the economy be in recession a year from now?
+
+[Chapter 5](/chapters/nonlinear-regression/) introduced the tools for such outcomes on bank-marketing data: the logit, odds ratios, marginal effects, confusion matrices and ROC curves. This chapter reviews them briefly and puts them to work on a harder problem: a rare economic event, forecast a year ahead, where the test data must come after the training data.
 
 For a binary outcome, the useful forecast is a probability between 0 and 1. A model that says "30% chance" is not wrong when the event fails to happen; it would be wrong if events it called 30% happened 90% of the time. That idea, called <Term def="A probability forecast is calibrated when events it gives probability p happen about a fraction p of the time.">calibration</Term>, will matter a lot by the end of the chapter.
 
@@ -285,7 +287,7 @@ Two lessons:
 
 ## Can other indicators help?
 
-The yield curve is only one signal. Three others are popular: the <Term def="Moody's Baa corporate bond yield minus the 10-year Treasury yield (FRED: BAA10Y). It widens when investors fear defaults.">credit spread</Term> (`BAA10Y`), initial jobless claims (`ICSA`, seasonally adjusted, the subject of Chapter 7) and University of Michigan consumer sentiment (`UMCSENT`, not seasonally adjusted). Adding them to a logit is easy: `glm(y ~ spread + baa + claims, ...)`. Whether they *help* is an out-of-sample question. Because the credit spread starts in 1986, this test trains on 1986–2005 and evaluates on 2006 onward, and it asks the question at two horizons.
+The yield curve is only one signal. Three others are popular: the <Term def="Moody's Baa corporate bond yield minus the 10-year Treasury yield (FRED: BAA10Y). It widens when investors fear defaults.">credit spread</Term> (`BAA10Y`), initial jobless claims (`ICSA`, seasonally adjusted, the subject of Chapter 8) and University of Michigan consumer sentiment (`UMCSENT`, not seasonally adjusted). Adding them to a logit is easy: `glm(y ~ spread + baa + claims, ...)`. Whether they *help* is an out-of-sample question. Because the credit spread starts in 1986, this test trains on 1986–2005 and evaluates on 2006 onward, and it asks the question at two horizons.
 
 <div class="breakout">
 <CodeLab client:load id="ch08-predictors" title="Do credit spreads, claims or sentiment add anything?" r={predR} py={predPy} setup={setupR} pySetup={setupPy} pyPackages={['statsmodels', 'scikit-learn']}

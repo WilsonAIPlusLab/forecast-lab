@@ -1,4 +1,4 @@
-// Small ARMA toolkit for the Chapter 6 explorables (pure JS, instant).
+// Small ARMA toolkit for the Chapter 7 explorables (pure JS, instant).
 import { rng } from '../../lib/ts';
 
 /** psi-weights of the MA(infinity) representation of an ARMA(p,q): y_t = sum psi_j e_{t-j}. */

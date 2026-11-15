@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Chapter 11 · Explorable 2: grow a regression tree by hand on two features (calendar month,
+  // Chapter 12 · Explorable 2: grow a regression tree by hand on two features (calendar month,
   // last month's growth) of real retail sales growth. Every candidate cut shows its SSE reduction;
   // "Best split" does what rpart does; the leaves slider shows overfitting on the 2023+ test months.
   import { onMount } from 'svelte';

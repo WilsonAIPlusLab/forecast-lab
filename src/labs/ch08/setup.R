@@ -1,4 +1,4 @@
-# Hidden setup shared by the Chapter 8 labs: rebuilds the data frame `d` from the first lab.
+# Hidden setup shared by the Chapter 9 labs: rebuilds the data frame `d` from the first lab.
 rec    <- fred("USREC", start = 1959)
 spread <- fred("GS10", start = 1959) - fred("TB3MS", start = 1959)
 X <- ts.intersect(rec, spread)

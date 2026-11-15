@@ -4,7 +4,7 @@ pce  <- fred("PCEPILFE", start = c(2000, 1))
 infl <- 1200 * diff(log(pce))
 
 #| **Model 1, by hand: ARIMA(0,1,1).** The ACF of *changes* in inflation had one spike at lag 1, so we difference once (d = 1) and add one MA term (q = 1). `Arima()` estimates θ by maximum likelihood.
-#| Read the result like this: θ ≈ −0.82 means the forecast is an exponentially weighted average of past inflation with weight 1 + θ ≈ 0.18 on the newest month. That is simple exponential smoothing from Chapter 5, in ARIMA clothing.
+#| Read the result like this: θ ≈ −0.82 means the forecast is an exponentially weighted average of past inflation with weight 1 + θ ≈ 0.18 on the newest month. That is simple exponential smoothing from Chapter 6, in ARIMA clothing.
 fit_ima <- Arima(infl, order = c(0, 1, 1))
 fit_ima
 

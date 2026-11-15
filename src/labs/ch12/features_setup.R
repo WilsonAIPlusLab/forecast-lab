@@ -1,4 +1,4 @@
-# Hidden setup shared by the Chapter 12 labs: builds the supervised feature table.
+# Hidden setup shared by the Chapter 13 labs: builds the supervised feature table.
 # (Lab 12.1 builds the same table step by step, with explanations.)
 library(xgboost)
 lag_by <- function(x, k) c(rep(NA, k), head(x, -k))

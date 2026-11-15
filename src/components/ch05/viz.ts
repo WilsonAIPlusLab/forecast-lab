@@ -1,4 +1,4 @@
-// Chapter 5 custom chart type, emitted from R/Python with viz_custom("ch05-multiples", panels = …).
+// Chapter 6 custom chart type, emitted from R/Python with viz_custom("ch05-multiples", panels = …).
 // A grid of small multiples: one panel per series with history, forecast, 80% band and a traffic-light badge.
 import * as Plot from '@observablehq/plot';
 import { registerViz } from '../../lib/viz/render';

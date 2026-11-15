@@ -1,4 +1,4 @@
-// Small numerical helpers for the Chapter 7 explorables (pure JS, instant).
+// Small numerical helpers for the Chapter 8 explorables (pure JS, instant).
 import type { Pt } from '../../lib/ts';
 
 export const key = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;

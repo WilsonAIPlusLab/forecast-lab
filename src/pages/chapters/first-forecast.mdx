@@ -73,7 +73,7 @@ The chart has three ingredients that will appear in every chapter:
 <dl class="vocab">
   <dt>Time series</dt><dd>Observations of one variable in time order: monthly sales, quarterly GDP, daily prices. The order matters.</dd>
   <dt>Horizon (h)</dt><dd>How far ahead we forecast. `h = 24` with monthly data means two years.</dd>
-  <dt>Model</dt><dd>A rule that turns the past into a forecast. `auto.arima()` picked one for us; Chapter 6 opens the box.</dd>
+  <dt>Model</dt><dd>A rule that turns the past into a forecast. `auto.arima()` picked one for us; Chapter 7 opens the box.</dd>
   <dt>Prediction interval</dt><dd>A range that should contain the future value with a stated probability (80%, 95%).</dd>
   <dt>Seasonality</dt><dd>A pattern that repeats every year, like the December shopping spike. Chapter 2 is all about it.</dd>
 </dl>
@@ -104,7 +104,7 @@ Every chapter follows the same rhythm:
 From here we go back to the start. Chapter 1 asks what a time series actually is and where economic data comes from. Chapter 3 asks the question every forecaster must answer: is my model actually better than a naive guess?
 
 <Callout type="math" title="What did auto.arima actually choose?">
-With the bundled data, the printed output reads `ARIMA(2,0,2)(0,1,1)[12] with drift` (the exact label can change when the data are updated). Roughly, it means: compare each month with the same month last year (the seasonal `(0,1,1)[12]` part), use the last two months and the model's last two surprises to predict the next move (the `(2,0,2)` part), and add a steady upward drift. Chapter 6 decodes this notation completely. For now, the point is that a well-chosen model learns both the trend and the seasonal pattern from the data.
+With the bundled data, the printed output reads `ARIMA(2,0,2)(0,1,1)[12] with drift` (the exact label can change when the data are updated). Roughly, it means: compare each month with the same month last year (the seasonal `(0,1,1)[12]` part), use the last two months and the model's last two surprises to predict the next move (the `(2,0,2)` part), and add a steady upward drift. Chapter 7 decodes this notation completely. For now, the point is that a well-chosen model learns both the trend and the seasonal pattern from the data.
 </Callout>
 
 <InstructorKit

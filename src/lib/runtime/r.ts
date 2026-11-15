@@ -16,6 +16,18 @@ let webR: any = null;
 let initPromise: Promise<any> | null = null;
 const installed = new Set<string>();
 let queue: Promise<any> = Promise.resolve();
+let lazyFiles = new Set<string>();
+const fetchedLazy = new Set<string>();
+/** Write any lazily-bundled dataset the code mentions (e.g. "data/bike_day.csv") into the R filesystem. */
+async function ensureLazyData(code: string) {
+  const want = [...code.matchAll(/data\/([A-Za-z0-9_]+\.csv)/g)].map((m) => m[1]).filter((f) => lazyFiles.has(f) && !fetchedLazy.has(f));
+  for (const f of want) {
+    setStatus('r', { message: `Loading ${f}…` });
+    const buf = new Uint8Array(await (await fetch(BASE + 'data/' + f)).arrayBuffer());
+    await webR.FS.writeFile('/home/web_user/data/' + f, buf);
+    fetchedLazy.add(f);
+  }
+}
 
 function serial<T>(fn: () => Promise<T>): Promise<T> {
   const p = queue.then(fn, fn);
@@ -31,8 +43,9 @@ async function init() {
   setStatus('r', { message: 'Loading course data…', progress: 0.35 });
   const manifest = await (await fetch(BASE + 'data/manifest.json')).json();
   try { await webR.FS.mkdir('/home/web_user/data'); } catch {}
+  lazyFiles = new Set(Object.values(manifest).filter((m: any) => m.lazy).map((m: any) => m.file));
   await Promise.all(
-    Object.values(manifest).map(async (m: any) => {
+    Object.values(manifest).filter((m: any) => !m.lazy).map(async (m: any) => {
       const buf = new Uint8Array(await (await fetch(BASE + 'data/' + m.file)).arrayBuffer());
       await webR.FS.writeFile('/home/web_user/data/' + m.file, buf);
     })
@@ -97,6 +110,7 @@ export async function runR(code: string, opts: { packages?: string[]; width?: nu
   await startR();
   if (opts.packages?.length) await ensurePackages(opts.packages);
   return serial(async () => {
+    await ensureLazyData(code);
     setStatus('r', { state: 'busy', message: 'Running R…' });
     const t0 = performance.now();
     const shelter = await new webR.Shelter();
@@ -161,7 +175,7 @@ export async function resetEnvR() {
 
 export async function restartR() {
   try { webR?.close(); } catch {}
-  webR = null; initPromise = null; installed.clear(); queue = Promise.resolve();
+  webR = null; initPromise = null; installed.clear(); queue = Promise.resolve(); fetchedLazy.clear();
   setStatus('r', { state: 'idle', message: 'R restarted', progress: 0 });
   return startR();
 }

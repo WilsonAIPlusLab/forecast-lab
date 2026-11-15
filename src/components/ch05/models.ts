@@ -1,4 +1,4 @@
-// Chapter 5 — small, dependency-free exponential smoothing routines for the explorables.
+// Chapter 6 — small, dependency-free exponential smoothing routines for the explorables.
 // These are teaching versions: parameters are found by coarse grid search and initial states by a
 // simple heuristic, whereas R's ets() optimizes everything (including initial states) by maximum likelihood.
 // Numbers therefore differ a little from the code labs.

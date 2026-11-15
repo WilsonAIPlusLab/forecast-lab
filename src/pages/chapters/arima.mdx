@@ -95,7 +95,7 @@ Most economic series in levels go up over time: prices, GDP, payrolls. A trend c
 The two can look nearly identical in a chart. They imply very different forecasts, though: after a recession, does output return to its old trend path, or has the path been permanently lowered? Nelson and Plosser (1982) famously found that most long U.S. macroeconomic series behave more like the stochastic kind.<sup>[5](#refs)</sup> That is why differencing, not detrending, is the default in this chapter.
 
 <Callout type="pitfall" title="Trending series make fake relationships">
-Regress one random walk on another, completely unrelated one, and you will often find a "highly significant" slope and a large R². This is <Term def="A regression between unrelated nonstationary series that looks statistically significant only because both trend.">spurious regression</Term>, and it is the main reason econometricians test for unit roots before running regressions on time series. Chapter 7 returns to it.
+Regress one random walk on another, completely unrelated one, and you will often find a "highly significant" slope and a large R². This is <Term def="A regression between unrelated nonstationary series that looks statistically significant only because both trend.">spurious regression</Term>, and it is the main reason econometricians test for unit roots before running regressions on time series. Chapter 8 returns to it.
 </Callout>
 
 ## Spot the random walk
@@ -226,7 +226,7 @@ Now fit two models to monthly core PCE inflation by hand, let `auto.arima()` hav
 
 What the lab shows, with data from January 2000 to September 2026:
 
-- The ACF fingerprint pointed to **ARIMA(0,1,1)**, and `auto.arima()` agrees exactly. Its estimated θ is −0.82. In plain words, the forecast is a weighted average of past inflation that puts 18% weight on the newest month and lets older months fade gradually. That is simple exponential smoothing from Chapter 5, written as an ARIMA.
+- The ACF fingerprint pointed to **ARIMA(0,1,1)**, and `auto.arima()` agrees exactly. Its estimated θ is −0.82. In plain words, the forecast is a weighted average of past inflation that puts 18% weight on the newest month and lets older months fade gradually. That is simple exponential smoothing from Chapter 6, written as an ARIMA.
 - The stationary alternative, **ARMA(1,1) with a mean**, estimates φ = 0.96 and a mean of 2.2%. A half-life of about **18 months** means it, too, sees inflation as very persistent, but not permanent.
 - The tests cannot referee. On inflation since 2000, ADF just rejects a unit root (p = 0.049) while KPSS rejects stationarity (p ≤ 0.01). `ndiffs()` says d = 1 using KPSS, and d = 0 using ADF.
 - The residuals pass the <Term def="A test of whether a group of autocorrelations is jointly zero. Applied to residuals, its null is 'no autocorrelation left', so a large p-value is good news.">Ljung–Box test</Term> (p = 0.27, 24 lags): only 1 of 36 residual autocorrelations falls outside the band, about what chance alone produces.
