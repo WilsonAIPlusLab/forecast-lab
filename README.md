@@ -1,6 +1,6 @@
 # Forecast Lab
 
-An interactive, code-first website for **ECON 3371 Economic & Business Forecasting**: 16 chapters, real U.S. data, and R and Python code that runs in the browser (webR and Pyodide), with step-through explanations, instant explorables, auto-checked exercises and an instructor kit for each chapter.
+An interactive, code-first website for **ECON 3371 Economic & Business Forecasting**: 15 chapters, real U.S. data, and R and Python code that runs in the browser (webR and Pyodide), with step-through explanations, instant explorables, auto-checked exercises and an instructor kit for each chapter.
 
 ## Run it locally
 

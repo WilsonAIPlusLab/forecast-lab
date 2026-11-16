@@ -1,4 +1,4 @@
-# Generates var_data.json for the Chapter 10 explorables. Run from site/public:
+# Generates var_data.json for the Chapter 9 explorables. Run from site/public:
 #   cd site/public && Rscript ../src/components/ch09/build_data.R
 # Everything the explorables show (IRFs, bootstrap bands, FEVD, Granger p-values) comes from here,
 # using the same data and the same vars functions as the chapter's labs.

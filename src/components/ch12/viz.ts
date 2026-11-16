@@ -1,4 +1,4 @@
-// Chapter 13: registers the "waterfall" chart type emitted by viz_custom("waterfall", ...) in Lab 13.3.
+// Chapter 12: registers the "waterfall" chart type emitted by viz_custom("waterfall", ...) in Lab 12.3.
 // Spec: { start, start_label, base, labels[], values[], feature_values[], total_label, unit, title, subtitle }
 // All values are changes from `start` (last month's sales), in `unit`. Bars are drawn in change space,
 // so the axis starts at zero = last month's level.

@@ -5,7 +5,7 @@ interface Props { objectives: string[]; discussion?: string[]; misconceptions?: 
 const { objectives, discussion = [], misconceptions = [], minutes, data = [] } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
 const srcLink = (id: string) => {
-  const uci: Record<string, string> = { bank_marketing: 'https://archive.ics.uci.edu/dataset/222/bank+marketing', bike_day: 'https://archive.ics.uci.edu/dataset/275/bike+sharing+dataset', bike_hour: 'https://archive.ics.uci.edu/dataset/275/bike+sharing+dataset' };
+  const uci: Record<string, string> = { bank_marketing: 'https://archive.ics.uci.edu/dataset/222/bank+marketing' };
   const href = uci[id] ?? (id === 'DIVISIA_M4' ? 'https://centerforfinancialstability.org/amfm.php' : `https://fred.stlouisfed.org/series/${id}`);
   const label = uci[id] ? 'UCI page' : id === 'DIVISIA_M4' ? 'CFS page' : 'FRED page';
   return { href, label };

@@ -10,7 +10,7 @@ e_form <- ets(pre, model = "MZM")                      # Z = "let R choose" the 
 a_form <- auto.arima(pre, stepwise = TRUE, approximation = TRUE)   # fast search for ARIMA orders
 c(ETS = e_form$method, ARIMA = as.character(a_form))   # the chosen forms, e.g. ETS(M,Ad,M)
 
-#| **Four forecasting functions.** Each takes the data up to an origin, **re-estimates** its parameters on that data alone, and returns `h` forecasts. The combination is the plain average of ETS and ARIMA ([Chapter 11](/chapters/uncertainty/)).
+#| **Four forecasting functions.** Each takes the data up to an origin, **re-estimates** its parameters on that data alone, and returns `h` forecasts. The combination is the plain average of ETS and ARIMA ([Chapter 10](/chapters/uncertainty/)).
 f <- list(`Seasonal naive` = function(x) snaive(x, h = h)$mean,   # same month last year
           Drift = function(x) rwf(x, h = h, drift = TRUE)$mean,    # straight line from first to last point
           # ETS with the chosen form: components 1-3 give letters like "MAM", component 4 says damped or not

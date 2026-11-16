@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Chapter 12 · Explorable 1: a sliding window walks along real retail sales and drops one
+  // Chapter 11 · Explorable 1: a sliding window walks along real retail sales and drops one
   // supervised-learning row per month into a feature table. A toggle makes the rolling mean leak.
   import { onMount, onDestroy } from 'svelte';
   import { fly } from 'svelte/transition';

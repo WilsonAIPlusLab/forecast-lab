@@ -1,4 +1,4 @@
-// Chapter 12 custom chart: a regression-tree diagram, emitted from R (rpart frame) or Python (sklearn tree_).
+// Chapter 11 custom chart: a regression-tree diagram, emitted from R (rpart frame) or Python (sklearn tree_).
 // R/Python: viz_custom("ch11-tree", title=, subtitle=, nodes = [{id, var, n, yval, label}])
 // Node ids are heap-indexed (root 1, children 2k and 2k+1), as in rpart's frame row names.
 import { registerViz } from '../../lib/viz/render';

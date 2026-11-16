@@ -1,4 +1,4 @@
-#| **Start from the feature table of Lab 13.1.** A hidden setup step rebuilt it: `d` holds every month, `train` is 1993–2022, `test` is January 2023 onward. Each test row uses only information published by the middle of that month, so every test forecast is a genuine **one-month-ahead** forecast.
+#| **Start from the feature table of Lab 12.1.** A hidden setup step rebuilt it: `d` holds every month, `train` is 1993–2022, `test` is January 2023 onward. Each test row uses only information published by the middle of that month, so every test forecast is a genuine **one-month-ahead** forecast.
 print({"train_months": len(train), "test_months": len(test)})   # rows in each block
 def X(df):                                    # helper: rows -> XGBoost's data format
     return xgb.DMatrix(df[features], label=df["growth"])

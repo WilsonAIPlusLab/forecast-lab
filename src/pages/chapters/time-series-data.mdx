@@ -83,7 +83,7 @@ Economic data come in three shapes. The difference decides which methods you can
 <DataShapes client:load />
 </div>
 
-Click **Restaurants & bars** and look at the 2020 column of the panel: sales fell 16.9% while nonstore (mostly online) sales rose 29.2%. No single cross-section or single time series shows that contrast as clearly as the panel does. Most of this course works with time series. Chapters 13 and 14 return to panels: a global model for 14 retail categories, and a retail hierarchy whose forecasts must add up.
+Click **Restaurants & bars** and look at the 2020 column of the panel: sales fell 16.9% while nonstore (mostly online) sales rose 29.2%. No single cross-section or single time series shows that contrast as clearly as the panel does. Most of this course works with time series. Chapters 12 and 13 return to panels: a global model for 14 retail categories, and a retail hierarchy whose forecasts must add up.
 
 ## Time series in R and Python
 
@@ -118,7 +118,7 @@ Models need every series at the same frequency. Often that means converting dail
 Some flows are published at a **seasonally adjusted annual rate** (SAAR): housing starts, vehicle sales, GDP. A monthly SAAR value answers "how many per year, if this month's pace lasted twelve months?" To get a quarterly SAAR value, *average* the three months. Summing them would triple the number.
 </Callout>
 
-The explorable below starts from a daily rate, the gap between the 10-year and 3-month Treasury yields (`T10Y3M`, in percentage points). When it drops below zero the yield curve is *inverted*, a classic recession warning: it turned negative before every U.S. recession since 1969 except one, when it only flattened (Chapter 9).<sup>[4](#refs)</sup> Try every rule at every frequency. Then switch to weekly jobless claims, a flow, where the sum is the right answer.
+The explorable below starts from a daily rate, the gap between the 10-year and 3-month Treasury yields (`T10Y3M`, in percentage points). When it drops below zero the yield curve is *inverted*, a classic recession warning: it turned negative before every U.S. recession since 1969 except one, when it only flattened (Chapter 5).<sup>[4](#refs)</sup> Try every rule at every frequency. Then switch to weekly jobless claims, a flow, where the sum is the right answer.
 
 <div class="breakout">
 <FrequencyZoom client:load />

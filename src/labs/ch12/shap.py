@@ -1,4 +1,4 @@
-#| **Refit the tuned model from Lab 13.2** (learning rate 0.1, depth-2 trees, 38 rounds). The hidden setup rebuilt `train` (1993–2022) and `test` (2023 onward).
+#| **Refit the tuned model from Lab 12.2** (learning rate 0.1, depth-2 trees, 38 rounds). The hidden setup rebuilt `train` (1993–2022) and `test` (2023 onward).
 params = {"eta": 0.1, "max_depth": 2, "tree_method": "exact", "nthread": 1}   # the tuned settings
 fit = xgb.train(params, xgb.DMatrix(train[features], label=train["growth"]), num_boost_round=38)   # 38 trees
 dtest = xgb.DMatrix(test[features])           # test features only

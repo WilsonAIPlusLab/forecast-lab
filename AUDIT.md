@@ -19,17 +19,16 @@ The bar: an instructor elsewhere should think "this is the only website I need."
   - 2 · decomposition · ch02
   - 3 · benchmarks · ch03
   - 4 · regression · ch04
-  - **5 · nonlinear-regression · nonlinear**
+  - **5 · nonlinear-regression · nonlinear (Part 1, bank clients) + ch08 (Part 2, recession probability)**
   - 6 · exponential-smoothing · ch05
   - 7 · arima · ch06
   - 8 · dynamic-regression · ch07
-  - 9 · recession-probability · ch08
-  - 10 · var · ch09
-  - 11 · uncertainty · ch10
-  - 12 · random-forests · ch11
-  - 13 · boosting-shap · ch12
-  - 14 · nowcasting · ch13
-  - 15 · forecast-studio · ch14
+  - 9 · var · ch09
+  - 10 · uncertainty · ch10
+  - 11 · random-forests · ch11
+  - 12 · boosting-shap · ch12
+  - 13 · nowcasting · ch13
+  - 14 · forecast-studio · ch14
 
   Folder names are historical; *chapter numbers in prose must follow the first column.*
 - Pages:

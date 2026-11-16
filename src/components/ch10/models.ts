@@ -1,4 +1,4 @@
-// Chapter 11 toolkit: a small additive exponential-smoothing model (fitted on logs) that can
+// Chapter 10 toolkit: a small additive exponential-smoothing model (fitted on logs) that can
 // forecast, simulate future sample paths, and produce one-step out-of-sample errors.
 // Pure functions, no DOM, so the numbers quoted in the chapter can be reproduced with `npx tsx`.
 

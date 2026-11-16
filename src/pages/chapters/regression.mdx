@@ -295,7 +295,7 @@ Your boss asks: *"What if mortgage rates fall to 5%?"* Fill in the two blanks (`
 - A driver model needs **future drivers**. Judge it by **ex-ante** accuracy against a benchmark; use it for **scenarios** with intervals, and remember those intervals leave out driver uncertainty.
 - Choose models with **AIC, BIC, CV or a time-ordered test**, not R². **Multicollinearity** (VIF above about 10) muddles coefficients but barely changes predictions.
 
-Every outcome in this chapter was a quantity on a smooth scale: millions of cars, billions of dollars. Many business forecasts are not. *Will this customer buy?* is a yes or no; *how many bikes will we rent tomorrow?* is a count that cannot go below zero. [Chapter 5](/chapters/nonlinear-regression/) keeps the regression line you built here but puts it inside a curve: logistic regression for yes/no outcomes and Poisson regression for counts.
+Every outcome in this chapter was a quantity on a smooth scale: millions of cars, billions of dollars. Many business forecasts are not. *Will this customer buy?* and *will there be a recession next year?* are yes-or-no questions, and the useful answer is a probability between 0 and 1. [Chapter 5](/chapters/nonlinear-regression/) keeps the regression line you built here but puts it inside an S-shaped curve: logistic regression, applied first to bank clients and then to the whole economy.
 
 <InstructorKit
   minutes={80}

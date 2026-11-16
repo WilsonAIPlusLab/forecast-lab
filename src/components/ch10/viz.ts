@@ -1,4 +1,4 @@
-// Chapter 11 custom chart types for the code labs (emitted with viz_custom("ch10-…", …)).
+// Chapter 10 custom chart types for the code labs (emitted with viz_custom("ch10-…", …)).
 // Registered on page load because the chapter's explorables import this file.
 import * as Plot from '@observablehq/plot';
 import { registerViz } from '../../lib/viz/render';

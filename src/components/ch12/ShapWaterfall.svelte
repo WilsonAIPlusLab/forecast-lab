@@ -1,6 +1,6 @@
 <script lang="ts">
   // Signature explorable 2: a SHAP waterfall for any month, from last month's sales to the forecast.
-  // Data: precomputed natively in R by src/labs/ch12/make_data.R (same model as Lab 13.3).
+  // Data: precomputed natively in R by src/labs/ch12/make_data.R (same model as Lab 12.3).
   import Explorable from '../Explorable.svelte';
   import data from './shap_data.json';
   import './viz';

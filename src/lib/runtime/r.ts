@@ -18,7 +18,7 @@ const installed = new Set<string>();
 let queue: Promise<any> = Promise.resolve();
 let lazyFiles = new Set<string>();
 const fetchedLazy = new Set<string>();
-/** Write any lazily-bundled dataset the code mentions (e.g. "data/bike_day.csv") into the R filesystem. */
+/** Write any lazily-bundled dataset the code mentions (e.g. "data/bank_marketing.csv") into the R filesystem. */
 async function ensureLazyData(code: string) {
   const want = [...code.matchAll(/data\/([A-Za-z0-9_]+\.csv)/g)].map((m) => m[1]).filter((f) => lazyFiles.has(f) && !fetchedLazy.has(f));
   for (const f of want) {

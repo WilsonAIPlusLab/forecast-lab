@@ -15,8 +15,8 @@ const href = (s: string) => `${base}chapters/${s}/`;
 const cards = chapters.map((c) => ({ ...c, spark: sparkPath(chapterSeries[c.slug].id, chapterSeries[c.slug]), sid: chapterSeries[c.slug].id }));
 const partBlurb: Record<string, string> = {
   Foundations: 'What a forecast is, where data comes from, and how to tell a good forecast from a lucky one.',
-  'Classic Toolkit': 'The model families behind most professional forecasts: linear, logistic and Poisson regression, exponential smoothing and ARIMA.',
-  'Economic Signals': 'Indicators, recession odds, feedback between variables, and turning uncertainty into decisions.',
+  'Classic Toolkit': 'The model families behind most professional forecasts: linear and logistic regression (including recession probabilities), exponential smoothing and ARIMA.',
+  'Economic Signals': 'Leading indicators, feedback between variables, and turning uncertainty into decisions.',
   'Machine Learning & Big Data': 'Trees, forests, gradient boosting with explanations, and forecasting from many series at once.',
   'Ship It': 'Put it all together into a forecast a manager can act on.',
 };
@@ -88,7 +88,7 @@ const partBlurb: Record<string, string> = {
           <div><h3>R and Python, side by side</h3><p>The main labs come in both languages with matching results. Students' edits are saved in their own browser.</p></div>
           <div><h3>Nothing to install</h3><p>R (webR) and Python (Pyodide) run as WebAssembly in the browser. The data are bundled with the site, so labs keep working offline after the first load.</p></div>
           <div><h3>Auto-checked exercises</h3><p>Exercises check students' answers and explain what the right answer teaches, with hints that unlock one at a time.</p></div>
-          <div><h3>Current methods</h3><p>Benchmarks and cross-validation, logistic and Poisson regression, ETS, ARIMA, VAR, conformal intervals, random forests, gradient boosting with SHAP, and nowcasting.</p></div>
+          <div><h3>Current methods</h3><p>Benchmarks and cross-validation, logistic regression and recession probabilities, ETS, ARIMA, VAR, conformal intervals, random forests, gradient boosting with SHAP, and nowcasting.</p></div>
         </div>
       </div>
     </section>

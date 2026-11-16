@@ -32,3 +32,22 @@ viz_table(oos, highlight = c("Brier", "Brier, climatology"), digits = 3,   # gre
 yr <- format(test$date, "%Y")             # year each forecast was made, as text
 loss <- tapply((test$p - test$rec_ahead)^2, yr, sum)   # tapply: sum of squared errors within each year
 round(sort(loss, decreasing = TRUE)[1:5], 2)           # five worst years
+
+#| **Why did it lose? Split the Brier score into three parts** (Murphy's decomposition). Group the forecasts into ten bins (0–10%, 10–20%, …). Then Brier ≈ **reliability − resolution + uncertainty**:
+#| - **Reliability** (lower is better): how far each bin's average forecast is from what actually happened in that bin. This is the calibration error.
+#| - **Resolution** (higher is better): how much the bins' actual outcome rates differ from the overall rate. This is the model's ability to tell risky months from calm ones.
+#| - **Uncertainty**: ȳ(1 − ȳ), set by the test period's base rate ȳ. No model can change it.
+murphy <- function(p, y) {
+  bin <- cut(p, breaks = seq(0, 1, by = 0.1), include.lowest = TRUE)   # ten probability bins
+  n_k <- tapply(y, bin, length); f_k <- tapply(p, bin, mean); o_k <- tapply(y, bin, mean)   # size, average forecast, actual rate
+  keep <- !is.na(n_k)                   # skip empty bins
+  n_k <- n_k[keep]; f_k <- f_k[keep]; o_k <- o_k[keep]
+  c(reliability = sum(n_k * (f_k - o_k)^2) / length(y),
+    resolution  = sum(n_k * (o_k - mean(y))^2) / length(y),
+    uncertainty = mean(y) * (1 - mean(y)),
+    Brier = brier(p, y))
+}
+train$p <- predict(fit, type = "response")   # in-sample fitted probabilities, for comparison
+round(rbind(`In sample, 1959–1999` = murphy(train$p, train$rec_ahead),
+            `Out of sample, 2000–2019` = with(test[test$date <= as.Date("2019-12-01"), ], murphy(p, rec_ahead)),
+            `Out of sample, 2000–Oct 2025` = murphy(test$p, test$rec_ahead)), 4)

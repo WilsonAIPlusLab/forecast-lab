@@ -58,7 +58,7 @@ board <- rbind(`Seasonal naive` = score(f_snaive), ETS = score(f_ets),   # one r
                `ETS + forest average` = score((f_ets + f_rf) / 2))   # forecast combination: simple 50/50 average
 round(board, 2)
 
-#| **The scorecard.** Green marks the best value in each column. Read it honestly: which row wins on MAE, and by how much? Look at the **ME** (bias) column too: ETS over-forecasts and the forest under-forecasts, by similar amounts. That is why the last row, a simple 50/50 average of the two (forecast combination, Chapter 11), does better than either.
+#| **The scorecard.** Green marks the best value in each column. Read it honestly: which row wins on MAE, and by how much? Look at the **ME** (bias) column too: ETS over-forecasts and the forest under-forecasts, by similar amounts. That is why the last row, a simple 50/50 average of the two (forecast combination, Chapter 10), does better than either.
 viz_table(board, highlight = c("MAE", "RMSE", "MAPE", "MASE"), digits = 2,   # green = best value in each column
           title = "ML vs ETS bake-off: retail sales, test period 2023 onward")
 viz_compare(history = window(train_y, start = 2020), actual = test_y,

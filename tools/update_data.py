@@ -2,7 +2,7 @@
 Usage (from site/): python tools/update_data.py          (DIVISIA_M4 is not from FRED and is left as-is)"""
 import csv, json, os, urllib.request
 D = os.path.join("public", "data")
-NON_FRED = {"DIVISIA_M4", "bank_marketing", "bike_day", "bike_hour"}
+NON_FRED = {"DIVISIA_M4", "bank_marketing"}
 OLD = json.load(open(os.path.join(D, "manifest.json")))
 for f in sorted(os.listdir(D)):
     if f.endswith(".csv") and f[:-4] not in NON_FRED:

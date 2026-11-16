@@ -21,7 +21,7 @@ function rehypeBaseLinks() {
 
 // Turn plain "Chapter N" mentions in chapter prose into links to that chapter (keeps pages well connected).
 const SLUGS = ['first-forecast', 'time-series-data', 'decomposition', 'benchmarks', 'regression', 'nonlinear-regression',
-  'exponential-smoothing', 'arima', 'dynamic-regression', 'recession-probability', 'var', 'uncertainty',
+  'exponential-smoothing', 'arima', 'dynamic-regression', 'var', 'uncertainty',
   'random-forests', 'boosting-shap', 'nowcasting', 'forecast-studio'];  // index = chapter number (keep in sync with src/lib/chapters.ts)
 function rehypeChapterLinks() {
   const SKIP = new Set(['a', 'h1', 'h2', 'h3', 'h4', 'code', 'pre', 'script', 'style', 'svg', 'math', 'button', 'summary']);
@@ -65,5 +65,7 @@ export default defineConfig({
   trailingSlash: 'ignore',
   markdown: { remarkPlugins: [remarkMath], rehypePlugins: [rehypeKatex, rehypeChapterLinks, rehypeBaseLinks] },
   integrations: [mdx(), svelte()],
+  // The recession chapter was merged into Chapter 5 (Part 2); keep the old URL working.
+  redirects: { '/chapters/recession-probability': `${(process.env.BASE || '/').replace(/\/?$/, '/')}chapters/nonlinear-regression/#part-2-will-there-be-a-recession-next-year` },
   vite: { optimizeDeps: { exclude: ['webr', 'pyodide'] } },
 });

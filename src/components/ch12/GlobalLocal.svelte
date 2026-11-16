@@ -1,6 +1,6 @@
 <script lang="ts">
   // Signature explorable 4: one global model for 14 retail categories vs 14 local models, by length of history.
-  // Data: precomputed natively in R by src/labs/ch12/make_data.R (same settings as Lab 13.4).
+  // Data: precomputed natively in R by src/labs/ch12/make_data.R (same settings as Lab 12.4).
   import { onMount } from 'svelte';
   import * as Plot from '@observablehq/plot';
   import Explorable from '../Explorable.svelte';

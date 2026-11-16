@@ -1,4 +1,4 @@
-# The tuned model from Lab 13.2 (the feature table is already built for you)
+# The tuned model from Lab 12.2 (the feature table is already built for you)
 fit = xgb.train({"eta": 0.1, "max_depth": 2, "tree_method": "exact", "nthread": 1},   # tuned settings
                 xgb.DMatrix(train[features], label=train["growth"]), num_boost_round=38)   # 38 trees
 nov = test.loc[["2025-11-01"]]                 # the month to explain
