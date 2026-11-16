@@ -1,17 +1,16 @@
 ---
 layout: ../../layouts/Chapter.astro
 slug: benchmarks
-minutes: 120
+minutes: 90
 sessions:
   - title: Benchmarks, honest splits and how to read an accuracy number
-  - title: Is the winner really better? Robust tests and the business loss
-    starts: one-test-period-is-not-enough-time-series-cross-validation
+  - title: Reading the errors, cross-validation and the business loss
+    starts: read-the-scorecard-like-an-analyst
 build:
   - A benchmark scorecard (ME, MAE, RMSE, MAPE, MASE) that every later model must beat, read out loud in plain words and units
   - An error-by-horizon curve from time-series cross-validation, the way professionals report accuracy
-  - A Diebold–Mariano test of whether one forecast is genuinely better than another, and a feel for when a gap is just luck
-  - An evaluation brief that scores forecasts by the business's own cost of a mistake, in the data's original units
-skills: [train/test split, meanf, naive, snaive, rwf, accuracy, bias (ME), RMSE ÷ MAE, MASE, tsCV, dm.test, asymmetric loss, back-transform]
+  - An evaluation brief that scores forecasts by the business's own cost of a mistake
+skills: [train/test split, meanf, naive, snaive, rwf, accuracy, bias (ME), RMSE ÷ MAE, MAPE, MASE, tsCV, asymmetric loss]
 ---
 import CodeLab from '../../components/CodeLab.svelte';
 import Callout from '../../components/Callout.astro';
@@ -62,6 +61,7 @@ import logsPy from '../../labs/ch03/ex_logs.py?raw';
 import logsSolPy from '../../labs/ch03/ex_logs_solution.py?raw';
 import logsCheckPy from '../../labs/ch03/ex_logs_check.py?raw';
 import InstructorKit from '../../components/InstructorKit.astro';
+import BeyondBasics from '../../components/BeyondBasics.astro';
 
 <p class="lede">A vendor shows you a slick AI forecasting tool. Its chart looks impressive. Before you sign anything, ask one question: <strong>is it more accurate than simply assuming this month will look like the same month last year?</strong> You will be surprised how often the answer is no.</p>
 
@@ -69,7 +69,7 @@ In 2018 the M4 forecasting competition pitted 61 forecasting methods against eac
 
 <KeyIdea>Never judge a forecast on its own. Judge it against a simple benchmark, on data the model has never seen.</KeyIdea>
 
-<SessionBreak n={1} title="Benchmarks, honest splits and how to read an accuracy number" goals={['Build the four benchmarks and say when each one is hard to beat', 'Split by time, and see why a random split flatters a model', 'Read **ME, MAE, RMSE, MAPE and MASE** in plain words and units', 'Score forecasts in code and compare accuracy across series']} />
+<SessionBreak n={1} title="Benchmarks, honest splits and how to read an accuracy number" goals={['Build the four benchmarks and say when each one is hard to beat', 'Split by time, and see why a random split flatters a model', 'Read **ME, MAE, RMSE, MAPE and MASE** in plain words and units', 'Build a benchmark scorecard in code']} />
 
 ## Four benchmarks
 
@@ -231,6 +231,18 @@ $$
 where $m$ is the seasonal period (12 for monthly data). Both numerator and denominator are in the same units, so the units cancel. With non-seasonal data, set $m = 1$ (naive instead of seasonal naive). R's `accuracy()` uses $m$ = the frequency of the series, so it uses 12 for every monthly series, seasonal or not; that is the convention in this chapter's labs.
 </Callout>
 
+<Predict client:load kind="check"
+  question="A model's MASE on the test set is **1.35**. What should you conclude?"
+  options={[
+    'It is 35% more accurate than the seasonal naive benchmark',
+    'Its errors are 35% larger than the in-sample seasonal naive errors, so it is probably not worth using',
+    'MASE above 1 means the model is overfitting',
+    'Nothing; MASE cannot be interpreted without the data units'
+  ]}
+  answer={1}
+  explain="MASE is a ratio to the seasonal naive benchmark's in-sample error. Above 1 means its test errors were larger than that benchmark's typical in-sample miss. Before you discard it, check the benchmarks' own MASE on the same test window (seasonal naive scored 1.04 on retail): if they all score above 1.35, the test period was simply hard. Because MASE is scale-free, you can say all this without knowing the units."
+/>
+
 ## Build the scorecard
 
 Now in code. This lab trains all four benchmarks on data through 2022, forecasts 2023 onward, and scores them. Press **⏯ Step through** to see what each line produces.
@@ -246,6 +258,8 @@ A number on its own means little. "MAE = 24,824" is good or bad only next to som
 <Callout type="tip" title="Make it yours">
 Change `"RSXFSN"` to `"MRTSSM4541USS"` (e-commerce sales, **seasonally adjusted**). With the seasonal pattern removed and a steep trend left, **drift** beats seasonal naive by a wide margin. Then try `"UNRATE"`: MAPE is awkward for a series that is already a percentage, but MASE still works.
 </Callout>
+
+<SessionBreak n={2} title="Reading the errors, cross-validation and the business loss" goals={['Look under a scorecard: bias, big misses, MAPE near zero', 'Compare forecasts of different series with MASE', 'Report accuracy **by horizon** with time-series cross-validation', 'Pick the metric that matches the business cost of a mistake']} />
 
 ## Read the scorecard like an analyst
 
@@ -265,14 +279,6 @@ The federal funds rate shows the trap with real data: the naive rule's misses we
 
 ## Practice: score and compare
 
-First, compute an MAE yourself, without `accuracy()`. Fill in the two blanks (`______`) and press **Run & check**. Hints unlock one at a time if you need them.
-
-<div class="breakout">
-<CodeLab client:load id="ch03-ex1" exercise title="Exercise: score seasonal naive on e-commerce sales" r={exR} solution={exSolR} check={exCheckR} py={exPy} solutionPy={exSolPy} checkPy={exCheckPy} packages={['forecast']}
-  goal="Forecast U.S. e-commerce sales for 2023 onward with the seasonal naive method, then compute its MAE yourself, without `accuracy()`."
-  hints={['Seasonal naive repeats the last 12 training months. In R, the `forecast` package function is `snaive()`. In Python, a negative position counts from the end, so `train.iloc[-12:]` is the last 12 rows.', 'An error is **actual minus forecast**. The actual values for the test period are stored in `test`.']} />
-</div>
-
 **You are the analyst.** Your manager oversees two dashboards: retail sales (in millions of dollars) and housing starts (in thousands of homes, not seasonally adjusted). Both use seasonal naive. She asks: *"Which of the two forecasts is in better shape?"* The MAEs (about 24,800 vs about 18) cannot answer that, because they are in different units. Compute MASE for both.
 
 <div class="breakout">
@@ -284,8 +290,6 @@ First, compute an MAE yourself, without `accuracy()`. Fill in the two blanks (`_
 <Callout type="empirical" title="Use a scale-free metric to compare series, never MAE">
 MAE, RMSE and ME carry the data's units, so they can rank methods on <strong>one</strong> series but cannot compare <strong>two</strong> series. To compare, use MASE (works for any series, including rates and series near zero) or MAPE (only for series well above zero). In the exercise, both say the same thing: retail forecast MASE 1.04 and MAPE 4.1%; housing starts MASE 1.67 and MAPE 16.1%. Housing starts are much harder to forecast, so put your modeling effort there.
 </Callout>
-
-<SessionBreak n={2} title="Is the winner really better? Robust tests and the business loss" goals={['Report accuracy **by horizon** with time-series cross-validation', 'Judge whether an accuracy gap is real or luck, intuitively and with the Diebold–Mariano test', 'Pick the metric that matches the business cost of a mistake', 'Score transformed forecasts in the original units']} />
 
 ## One test period is not enough: time-series cross-validation
 
@@ -308,10 +312,10 @@ Three lessons jump out of the "Result on real data" chart:
 - **Beware of coincidences.** Switch to retail sales and look at horizon 12: naive suddenly ties seasonal naive, and drift even beats it. Twelve months ahead, the "last observed value" is from the same month a year earlier, so naive briefly *becomes* seasonal naive (and drift becomes seasonal naive plus a year of trend). Cross-validation by horizon exposes this kind of illusion; a single test score would hide it.
 
 <div class="breakout">
-<CodeLab client:load id="ch03-tscv" title="Cross-validated accuracy by horizon" r={cvR} py={cvPy} packages={['forecast']} pyPackages={['scipy']} goal="Compute MAE at horizons 1 to 12 with tsCV(), then test whether the difference between two methods is statistically significant." />
+<CodeLab client:load id="ch03-tscv" title="Cross-validated accuracy by horizon" r={cvR} py={cvPy} packages={['forecast']} pyPackages={['scipy']} goal="Compute MAE at horizons 1 to 12 with tsCV() and plot error against horizon. (The last step previews a significance test, explained under Beyond the basics below.)" />
 </div>
 
-The lab's chart says seasonal naive beats drift even at horizon 12, yet the explorer above showed drift winning there. Both are right. `tsCV()` starts scoring drift after only two months of data, when its slope is wild, while the explorer waits for four years of history before its first origin. Skip the first two years of origins in the lab and drift wins at horizon 12 again. How you set up the evaluation is part of the result.
+The lab's chart says seasonal naive beats drift even at horizon 12, while the explorer above showed drift winning there. Both are right: `tsCV()` starts scoring drift after only two months of data, when its slope is wild, while the explorer waits for four years of history. How you set up the evaluation is part of the result.
 
 ### How to read an error-by-horizon chart
 
@@ -320,7 +324,48 @@ The lab's chart says seasonal naive beats drift even at horizon 12, yet the expl
 3. **Look for crossings.** If two lines cross, the winner depends on the horizon. Pick the method for the horizon the business needs: a store ordering stock three months ahead cares about horizon 3, not horizon 1.
 4. **Distrust odd bumps.** A sudden dip at one horizon (drift at horizon 12 on retail) is usually a coincidence of the calendar, not skill.
 
-## How big a difference is meaningful?
+When two methods are close, keep the simpler one. (Whether a gap could be pure luck has a formal test, the Diebold–Mariano test; see Beyond the basics below.)
+
+## Choose the metric that matches the business loss
+
+Every metric is a judgment about which mistakes hurt. MAE says every \$1 million of miss costs the same, whichever way it goes. RMSE says one big miss is worse than several small ones. MAPE says a miss on a small month matters more than the same miss on a big month. None of them says "running out of stock hurts more than having too much," yet that is how many businesses lose money.
+
+So write down the business's own cost of a mistake and score with that. Suppose each \$1 million of retail sales you fail to stock (an under-forecast: empty shelves, lost sales) costs $r$ times as much as \$1 million of leftover stock (an over-forecast). With $r = 1$ the cost is exactly the MAE. Move $r$ and watch the winner change.
+
+<div class="breakout">
+<LossPicker client:load />
+</div>
+
+<Callout type="business" title="Which metric should you report?">
+Pick the metric that matches the <em>cost</em> of a mistake. If being 10 units off costs twice as much as being 5 units off, use <strong>MAE</strong>. If one big miss is a disaster (a stock-out on Black Friday, a hospital running out of beds), use <strong>RMSE</strong>. If running short costs more than running over (or the reverse), score with an <strong>asymmetric cost</strong> like the one above. Managers like <strong>MAPE</strong> because "we're 3% off" needs no explanation, but remember it favors forecasts that are too low. Analysts prefer <strong>MASE</strong> because it works across any series and has a built-in benchmark. Always report <strong>bias</strong> too: a forecast that is always 5% too low leads to chronic under-stocking even if its MAE looks fine. <a href="/chapters/uncertainty/#from-uncertainty-to-a-decision-the-newsvendor">Chapter 10</a> shows how to choose the right buffer properly, from the forecast's uncertainty and the two costs.
+</Callout>
+
+## Your turn: the evaluation brief
+
+Your manager at a national retailer wants a short brief before choosing a forecasting method for next year. Her question:
+
+**"A lost sale costs us about four times as much as leftover stock. Which benchmark should we use?"**
+
+<div class="breakout">
+<CodeLab client:load id="ch03-ex-cost" exercise title="Exercise: score forecasts by the business's own cost" r={costR} solution={costSolR} check={costCheckR} py={costPy} solutionPy={costSolPy} checkPy={costCheckPy} packages={['forecast']}
+  goal="Write a 4-to-1 asymmetric cost function and use it to compare seasonal naive and naive on retail sales; see whether the winner differs from the MAE winner."
+  hints={['An under-forecast means the actual was above the forecast, so `e > 0`. Each $1 million of it costs 4 units.', 'An over-forecast has `e < 0`. Its cost is the size of the miss, a positive number: `-e`.', 'Seasonal naive should cost about 95,320 units a month and naive about 55,258.']} />
+</div>
+
+Put your answer into three sentences, the way you would brief a manager: which forecast wins under the business's cost and why, how big the gap is in dollars, and one caution about the test period.
+
+## Chapter checklist
+
+- Benchmarks first: **mean, naive, seasonal naive, drift**. A model earns its place only by beating the best of them, **on the same test window**.
+- Split by time, never randomly: a random split lets the model peek at the future and can make errors look roughly 20 to 30 times smaller than they are. Guard against **leakage**.
+- Read every metric in words and units. **ME**: positive means too low (actual − forecast). **MAE**: the typical miss. **RMSE ≥ MAE**; a ratio well above 1.25 means a few big misses. **MASE** below 1: smaller errors than seasonal naive's typical in-sample miss.
+- **MAPE** is easy to say but explodes near zero and rewards forecasts that are too low. Use MAE in percentage points or MASE for rates; use MASE or MAPE, never MAE, to compare series.
+- Prefer **time-series cross-validation** to a single split, and report accuracy **by horizon**. One lucky test year proves nothing.
+- Score with the **business's cost** of a mistake: pick the metric (or the cost function) that matches what a miss really costs.
+
+<BeyondBasics topics={['How big a difference is meaningful?', 'Transform, forecast, then score in original units', 'From benchmark to business value', 'Extra practice']}>
+
+#### How big a difference is meaningful?
 
 Suppose drift beats naive by 5% on MAE. Is drift better, or was it lucky in this test period? Think of each test month as one **vote**: compute the gap between the two methods' misses that month. If drift is truly better, the votes lean the same way month after month. If not, they scatter around zero, and a small average gap is just noise.
 
@@ -329,7 +374,7 @@ Two things decide whether an average gap is convincing:
 - **How big it is compared with the month-to-month scatter of the gaps.** A gap of 90 with gaps scattering by ±1,000 is noise; a gap of 90 with gaps scattering by ±100 is real.
 - **How many months you average.** The noise in an average shrinks as you add months (by the square root of their number), so a gap that is unconvincing over 12 months can be convincing over 96.
 
-The **Diebold–Mariano (DM) statistic** puts these together: the average gap divided by its standard error. Roughly, if |DM| is above 2, the gap is unlikely to be luck (p < 0.05). Try it on three real comparisons of one-month-ahead naive and drift forecasts, 2012–2019.
+The **Diebold–Mariano (DM) statistic** puts these together: the average gap divided by its standard error. Roughly, if |DM| is above 2, the gap is unlikely to be luck (p < 0.05). (The last step of the cross-validation lab runs this test.) Try it on three real comparisons of one-month-ahead naive and drift forecasts, 2012–2019.
 
 <Predict client:load
   question="On e-commerce sales, drift beats naive over the full eight years: its one-month-ahead MAE is $423 million vs $516 million, and DM ≈ 4.7. If you test on just **one year** (12 months) instead, how often will drift still come out ahead?"
@@ -349,36 +394,14 @@ What the three series teach:
 - **Housing starts: a coin flip.** The average gap is almost exactly zero (DM ≈ −0.1). Whichever method "wins" a given year won by luck.
 
 <Callout type="math" title="The Diebold–Mariano test in one paragraph">
-Let $d_t = L(e_{1,t}) - L(e_{2,t})$ be the loss differential between methods 1 and 2 for some loss $L$. `dm.test` uses squared errors by default (`power = 2`), as the lab above does; the explorer uses absolute errors (`power = 1`), which keeps the gap in the data's units. If the two methods are equally accurate, $E[d_t] = 0$. The DM statistic is $\bar d / \widehat{\text{se}}(\bar d)$, where the standard error is corrected for autocorrelation in $d_t$ (for one-step-ahead forecasts no correction is needed, and $\widehat{\text{se}} = s_d/\sqrt n$). Under the null it is approximately standard normal (`dm.test` adds a small-sample correction and compares it with a $t$ distribution).<sup>[4](#refs)</sup> A p-value below 0.05 says the accuracy gap is unlikely to be luck.
+Let $d_t = L(e_{1,t}) - L(e_{2,t})$ be the loss differential between methods 1 and 2 for some loss $L$. `dm.test` uses squared errors by default (`power = 2`), as the last step of the cross-validation lab does; the explorer uses absolute errors (`power = 1`), which keeps the gap in the data's units. If the two methods are equally accurate, $E[d_t] = 0$. The DM statistic is $\bar d / \widehat{\text{se}}(\bar d)$, where the standard error is corrected for autocorrelation in $d_t$ (for one-step-ahead forecasts no correction is needed, and $\widehat{\text{se}} = s_d/\sqrt n$). Under the null it is approximately standard normal (`dm.test` adds a small-sample correction and compares it with a $t$ distribution).<sup>[4](#refs)</sup> A p-value below 0.05 says the accuracy gap is unlikely to be luck.
 </Callout>
 
 <Callout type="empirical" title="Beware a single lucky test period, and don't split hairs">
 One test year is an anecdote. Before you announce a winner: (1) score on many origins (cross-validation), or at least several separate test years; (2) check whether the gap is large next to its noise (DM, or the band in the explorer); (3) ask whether the gap matters in money. Robert Nau's rough guide is useful: a 30% lower error is a big improvement, 10% is worth noticing, and a 2% difference is probably not worth a more complicated model.<sup>[9](#refs)</sup> When two methods are close, keep the simpler one.
 </Callout>
 
-**You are the analyst.** A colleague tested naive and drift forecasts of the unemployment rate on 2019 only and concluded that drift is better. Check the claim on every test year from 2011 to 2019.
-
-<div class="breakout">
-<CodeLab client:load id="ch03-ex-windows" exercise title="Exercise: one lucky year? Score nine test years" r={winR} solution={winSolR} check={winCheckR} py={winPy} solutionPy={winSolPy} checkPy={winCheckPy} packages={['forecast']}
-  goal="Score naive and drift on each calendar year from 2011 to 2019, count how many years each method wins, and compare with the average over all years."
-  hints={['The test year starts right after training ends in December of `yr`. So the test year is `yr + 1`.', 'For the second blank you need a comparison that is TRUE when naive\'s MAE is smaller than drift\'s. Summing TRUE/FALSE values counts the TRUEs.', 'You should find that naive wins 5 of the 9 years.']} />
-</div>
-
-## Choose the metric that matches the business loss
-
-Every metric is a judgment about which mistakes hurt. MAE says every \$1 million of miss costs the same, whichever way it goes. RMSE says one big miss is worse than several small ones. MAPE says a miss on a small month matters more than the same miss on a big month. None of them says "running out of stock hurts more than having too much," yet that is how many businesses lose money.
-
-So write down the business's own cost of a mistake and score with that. Suppose each \$1 million of retail sales you fail to stock (an under-forecast: empty shelves, lost sales) costs $r$ times as much as \$1 million of leftover stock (an over-forecast). With $r = 1$ the cost is exactly the MAE. Move $r$ and watch the winner change.
-
-<div class="breakout">
-<LossPicker client:load />
-</div>
-
-<Callout type="business" title="Which metric should you report?">
-Pick the metric that matches the <em>cost</em> of a mistake. If being 10 units off costs twice as much as being 5 units off, use <strong>MAE</strong>. If one big miss is a disaster (a stock-out on Black Friday, a hospital running out of beds), use <strong>RMSE</strong>. If running short costs more than running over (or the reverse), score with an <strong>asymmetric cost</strong> like the one above. Managers like <strong>MAPE</strong> because "we're 3% off" needs no explanation, but remember it favors forecasts that are too low. Analysts prefer <strong>MASE</strong> because it works across any series and has a built-in benchmark. Always report <strong>bias</strong> too: a forecast that is always 5% too low leads to chronic under-stocking even if its MAE looks fine. <a href="/chapters/uncertainty/#from-uncertainty-to-a-decision-the-newsvendor">Chapter 10</a> shows how to choose the right buffer properly, from the forecast's uncertainty and the two costs.
-</Callout>
-
-## Transform, forecast, then score in original units
+#### Transform, forecast, then score in original units
 
 Analysts often forecast a transformed series: the log, a growth rate, a seasonally adjusted version (see [Chapter 1](/chapters/time-series-data/#transformations-every-analyst-uses) for why). That is fine for **modeling**. But the business lives in dollars, homes and jobs, so the **scoring** must happen in those units:
 
@@ -388,38 +411,32 @@ Analysts often forecast a transformed series: the log, a growth rate, a seasonal
 4. compute the errors against the **original** actual values.
 
 <Callout type="empirical" title="An MAE in logs is not comparable with an MAE in dollars">
-In the last exercise below, a drift forecast of log e-commerce sales has an MAE of 0.115 on the log scale. That looks tiny next to the 1,958 (\$ millions) of a drift forecast on the original data, but the two numbers are in different units and cannot be compared. Transformed back to dollars, the log forecast misses by about \$13,400 million a month: far worse. Always score every candidate on the same, original scale. (Back-transforming a log forecast gives a median rather than a mean forecast; <a href="/chapters/uncertainty/#forecasting-in-logs-and-coming-back-to-dollars">Chapter 10</a> explains the small correction.)
+In the log exercise under Extra practice below, a drift forecast of log e-commerce sales has an MAE of 0.115 on the log scale. That looks tiny next to the 1,958 (\$ millions) of a drift forecast on the original data, but the two numbers are in different units and cannot be compared. Transformed back to dollars, the log forecast misses by about \$13,400 million a month: far worse. Always score every candidate on the same, original scale. (Back-transforming a log forecast gives a median rather than a mean forecast; <a href="/chapters/uncertainty/#forecasting-in-logs-and-coming-back-to-dollars">Chapter 10</a> explains the small correction.)
 </Callout>
 
-## From benchmark to business value
+#### From benchmark to business value
 
 In companies, the benchmark idea becomes a metric called <Term def="The reduction in forecast error achieved by a step in the forecasting process (a model, an analyst's adjustment), compared with a naive benchmark.">forecast value added (FVA)</Term>. Each step in the forecasting process (the statistical model, the analyst's adjustments, the sales team's "gut feel") is scored against the naive benchmark. Steps that make the forecast worse get removed.<sup>[6](#refs)</sup> The results are often humbling: a study of more than 60,000 forecasts at four supply-chain companies found that large manual adjustments usually helped, but small ones often made forecasts *worse*, and upward adjustments were much less likely to help than downward ones.<sup>[7](#refs)</sup>
 
-<Predict client:load kind="check"
-  question="A model's MASE on the test set is **1.35**. What should you conclude?"
-  options={[
-    'It is 35% more accurate than the seasonal naive benchmark',
-    'Its errors are 35% larger than the in-sample seasonal naive errors, so it is probably not worth using',
-    'MASE above 1 means the model is overfitting',
-    'Nothing; MASE cannot be interpreted without the data units'
-  ]}
-  answer={1}
-  explain="MASE is a ratio to the seasonal naive benchmark's in-sample error. Above 1 means its test errors were larger than that benchmark's typical in-sample miss. Before you discard it, check the benchmarks' own MASE on the same test window (seasonal naive scored 1.04 on retail): if they all score above 1.35, the test period was simply hard. Because MASE is scale-free, you can say all this without knowing the units."
-/>
+#### Extra practice
 
-## Your turn: the evaluation brief
-
-Your manager at a national retailer wants a short brief before choosing a forecasting method for next year. Two questions, one exercise each.
-
-**1. "A lost sale costs us about four times as much as leftover stock. Which benchmark should we use?"**
+**Score it by hand.** Compute an MAE yourself, without `accuracy()`. Fill in the two blanks (`______`) and press **Run & check**. Hints unlock one at a time if you need them.
 
 <div class="breakout">
-<CodeLab client:load id="ch03-ex-cost" exercise title="Exercise: score forecasts by the business's own cost" r={costR} solution={costSolR} check={costCheckR} py={costPy} solutionPy={costSolPy} checkPy={costCheckPy} packages={['forecast']}
-  goal="Write a 4-to-1 asymmetric cost function and use it to compare seasonal naive and naive on retail sales; see whether the winner differs from the MAE winner."
-  hints={['An under-forecast means the actual was above the forecast, so `e > 0`. Each $1 million of it costs 4 units.', 'An over-forecast has `e < 0`. Its cost is the size of the miss, a positive number: `-e`.', 'Seasonal naive should cost about 95,320 units a month and naive about 55,258.']} />
+<CodeLab client:load id="ch03-ex1" exercise title="Exercise: score seasonal naive on e-commerce sales" r={exR} solution={exSolR} check={exCheckR} py={exPy} solutionPy={exSolPy} checkPy={exCheckPy} packages={['forecast']}
+  goal="Forecast U.S. e-commerce sales for 2023 onward with the seasonal naive method, then compute its MAE yourself, without `accuracy()`."
+  hints={['Seasonal naive repeats the last 12 training months. In R, the `forecast` package function is `snaive()`. In Python, a negative position counts from the end, so `train.iloc[-12:]` is the last 12 rows.', 'An error is **actual minus forecast**. The actual values for the test period are stored in `test`.']} />
 </div>
 
-**2. "Our data team forecasts e-commerce sales in logs. Is that better than forecasting dollars directly?"**
+**One lucky year?** A colleague tested naive and drift forecasts of the unemployment rate on 2019 only and concluded that drift is better. Check the claim on every test year from 2011 to 2019.
+
+<div class="breakout">
+<CodeLab client:load id="ch03-ex-windows" exercise title="Exercise: one lucky year? Score nine test years" r={winR} solution={winSolR} check={winCheckR} py={winPy} solutionPy={winSolPy} checkPy={winCheckPy} packages={['forecast']}
+  goal="Score naive and drift on each calendar year from 2011 to 2019, count how many years each method wins, and compare with the average over all years."
+  hints={['The test year starts right after training ends in December of `yr`. So the test year is `yr + 1`.', 'For the second blank you need a comparison that is TRUE when naive\'s MAE is smaller than drift\'s. Summing TRUE/FALSE values counts the TRUEs.', 'You should find that naive wins 5 of the 9 years.']} />
+</div>
+
+**Forecast in logs, score in dollars.** "Our data team forecasts e-commerce sales in logs. Is that better than forecasting dollars directly?" Read *Transform, forecast, then score in original units* above first.
 
 <div class="breakout">
 <CodeLab client:load id="ch03-ex-logs" exercise title="Exercise: forecast in logs, score in dollars" r={logsR} solution={logsSolR} check={logsCheckR} py={logsPy} solutionPy={logsSolPy} checkPy={logsCheckPy} packages={['forecast']}
@@ -427,17 +444,7 @@ Your manager at a national retailer wants a short brief before choosing a foreca
   hints={['The function that undoes `log()` is `exp()` (in Python, `np.exp()`).', 'Score the back-transformed forecast, `f_back`, against `test`.', 'Both MAEs should now be in $ millions: about 1,958 for levels and 13,397 for logs.']} />
 </div>
 
-Put your two answers into three sentences, the way you would brief a manager: which forecast wins under the business's cost and why, how big the gap is in dollars, and one caution about the test period.
-
-## Chapter checklist
-
-- Benchmarks first: **mean, naive, seasonal naive, drift**. A model earns its place only by beating the best of them, **on the same test window**.
-- Split by time, never randomly: a random split lets the model peek at the future and can make errors look roughly 20 to 30 times smaller than they are. Guard against **leakage**.
-- Read every metric in words and units. **ME**: positive means too low (actual − forecast). **MAE**: the typical miss. **RMSE ≥ MAE**; a ratio well above 1.25 means a few big misses. **MASE** below 1: smaller errors than seasonal naive's typical in-sample miss.
-- **MAPE** is easy to say but explodes near zero and rewards forecasts that are too low. Use MAE in percentage points or MASE for rates; use MASE or MAPE, never MAE, to compare series.
-- Prefer **time-series cross-validation** to a single split, and report accuracy **by horizon**. One lucky test year proves nothing.
-- Ask whether a gap is real: compare it with its noise (**Diebold–Mariano**, |DM| > 2), and whether it is big enough to matter.
-- Score with the **business's cost** of a mistake, and score transformed forecasts **after transforming back** to the original units.
+</BeyondBasics>
 
 <InstructorKit
   minutes={150}
@@ -445,20 +452,21 @@ Put your two answers into three sentences, the way you would brief a manager: wh
   sessions={[
     { title: 'Session 1 · Benchmarks, honest splits and how to read an accuracy number', plan: [
       '5 min · Hook: the vendor question and the M4 result',
-      '12 min · Four benchmarks in the explorer; Predict on retail sales, then switch to unemployment',
-      '10 min · Split by time: Predict, then the random-vs-time explorable (Shuffle a few times)',
+      '10 min · Four benchmarks in the explorer; Predict on retail sales, then switch to unemployment',
+      '8 min · Split by time: Predict, then the random-vs-time explorable (Shuffle a few times)',
       '15 min · Error metrics: drag the playground; read ME, MAE, RMSE, MAPE and MASE aloud from the retail table; the dice Predict',
-      '10 min · Scorecard lab, stepped through; then the read-the-errors lab (bias, RMSE ÷ MAE, MAPE near zero)',
-      '20 min · Activity: scorecard tournament (below), ending with the MASE exercise as the tie-breaker',
-      '3 min · Wrap-up: the five-sentence reading of a scorecard; assign the e-commerce MAE exercise'
+      '7 min · Scorecard lab, stepped through',
+      '15 min · Activity: scorecard tournament (below)',
+      '15 min · Buffer: questions, catch-up'
     ] },
-    { title: 'Session 2 · Is the winner really better? Robust tests and the business loss', plan: [
-      '5 min · Warm-up Predict: a vendor reports one great test year; what would you ask?',
+    { title: 'Session 2 · Reading the errors, cross-validation and the business loss', plan: [
+      '3 min · Warm-up: a vendor reports one great test year; what would you ask?',
+      '10 min · Read-the-errors lab: bias, RMSE ÷ MAE, the worst month, MAPE near zero',
+      '10 min · Exercise: which forecast is in better shape? (MASE across two series)',
       '15 min · Rolling-origin explorable and tsCV lab; read the error-by-horizon chart with the four-step guide',
-      '15 min · Is the gap real? Predict, then the gap explorable on all three series; DM in words',
-      '10 min · Exercise: one lucky year? (unemployment, nine test years)',
-      '10 min · Loss picker explorable: raise the cost ratio and watch the winner change',
-      '20 min · Activity: the evaluation brief (below)'
+      '7 min · Loss picker explorable: raise the cost ratio and watch the winner change',
+      '15 min · Activity: the evaluation brief (below)',
+      '15 min · Buffer: questions, catch-up'
     ] }
   ]}
   objectives={[
@@ -467,14 +475,14 @@ Put your two answers into three sentences, the way you would brief a manager: wh
     'Read ME, MAE, RMSE, MAPE and MASE in plain words and units: the sign of ME, the RMSE ÷ MAE ratio, MASE above or below 1.',
     'Explain why MAPE fails near zero and favors low forecasts, and choose a scale-free metric to compare series.',
     'Run time-series cross-validation with `tsCV()`, report accuracy by horizon, and read an error-by-horizon chart.',
-    'Judge whether an accuracy difference is meaningful, intuitively (gap vs noise, number of test periods) and with the Diebold–Mariano test.',
-    'Score forecasts with an asymmetric business cost, and score transformed forecasts in the original units.'
+    'Choose the metric that matches the business cost of a mistake, and score forecasts with a simple asymmetric cost.',
+    'Optional extensions (the Diebold–Mariano test, scoring after a log transform, forecast value added): see Beyond the basics.'
   ]}
   discussion={[
     'A vendor reports a MAPE of 3% for its AI tool. What three questions would you ask before believing it is useful?',
     'Your company loses \$50 for each unit of excess inventory and \$400 for each lost sale. Which metric (or which loss) should drive model choice? What does the loss picker suggest happens to the best forecast?',
     'Seasonal naive has the best scorecard on retail sales but MASE 1.04. Is it a good forecast? What would you tell a manager?',
-    'Drift beat naive on unemployment in 2016–2019 but not in 2011–2015. Is drift better? What would convince you?',
+    'A colleague says drift beats naive because it won on one test year. What would convince you?',
     'Why might a forecaster be **rewarded** for beating a naive benchmark rather than for a low MAPE?'
   ]}
   misconceptions={[
@@ -483,23 +491,22 @@ Put your two answers into three sentences, the way you would brief a manager: wh
     '“A positive ME means the forecast was too high.” With error = actual − forecast, positive ME means the forecast was too low.',
     '“MAPE is always the best metric because it is in percent.” It explodes near zero and penalizes over-forecasts more than under-forecasts, so it rewards forecasting low.',
     '“MASE above 1 means the method is worse than seasonal naive on this test.” It means worse than seasonal naive’s typical in-sample miss; compare methods on the same window.',
-    '“One test period is enough.” Rankings can flip with the start date and with the horizon.',
-    '“A model fitted in logs can be scored on the log scale.” Transform back first; an MAE in logs cannot be compared with one in dollars.'
+    '“One test period is enough.” Rankings can flip with the start date and with the horizon.'
   ]}
 >
 
-**Session 1 activity: scorecard tournament (20 minutes).** Teams of three. Each team takes one series: retail sales (`RSXFSN`), e-commerce (`MRTSSM4541USS`), payrolls (`PAYEMS`), housing starts (`HOUST`) or unemployment (`UNRATE`).
+**Session 1 activity: scorecard tournament (15 minutes).** Teams of three. Each team takes one series: retail sales (`RSXFSN`), e-commerce (`MRTSSM4541USS`), payrolls (`PAYEMS`), housing starts (`HOUST`) or unemployment (`UNRATE`).
 
-1. **Predict (3 min).** Before touching any code, write down which benchmark will win and whether its misses will be mostly too high or too low.
-2. **Test (8 min).** Run the scorecard lab with the team's series ID (origin December 2022, data from 2010).
-3. **Read (6 min).** Write five sentences: the winner and its MAE in units; its bias (sign of ME, and whether |ME| ≈ MAE); its RMSE ÷ MAE; its MASE in words; whether MAPE is sensible for this series.
-4. **Tie-break (3 min).** Using MASE, which team's best forecast is in the best shape?
+1. **Predict (2 min).** Before touching any code, write down which benchmark will win and whether its misses will be mostly too high or too low.
+2. **Test (6 min).** Run the scorecard lab with the team's series ID (origin December 2022, data from 2010).
+3. **Read (5 min).** Write five sentences: the winner and its MAE in units; its bias (sign of ME, and whether |ME| ≈ MAE); its RMSE ÷ MAE; its MASE in words; whether MAPE is sensible for this series.
+4. **Tie-break (2 min).** Using MASE, which team's best forecast is in the best shape?
 
-*Expected results* (MAE of the winner; ME; RMSE ÷ MAE; MASE): **retail**: seasonal naive, MAE 24,824 (\$ millions), ME +22,174 (too low most months), 1.26, MASE 1.04. **E-commerce**: drift, MAE 2,651, ME +2,636 (too low almost every month), 1.15, MASE 0.47. **Payrolls**: drift, MAE 884 (thousand jobs), ME −390, 1.27, MASE 0.24. **Housing starts**: naive narrowly over drift (MAE 91.7 vs 93.9 thousand, annual rate), naive ME +80 (too low), MASE 0.69. **Unemployment**: seasonal naive edges naive (MAE 0.45 vs 0.54 percentage points) even though the series is seasonally adjusted; both too low (ME +0.38 and +0.53); MAPE is awkward for a rate. Drift is badly biased here (ME +1.49 points: its line, fitted from 2010's 9.8%, keeps falling). Payrolls win the tie-break (MASE 0.24), then unemployment (seasonal naive, 0.33) and e-commerce (0.47). Point out why unemployment scores so well: its MASE scale is the in-sample year-over-year change, which includes the 2020 jump to 14.8%, so the denominator is unusually large. A scale-free metric is only as sensible as its benchmark's training data. Ask the class whether the unemployment result is skill or luck: Session 2 settles it.
+*Expected results* (MAE of the winner; ME; RMSE ÷ MAE; MASE): **retail**: seasonal naive, MAE 24,824 (\$ millions), ME +22,174 (too low most months), 1.26, MASE 1.04. **E-commerce**: drift, MAE 2,651, ME +2,636 (too low almost every month), 1.15, MASE 0.47. **Payrolls**: drift, MAE 884 (thousand jobs), ME −390, 1.27, MASE 0.24. **Housing starts**: naive narrowly over drift (MAE 91.7 vs 93.9 thousand, annual rate), naive ME +80 (too low), MASE 0.69. **Unemployment**: seasonal naive edges naive (MAE 0.45 vs 0.54 percentage points) even though the series is seasonally adjusted; both too low (ME +0.38 and +0.53); MAPE is awkward for a rate. Drift is badly biased here (ME +1.49 points: its line, fitted from 2010's 9.8%, keeps falling). Payrolls win the tie-break (MASE 0.24), then unemployment (seasonal naive, 0.33) and e-commerce (0.47). Point out why unemployment scores so well: its MASE scale is the in-sample year-over-year change, which includes the 2020 jump to 14.8%, so the denominator is unusually large. A scale-free metric is only as sensible as its benchmark's training data. Ask the class whether the unemployment result is skill or luck: one test window cannot tell (Session 2's cross-validation is the better test).
 
-**Session 2 activity: the evaluation brief (20 minutes).** Pairs complete the two "Your turn" exercises, then each pair writes a three-sentence brief for the retail manager and two pairs read theirs aloud.
+**Session 2 activity: the evaluation brief (15 minutes).** Pairs complete the "Your turn" exercise, then each pair writes a three-sentence brief for the retail manager and two pairs read theirs aloud.
 
-*Expected results:* under MAE, seasonal naive wins (24,824 vs 44,208); under the 4-to-1 cost, naive wins (55,258 vs 95,320 cost units a month) only because it repeats December's peak and is too high in about 84% of months. A better answer is seasonal naive plus a buffer: +5% costs 38,869 (the check message says so), but the buffer must be chosen on earlier data, not the test set. For e-commerce, drift on levels misses by 1,958 (\$ millions) a month and drift on logs by 13,397: the log model assumed the 2015–22 growth rate of 13.8% a year (boosted by the 2020 jump) would continue. Scored on the log scale, it would have shown 0.115, which cannot be compared with 1,958. A strong brief names the winner, gives the gap in dollars and warns that it rests on one test period (2023 onward).
+*Expected results:* under MAE, seasonal naive wins (24,824 vs 44,208); under the 4-to-1 cost, naive wins (55,258 vs 95,320 cost units a month) only because it repeats December's peak and is too high in about 84% of months. A better answer is seasonal naive plus a buffer: +5% costs 38,869 (the check message says so), but the buffer must be chosen on earlier data, not the test set. A strong brief names the winner, gives the gap in dollars and warns that it rests on one test period (2023 onward).
 
 </InstructorKit>
 

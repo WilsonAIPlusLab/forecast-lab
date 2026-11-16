@@ -1,17 +1,16 @@
 ---
 layout: ../../layouts/Chapter.astro
 slug: dynamic-regression
-minutes: 130
+minutes: 100
 sessions:
   - title: Do claims lead jobs? Reading lead-lag relationships and dynamic multipliers
-  - title: Can you trust it? Spurious links, breaks and an honest forecast test
+  - title: Can you trust it? Spurious links and an honest forecast test
     starts: spurious-regression-when-two-random-walks-look-related
 build:
   - A lead-lag analysis that finds how many months jobless claims run ahead of job growth
-  - An ADL model of payrolls with honest (Newey–West) standard errors and its dynamic multipliers
-  - A structural-break test that dates the downshift in U.S. job growth and diagnoses COVID
+  - An ADL model of payrolls and its dynamic multipliers, read in thousands of jobs
   - An out-of-sample scorecard that tests whether claims beat an AR benchmark, without look-ahead leakage
-skills: [growth rates, ccf, dynlm, "L()", ADL, NeweyWest, coeftest, "auto.arima(xreg=)", spurious regression, Fstats, sctest, breakpoints, pseudo out-of-sample]
+skills: [growth rates, ccf, dynlm, "L()", ADL, dynamic multipliers, spurious regression, pseudo out-of-sample]
 ---
 import CodeLab from '../../components/CodeLab.svelte';
 import Callout from '../../components/Callout.astro';
@@ -55,8 +54,9 @@ import exCumCheckR from '../../labs/ch07/ex_cumulative_check.R?raw';
 import exCumPy from '../../labs/ch07/ex_cumulative.py?raw';
 import exCumSolPy from '../../labs/ch07/ex_cumulative_solution.py?raw';
 import exCumCheckPy from '../../labs/ch07/ex_cumulative_check.py?raw';
+import BeyondBasics from '../../components/BeyondBasics.astro';
 
-<p class="lede">Every Thursday at 8:30 a.m. Eastern, the Department of Labor reports how many people filed a <em>new</em> claim for unemployment benefits the week before. The jobs report, the number markets care about most, comes out only once a month. If the weekly number told you where the monthly one was heading, you would know first. <strong>Does it?</strong> This chapter teaches you to answer that question honestly, and to avoid the three traps that make time-series regressions lie.</p>
+<p class="lede">Every Thursday at 8:30 a.m. Eastern, the Department of Labor reports how many people filed a <em>new</em> claim for unemployment benefits the week before. The jobs report, the number markets care about most, comes out only once a month. If the weekly number told you where the monthly one was heading, you would know first. <strong>Does it?</strong> This chapter teaches you to answer that question honestly, and to avoid the traps that make time-series regressions lie.</p>
 
 Economists sort indicators by **timing**. A <Term def="A series whose turning points tend to come before those of the overall economy, so it can be used to forecast it.">leading indicator</Term> turns before the economy does. A <Term def="A series that moves at about the same time as the overall economy, so it tells you where the economy is now.">coincident indicator</Term> moves with it. A <Term def="A series whose turning points come after those of the economy. Useful to confirm a turn, not to predict one.">lagging indicator</Term> turns afterwards. The Conference Board publishes a composite index of each:<sup>[1](#refs)</sup>
 
@@ -66,11 +66,11 @@ Economists sort indicators by **timing**. A <Term def="A series whose turning po
 | **Coincident** (4 components) | payroll employment; personal income less transfers; manufacturing and trade sales; industrial production | `PAYEMS`, `INDPRO` |
 | **Lagging** (7 components) | includes the average duration of unemployment, the average prime rate and the change in the CPI for services<sup>[2](#refs)</sup> | `UNRATE` behaves like one below |
 
-Notice that **payroll employment is itself a coincident indicator**. So our question, "do claims tell us where jobs are going?", is really the question of whether a leading indicator earns its name. GDP is not one of the components (it is quarterly), but it is the textbook coincident measure of the cycle.
+Notice that **payroll employment is itself a coincident indicator**. So our question, "do claims tell us where jobs are going?", is really whether a leading indicator earns its name.
 
 <KeyIdea>A leading indicator is only useful if it leads by a stable amount, is known before the thing you forecast, and improves on a forecast that ignores it. This chapter tests all three.</KeyIdea>
 
-<SessionBreak n={1} title="Do claims lead jobs? Reading lead-lag relationships and dynamic multipliers" goals={['Explain why we correlate **growth rates**, not levels, of trending series', 'Find a lead with the cross-correlation function and say it in words, with units', 'Read an ADL model: **impact**, **cumulative** and **long-run** effects', 'Read Newey–West and plain t-statistics side by side']} />
+<SessionBreak n={1} title="Do claims lead jobs? Reading lead-lag relationships and dynamic multipliers" goals={['Explain why we correlate **growth rates**, not levels, of trending series', 'Find a lead with the cross-correlation function and say it in words, with units', 'Read an ADL model: **impact**, **cumulative** and **long-run** effects, in thousands of jobs']} />
 
 ## Slide one series against another
 
@@ -93,7 +93,7 @@ What the explorer shows, with data from 1990 to 2019:
 - **Building permits lead by about 9 months** (r = 0.68). Builders pull permits before they hire crews.
 - **Industrial production is roughly coincident** (strongest 4 months ahead, r = 0.80). The **unemployment rate lags** by about a year.
 
-Now tick **Include 2020 to today** with claims selected. The best lead collapses from 7 months to **1 month**, and the correlation at 7 months drops from −0.73 to −0.43. In March 2020 seasonally adjusted weekly claims went from 273,000 to 2.9 million in one week and to 5.9 million the week after, while payrolls fell by 20.5 million in April alone. A few extreme months now dominate every correlation. Hold on to that observation; it returns in the section on structural breaks.
+Now tick **Include 2020 to today** with claims selected. The best lead collapses from 7 months to **1 month**. In March 2020 weekly claims went from 273,000 to 2.9 million in one week, and payrolls fell by 20.5 million in April alone: a few extreme months now dominate every correlation. Hold on to that observation; it returns in the out-of-sample test at the end of the chapter.
 
 <Callout type="pitfall" title="Which way does the lag point?">
 R's `ccf(x, y)` reports the correlation of <code>x[t + k]</code> with <code>y[t]</code>. A peak at a <strong>negative</strong> <em>k</em> means <em>x</em> moves first. Python's statsmodels `ccf` uses a different convention (and only non-negative lags). Always check a lead you found by shifting the series and looking at the plot, as the lab below does.
@@ -101,7 +101,7 @@ R's `ccf(x, y)` reports the correlation of <code>x[t + k]</code> with <code>y[t]
 
 ## Levels or growth rates? Transform before you correlate
 
-You may have noticed that the explorer never compared claims with jobs directly. It compared their **12-month % changes**. That was not a detail; it is the most important data decision in this chapter. Your manager will often start with the raw numbers, so make a prediction first.
+The explorer never compared claims with jobs directly. It compared their **12-month % changes**. That is the most important data decision in this chapter. Make a prediction first.
 
 <Predict client:load
   question="From 2010 to 2019, what is the correlation between the **level** of the consumer price index and the **level** of payroll employment? (Prices and hiring have no obvious link.)"
@@ -122,44 +122,24 @@ Here is what the explorer shows, 2010–2019:
 | 12-month % change | +0.49 | −0.23 |
 | Monthly % change | −0.15 | +0.02 |
 
-In levels, claims and consumer prices look like equally perfect partners for jobs. One of them has a real economic link to hiring and one does not, and the levels correlation cannot tell them apart. That is because **a correlation of two trending series mostly measures that both trend**. Claims drifted down all decade as the labor market healed; jobs and prices drifted up. Any two series with a steady drift will do the same. Turn each into a growth rate and the drift is gone. What is left answers a real question: *in months when claims grow faster than usual, do jobs grow slower than usual?* For claims the answer is "yes, a little" (−0.15); for prices, "no" (0.02).
+In levels, claims and consumer prices look like equally perfect partners for jobs, although only one has a real link to hiring. That is because **a correlation of two trending series mostly measures that both trend**: claims drifted down all decade, jobs and prices drifted up. Turn each into a growth rate and the drift is gone. What is left answers a real question: *in months when claims grow faster than usual, do jobs grow slower than usual?* For claims the answer is "yes, a little" (−0.15); for prices, "no" (0.02).
 
-The 12-month row has a surprise: claims growth correlates **+0.49** with job growth in the same months of the 2010s, the "wrong" sign. Twelve-month changes are smooth, and in a decade with no recession their slow swings can line up by accident. They also ignore timing: claims move months *before* jobs. That is why the explorer at the top of the page slides the series in time, and why the next lab looks at every lag.
+The 12-month row has the "wrong" sign (+0.49): in a decade with no recession, smooth annual changes can line up by accident, and same-month numbers ignore that claims move months *before* jobs. That is why the lead-lag explorer slides the series in time.
 
 <Callout type="empirical" title="Difference before you correlate trending series">
-Before you correlate or regress two series, plot them. If either one trends, the levels correlation is close to useless: it rewards any pair that drifts the same way, and the sample correlation of a series without a stable mean says little about the future.<sup>[12](#refs)</sup> Use the growth rate (`100 * diff(log(x))` for the monthly % change, `lag = 12` for the year-over-year change) or the plain change (`diff(x)`), whichever has the clearer units. [Chapter 1](/chapters/time-series-data/#transformations-every-analyst-uses) reviews these transformations, and [Chapter 7](/chapters/arima/#the-cure-differencing) explains why differencing removes a trend. The [spurious-regression section](#spurious-regression-when-two-random-walks-look-related) shows the extreme case: two series that have **nothing** to do with each other, but look strongly related in levels most of the time.
+Before you correlate or regress two series, plot them. If either one trends, the levels correlation is close to useless: it rewards any pair that drifts the same way.<sup>[12](#refs)</sup> Use the growth rate (`100 * diff(log(x))` for the monthly % change, `lag = 12` for the year-over-year change) or the plain change (`diff(x)`), whichever has the clearer units. [Chapter 1](/chapters/time-series-data/#transformations-every-analyst-uses) reviews these transformations, and [Chapter 7](/chapters/arima/#the-cure-differencing) explains why differencing removes a trend. The [spurious-regression section](#spurious-regression-when-two-random-walks-look-related) shows the extreme case.
 </Callout>
 
-Which growth rate? This chapter uses two, and you should know why each one appears where it does:
-
-- **12-month % change** (the lead-lag explorer and lab). It removes any leftover seasonality and smooths out weekly noise, which makes turning points easy to see. The cost: neighbouring months share eleven of their twelve months of data, so the series is very smooth and its correlations look stronger than they are.
-- **Monthly change** (the ADL model and everything after). Jobs added this month (`diff(jobs)`, in thousands) and the % change in claims (`100 * diff(log(claims))`) do not overlap from one month to the next, so each month is a fresh observation. That is what a regression and its standard errors need.
+Which growth rate? The lead-lag explorer and lab use the **12-month % change**, which smooths out noise and makes turning points easy to see (but neighbouring months share eleven of twelve months of data, so correlations look stronger than they are). The ADL model and everything after use **monthly changes**: jobs added (`diff(jobs)`, thousands) and the % change in claims. Each month is then a fresh observation, which is what a regression needs.
 
 ## Find the lead in code
 
-The explorer used the <Term def="The correlation between one series and lagged or leading values of another, computed for a range of lags. Its peak suggests how far one series leads the other.">cross-correlation function</Term>. Here is the same analysis in a few lines, with a chart you can paste into a report.
-
-The first line of the lab turns weekly claims into a monthly series. That step hides a trap.
-
-<Predict client:load
-  question="You add up the weekly initial claims in each month. The total for November 2019 is 28% higher than October's. What happened?"
-  options={['A wave of layoffs in November', 'November had five weekly readings and October four', 'Thanksgiving: claims always jump in November']}
-  answer={1}
-  explain="Five Saturdays fell in November 2019 (week-ending dates are Saturdays), against four in October. The monthly <strong>sum</strong> jumped 28%; the monthly <strong>average</strong> of the weekly numbers rose 5.6%. The data are seasonally adjusted, so a holiday effect is already removed."
-/>
-
-<Callout type="empirical" title="Weekly to monthly: average the weeks for growth rates">
-`fred("ICSA", to = "month")` assigns each week to the month in which it **ends** (a Saturday) and takes the **average**. About a third of months (35% in 1990–2019) contain five week-ending Saturdays, the rest four. If you **sum** the weeks instead, those extra weeks make the monthly total jump by about 25% and fall back the month after: the monthly % change of the sum has a standard deviation of **19 points**, against **4 points** for the average. That noise has nothing to do with layoffs, and it would swamp every correlation in this chapter. The sum is the right answer if you need the *total number of new claims filed* in a month ([Chapter 1](/chapters/time-series-data/#changing-frequency-sum-average-or-last-value) treats claims as a flow). For growth rates and correlations, use the average weekly level, which is what the Conference Board's leading index uses too.<sup>[1](#refs)</sup>
-</Callout>
+The explorer used the <Term def="The correlation between one series and lagged or leading values of another, computed for a range of lags. Its peak suggests how far one series leads the other.">cross-correlation function</Term>. Here is the same analysis in a few lines. The lab's first line turns weekly claims into a monthly series by **averaging** the weeks that end in each month. Summing them instead would make the monthly total jump by about 25% in every five-week month, noise that has nothing to do with layoffs ([Chapter 1](/chapters/time-series-data/#changing-frequency-sum-average-or-last-value) covers sum versus average; more in Beyond the basics below).
 
 <div class="breakout">
 <CodeLab client:load id="ch07-ccf" title="How many months do claims lead job growth?" r={leadR} py={leadPy} pyPackages={['statsmodels']}
   goal="Compute the cross-correlation between claims growth and job growth, find the lead, and show it visually." />
 </div>
-
-<Callout type="tip" title="Make it yours">
-Swap `"ICSA"` for `"PERMIT"` (building permits are already monthly, so `to = "month"` changes nothing). The peak moves to a 9-month lead with a **positive** correlation, because more permits mean more jobs. Then try the yield-curve spread: replace the whole `claims_yoy` line with `claims_yoy <- window(fred("T10Y3M", to = "month"), start = c(1990, 1), end = c(2019, 12))` (a spread can be negative, so no logs). The strongest correlation is now at **k = +9** and negative: within ±18 months the spread mostly *follows* job growth. Its reputation as a recession signal rests on longer horizons, which is where [Chapter 5](/chapters/nonlinear-regression/#part-2-will-there-be-a-recession-next-year) used it.
-</Callout>
 
 ### Reading a cross-correlation in words
 
@@ -174,7 +154,7 @@ Four habits make that sentence trustworthy:
 3. **A correlation is not a slope.** −0.73 does not mean "jobs fall 0.73% when claims rise 1%". It says how closely the two shapes match, not how big the response is. The response size is what the ADL model in the next section measures.
 4. **It is not cause and effect, and it is not yet a forecast.** Claims do not *cause* weaker hiring; rising layoffs and slowing hiring are both symptoms of firms cutting back, and the layoffs show up first. Whether the lead improves a forecast is a separate question, answered out of sample at the end of the chapter.
 
-A quick sense of scale: *r*² = 0.73² ≈ 0.54, so claims seven months earlier line up with about half of the ups and downs in annual job growth over 1990–2019. That is a strong lead for macro data, and it still leaves half unexplained.
+For scale: *r*² = 0.73² ≈ 0.54, so claims seven months earlier line up with about half of the ups and downs in annual job growth. That is a strong lead for macro data, and it still leaves half unexplained.
 
 ## From correlation to a model: distributed lags
 
@@ -215,7 +195,7 @@ Before you read any coefficient, write down the units of both sides. Here the ou
 Three ways *not* to read this table:
 
 - **Not "the effect of claims is −11.2".** That is only the *impact*, the same-month effect. Because job gains are persistent (0.39 + 0.43 = 0.81 of last two months' gains carry over), the effect keeps building for months.
-- **Not "lags 2 and 3 are near zero, so claims stop mattering after a month".** The *direct* effect fades, but the echo through the job-gain lags keeps going. In month 1 the response is −5.6 plus 0.39 × (−11.2) ≈ −9.9 per 1% rise in claims; in month 2 it is still about −11, although the month-2 claims coefficient alone is only −2.6.
+- **Not "lags 2 and 3 are near zero, so claims stop mattering after a month".** The *direct* effect fades, but the echo through the job-gain lags keeps going: in month 1 the response is −5.6 plus 0.39 × (−11.2) ≈ −9.9 per 1% rise in claims.
 - **Not a causal effect.** "A 1% rise in claims goes with…" is a forecasting statement about what usually follows, not a promise that cutting claims would create jobs.
 
 The explorer below does the bookkeeping for you and turns it into a sentence. Before you use it, make a prediction.
@@ -231,21 +211,13 @@ The explorer below does the bookkeeping for you and turns it into a sentence. Be
 <ReadMultipliers client:load />
 </div>
 
-Slide to month 2 with *Claims jump 10% and stay up*. The sentence reads: **a lasting 10% jump in claims is followed by about 323,000 fewer jobs over three months** (112,000 + 99,000 + 112,000, the month in which claims rise and the next two). That is the kind of number a manager can use. For comparison, payrolls grew by about 119,000 jobs in an average month of 1990–2019, so the first month's hit alone wipes out roughly a typical month of hiring.
+Slide to month 2 with *Claims jump 10% and stay up*. The sentence reads: **a lasting 10% jump in claims is followed by about 323,000 fewer jobs over three months** (112,000 + 99,000 + 112,000, the month in which claims rise and the next two). For comparison, payrolls grew by about 119,000 jobs in an average month of 1990–2019, so the first month's hit alone wipes out roughly a typical month of hiring.
 
 <Callout type="empirical" title="Impact, cumulative or long run: name the number you report">
 An ADL gives you at least three honest answers to "what does a 10% jump in claims mean for jobs?", and they differ by a factor of ten: **−112,000** in the same month (impact), **−843,000** after a year (cumulative), **−1.03 million** in the long run, all for a jump that lasts. For a one-month blip, the answer 12 months later shrinks to about −27,000. Always state (1) the size and kind of the shock ("claims rise 10% and stay there"), (2) the horizon ("over the following three months"), (3) whether you mean the jobs added in that month or the running total, and (4) the units ("thousands of jobs"). Then convert to something the reader knows: 843,000 jobs is about 0.56% of the 151.8 million payroll jobs at the end of 2019.<sup>[16](#refs)</sup>
 </Callout>
 
-### Why plain OLS is overconfident
-
-There is a catch in running any regression on time series. OLS standard errors assume each month's error is unrelated to the last. With monthly macro data that is almost never true. In the lab below, a simple regression of job gains on same-month claims growth leaves residuals with an autocorrelation of **0.74** at lag 1. Each month's surprise mostly repeats the previous one, so the 360 months carry far less independent information than 360 coin flips would, and OLS reports more precision than the data contain.
-
-Three fixes, all in the lab:
-
-1. **Keep OLS, fix the standard errors.** <Term def="Heteroskedasticity- and autocorrelation-consistent standard errors (Newey–West): they allow the regression errors to be correlated over time, so t-statistics are not overstated.">Newey–West (HAC)</Term> standard errors<sup>[8](#refs)</sup>, first met in Chapter 4 and used again in Chapter 5's recession model, allow for autocorrelation. For the claims slope the standard error goes from 2.54 to **4.78**, and the t-statistic from −5.2 to **−2.7**.
-2. **Put the dynamics in the model.** Adding lags (the ADL) soaks up most of the autocorrelation. Some remains, so we still report Newey–West errors.
-3. **Model the errors directly.** <Term def="A regression y = a + b·x + e in which the error e follows an ARIMA model. Fitted in R with auto.arima(y, xreg = x).">Regression with ARIMA errors</Term> (`auto.arima(y, xreg = x)`)<sup>[10](#refs)</sup> estimates the slope and an ARIMA model for the error together. It is also a forecasting model in its own right: forecast the predictor, and the ARIMA error carries the persistence forward.
+One catch before the lab. OLS standard errors assume each month's error is unrelated to the last, and with monthly macro data that is almost never true: a regression of job gains on same-month claims growth alone leaves residuals with a lag-1 autocorrelation of **0.74**, so OLS reports more precision than the data contain. The ADL's own lags soak up most of that. For what remains we report <Term def="Heteroskedasticity- and autocorrelation-consistent standard errors (Newey–West): they allow the regression errors to be correlated over time, so t-statistics are not overstated.">Newey–West (HAC)</Term> standard errors<sup>[8](#refs)</sup>, met in [Chapter 4](/chapters/regression/#standard-errors-you-can-defend): they keep the estimate and only widen its standard error. The lab ends by fitting the same slope as a regression with ARIMA errors; Beyond the basics below reads those outputs side by side.
 
 <div class="breakout">
 <CodeLab client:load id="ch07-adl" title="An ADL model of payrolls, with honest standard errors" r={adlR} py={adlPy}
@@ -253,11 +225,135 @@ Three fixes, all in the lab:
   goal="Diagnose autocorrelated errors, fit an ADL(2,3) with dynlm, report Newey–West t-statistics, and compute the dynamic multipliers." />
 </div>
 
+<SessionBreak n={2} title="Can you trust it? Spurious links and an honest forecast test" goals={['Explain why two unrelated random walks look "significant" in levels, and what to do about it', 'Use only data that were public on forecast day', 'Judge claims out of sample against an AR benchmark and give an honest verdict']} />
+
+## Spurious regression: when two random walks look related
+
+In 1974 Clive Granger and Paul Newbold ran a simple experiment.<sup>[3](#refs)</sup> They generated pairs of **independent** <Term def="A series where each value equals the previous value plus a new random shock. It wanders with no tendency to return to a mean, like a stock price.">random walks</Term>, regressed one on the other, and counted how often the usual t-test declared the slope "significant". It should happen about 5% of the time.
+
+<Predict client:load
+  question="You regress one random walk of 100 steps on another, completely independent one, and repeat 1,000 times. In roughly what share of regressions will |t| exceed 2?"
+  options={['About 5%, as the test promises', 'About 15%', 'About 40%', 'About 75%']}
+  answer={3}
+  explain="About three in four. In 1,000 simulations (the lab is in Beyond the basics below), 75% of levels regressions had |t| > 2, against 6% when both series are differenced first. Granger and Newbold found a similar rate with 50 observations. Try it below."
+/>
+
+<div class="breakout">
+<SpuriousGenerator client:load />
+</div>
+
+Why does it happen? Each random walk drifts away from its starting point and stays there for long stretches. Two such series almost always end up trending in some direction over the sample, so they look related, and the t-test, built for independent errors, cannot tell a shared drift from a real link. The residuals are themselves a random walk, which is the tell-tale sign.
+
+<KeyIdea>Before regressing one trending series on another, ask whether each one wanders like a random walk. If so, regress changes on changes, or test for cointegration.</KeyIdea>
+
+Two ways out:
+
+- **Difference both series**, as we did with job gains and claims growth in this chapter. Changes of random walks are white noise, and the t-test works again. [Chapter 7](/chapters/arima/#spot-the-random-walk) shows how to spot a random walk.
+- **Test for <Term def="Two random-walk series are cointegrated if some combination of them is stationary: they wander, but together, tied by a long-run equilibrium.">cointegration</Term>.** Sometimes two wandering series really are tied together (consumption and income), and differencing would throw away that long-run link. [Chapter 9](/chapters/var/) shows how to test for it.
+
+## Does adding claims beat the AR?
+
+Now the real test. Forget in-sample t-statistics: does adding claims make **next month's** payroll forecast more accurate than a model that only uses past payrolls? We run a <Term def="An evaluation that mimics real-time forecasting: for each target date, the model is estimated only on data before it, then scored on the value it did not see. 'Pseudo' because the data are today's revised figures, not what was available at the time.">pseudo out-of-sample</Term> test: for every month, fit on everything before it, forecast that month, record the error.
+
+<Callout type="pitfall" title="Leakage: was the predictor known when you forecast?">
+Standing at the end of month $t-1$ to forecast jobs in month $t$, you know claims through month $t-1$, not month $t$. A model that uses same-month claims is a <Term def="An estimate of the current period, made before the official number is published, using data that arrive sooner. Chapter 13 will build nowcasts properly.">nowcast</Term>: legitimate, but only once month $t$'s claims are in. Weekly claims come out each Thursday, five days after the week ends,<sup>[6](#refs)</sup> so a month's last week is usually public just before that month's jobs report. Score a nowcast as if it were a one-month-ahead forecast and you have leaked the future into your test.
+</Callout>
+
+<Predict client:load
+  question="In the calm 2010–2019 decade, how much does adding last month's claims growth cut the RMSE of a one-month-ahead AR(2) forecast of jobs added?"
+  options={['Not at all: well under 1%', 'About 5%', 'About 15%', 'About 30%']}
+  answer={0}
+  explain="RMSE goes from 116.9 to 116.7 thousand jobs. In normal times, last month's job gains already contain what claims would tell you. Claims earn their keep around turning points, as the next lab shows."
+/>
+
+<div class="breakout">
+<CodeLab client:load id="ch07-oos" title="Scorecard: AR vs AR + claims, without leakage" r={oosR} py={oosPy}
+  packages={['forecast']} pyPackages={['statsmodels', 'scipy']}
+  goal="Run expanding-window one-month-ahead forecasts in four test periods and decide, with a Diebold–Mariano test, whether claims help." />
+</div>
+
+Read the scorecard column by column (RMSE, thousands of jobs):
+
+| Test period | AR(2) | + claims (t−1) | + claims (t), nowcast | What it says |
+|---|---|---|---|---|
+| Calm, 2010–2019 | 116.9 | 116.7 | 116.5 | No gain at all (DM p = 0.83) |
+| Great Recession, 2007–2010 | 166.2 | 163.4 | **150.4** | Lagged claims help a little (p = 0.20); the **nowcast** cuts error by 10% (p = 0.01) |
+| 2022 to Oct 2026, COVID months in training | **198.3** | 417.9 | 222.1 | Claims make the forecast **twice as bad** |
+| 2022 to Oct 2026, COVID months dropped | 149.4 | 150.3 | 149.0 | AR improves by a quarter; claims still add nothing |
+
+So, **do jobless claims tell us where jobs are going?** Honestly: not much, one month ahead, in normal times. Their value is concentrated around turning points, and mostly as a *nowcast* of the current month rather than a forecast of the next. And a model estimated through COVID without care can be worse than ignoring claims entirely. Indicators that look strong in one period and add little in another are the main finding of Stock and Watson's survey of leading indicators.<sup>[7](#refs)</sup>
+
+Why did the COVID months do so much damage? A few extreme months can pull a regression's slope far from its normal value: fitted on 2010–2024 with the pandemic months left in, the claims slope is about eight times what it is without them. Whatever you do with those months (drop them, or give each its own dummy), **say so** in the forecast's footnote. Relationships can also change for good; Beyond the basics below shows how to test for such a <Term def="A change, at some date, in the parameters of a model: the mean, the slope, or the variance.">structural break</Term> and compares ways of handling COVID.
+
+Two more cautions. The Bureau of Labor Statistics puts the 90% confidence interval for the monthly payroll change at about ±122,000 from sampling error alone,<sup>[6](#refs)</sup> so no model can be much more accurate than that. And this is *pseudo* out-of-sample: we used today's revised payrolls, not the first estimates a forecaster saw; a real-time test would be tougher.
+
+## Your turn
+
+Two short tasks, each the kind of request an analyst gets in a week. Fill in the blanks (`______`) and press **Run & check**.
+
+**1. "Claims explain almost everything about jobs."** Your manager has seen a chart of claims and payrolls in levels over 2010–2019 with a correlation of −0.97. Check the claim the way this chapter taught you, using consumer prices as a "placebo" series that should have no link to hiring.
+
+<div class="breakout">
+<CodeLab client:load id="ch07-ex-growth" exercise title="Exercise: levels or growth rates? Check your manager's correlation" r={exGrR} solution={exGrSolR} check={exGrCheckR}
+  py={exGrPy} solutionPy={exGrSolPy} checkPy={exGrCheckPy}
+  goal="Compare correlations with payroll jobs in levels and in monthly growth rates, for claims and for a placebo series (CPI), over 2010–2019."
+  hints={['The monthly % change of a series is 100 times the change in its log from one month to the next.', 'In R: `g <- function(x) 100 * diff(log(x))`; in Python: `return 100 * np.log(x).diff()`.', 'The second blank applies the same function to the price index: `g(cpi)`.']} />
+</div>
+
+**2. "How many jobs over the next three months?"** Weekly claims have jumped about 10% and look set to stay there. Your manager wants one number: the total jobs shortfall over this month and the next two. Fit an ADL(1,1) and trace its dynamic multipliers month by month, by hand.
+
+<div class="breakout">
+<CodeLab client:load id="ch07-ex-cum" exercise title="Exercise: the three-month cumulative effect of a jump in claims" r={exCumR} solution={exCumSolR} check={exCumCheckR}
+  py={exCumPy} solutionPy={exCumSolPy} checkPy={exCumCheckPy} packages={['dynlm']} pyPackages={['statsmodels']}
+  goal="Compute the dynamic multipliers for months 0, 1 and 2 of an ADL(1,1) and add them up into the cumulative effect of a lasting 10% jump in claims."
+  hints={['Each month\'s response = the claims coefficient for that lag (if the model has one) + phi times the previous month\'s response.', 'Month 1: `b1 + phi * m0`. Month 2: the model has no lag-2 claims term, so it is just `phi * m1`.', 'Expect m0 ≈ −11.0, m1 ≈ −10.0 and m2 ≈ −7.5 (thousands of jobs per 1% rise in claims), so the 10% total is about −285 thousand.']} />
+</div>
+
+## Chapter checklist
+
+- Classify indicators by **timing**: leading, coincident, lagging.
+- **Transform before you correlate.** Trending series correlate in levels whatever their link (claims −0.97 and CPI +0.98 with jobs in 2010–2019). Use growth rates or changes, and name the transformation, units and sample in every result.
+- Find the lead with the **cross-correlation function**, confirm it by shifting the series, and say it in words ("claims growth leads job growth by about seven months, *r* = −0.73"). A correlation is not a slope and not a cause.
+- Write **ADL models** with `dynlm(y ~ L(y, 1:p) + L(x, 0:q))` and read each coefficient in units. Report the **impact**, **cumulative** or **long-run** effect; say which one you mean and whether the shock lasts. Time-series errors are autocorrelated, so report Newey–West standard errors.
+- Never regress one **random walk** on another in levels: difference both, or test for **cointegration** ([Chapter 9](/chapters/var/)).
+- Judge an indicator **out of sample**, against an AR benchmark, using only data **public on forecast day**. Say how you treated extreme months such as COVID.
+
+<BeyondBasics topics={['More indicators in the lead-lag lab', 'Weekly to monthly', 'Newey–West and ARIMA errors', 'Spurious-regression simulation lab', 'Structural breaks and COVID', 'Real-time data and publication lags', 'Extra practice']}>
+
+#### Try other indicators in the lead-lag lab
+
+<Callout type="tip" title="Make it yours">
+Swap `"ICSA"` for `"PERMIT"` (building permits are already monthly, so `to = "month"` changes nothing). The peak moves to a 9-month lead with a **positive** correlation, because more permits mean more jobs. Then try the yield-curve spread: replace the whole `claims_yoy` line with `claims_yoy <- window(fred("T10Y3M", to = "month"), start = c(1990, 1), end = c(2019, 12))` (a spread can be negative, so no logs). The strongest correlation is now at **k = +9** and negative: within ±18 months the spread mostly *follows* job growth. Its reputation as a recession signal rests on longer horizons, which is where [Chapter 5](/chapters/nonlinear-regression/#part-2-will-there-be-a-recession-next-year) used it.
+</Callout>
+
+#### Weekly to monthly: sum or average?
+
+<Predict client:load
+  question="You add up the weekly initial claims in each month. The total for November 2019 is 28% higher than October's. What happened?"
+  options={['A wave of layoffs in November', 'November had five weekly readings and October four', 'Thanksgiving: claims always jump in November']}
+  answer={1}
+  explain="Five Saturdays fell in November 2019 (week-ending dates are Saturdays), against four in October. The monthly <strong>sum</strong> jumped 28%; the monthly <strong>average</strong> of the weekly numbers rose 5.6%. The data are seasonally adjusted, so a holiday effect is already removed."
+/>
+
+<Callout type="empirical" title="Weekly to monthly: average the weeks for growth rates">
+`fred("ICSA", to = "month")` assigns each week to the month in which it **ends** (a Saturday) and takes the **average**. About a third of months (35% in 1990–2019) contain five week-ending Saturdays, the rest four. If you **sum** the weeks instead, those extra weeks make the monthly total jump by about 25% and fall back the month after: the monthly % change of the sum has a standard deviation of **19 points**, against **4 points** for the average. That noise has nothing to do with layoffs, and it would swamp every correlation in this chapter. The sum is the right answer if you need the *total number of new claims filed* in a month ([Chapter 1](/chapters/time-series-data/#changing-frequency-sum-average-or-last-value) treats claims as a flow). For growth rates and correlations, use the average weekly level, which is what the Conference Board's leading index uses too.<sup>[1](#refs)</sup>
+</Callout>
+
+#### Why plain OLS is overconfident
+
+There is a catch in running any regression on time series. OLS standard errors assume each month's error is unrelated to the last. With monthly macro data that is almost never true. In the ADL lab above, a simple regression of job gains on same-month claims growth leaves residuals with an autocorrelation of **0.74** at lag 1. Each month's surprise mostly repeats the previous one, so the 360 months carry far less independent information than 360 coin flips would, and OLS reports more precision than the data contain.
+
+Three fixes, all in the ADL lab above:
+
+1. **Keep OLS, fix the standard errors.** <Term def="Heteroskedasticity- and autocorrelation-consistent standard errors (Newey–West): they allow the regression errors to be correlated over time, so t-statistics are not overstated.">Newey–West (HAC)</Term> standard errors<sup>[8](#refs)</sup>, first met in Chapter 4 and used again in Chapter 5's recession model, allow for autocorrelation. For the claims slope the standard error goes from 2.54 to **4.78**, and the t-statistic from −5.2 to **−2.7**.
+2. **Put the dynamics in the model.** Adding lags (the ADL) soaks up most of the autocorrelation. Some remains, so we still report Newey–West errors.
+3. **Model the errors directly.** <Term def="A regression y = a + b·x + e in which the error e follows an ARIMA model. Fitted in R with auto.arima(y, xreg = x).">Regression with ARIMA errors</Term> (`auto.arima(y, xreg = x)`)<sup>[10](#refs)</sup> estimates the slope and an ARIMA model for the error together. It is also a forecasting model in its own right: forecast the predictor, and the ARIMA error carries the persistence forward.
+
 Notice how the claims slope changes between methods: −13.1 in the static OLS regression, but −6.4 in the regression with ARIMA(2,0,2) errors. Once the errors are allowed to carry the persistent swings in job growth, less of those swings gets credited to claims. Coefficient estimates, not just standard errors, can shift when you take the time-series structure seriously.
 
-### Reading Newey–West and plain t-statistics side by side
+#### Reading Newey–West and plain t-statistics side by side
 
-The lab prints the static regression twice. Put the two outputs next to each other and read them like this:
+The ADL lab above prints the static regression twice. Put the two outputs next to each other and read them like this:
 
 | | Estimate | Std. error | t | 95% interval (estimate ± 1.96 × s.e.) |
 |---|---|---|---|---|
@@ -273,45 +369,21 @@ In the static regression the Newey–West standard error is 1.9 times the plain 
 </Callout>
 
 <Callout type="pitfall" title="Newey–West is a bandage, not a cure">
-HAC standard errors fix inference for the slope you estimated. They do not make a mis-specified model right, and they do nothing about the next problem, which is far worse: a "relationship" that does not exist at all.
+HAC standard errors fix inference for the slope you estimated. They do not make a mis-specified model right, and they do nothing about a far worse problem: a "relationship" that does not exist at all (see the spurious-regression section).
 </Callout>
 
-<SessionBreak n={2} title="Can you trust it? Spurious links, breaks and an honest forecast test" goals={['Explain why two unrelated random walks look "significant" in levels', 'Read a structural-break test and decide what it means for a forecast', 'Build the data set a forecaster actually had: publication lags, weekly-to-monthly alignment, revisions', 'Judge claims out of sample against an AR benchmark, without look-ahead bias']} />
-
-## Spurious regression: when two random walks look related
-
-In 1974 Clive Granger and Paul Newbold ran a simple experiment.<sup>[3](#refs)</sup> They generated pairs of **independent** <Term def="A series where each value equals the previous value plus a new random shock. It wanders with no tendency to return to a mean, like a stock price.">random walks</Term>, regressed one on the other, and counted how often the usual t-test declared the slope "significant". It should happen about 5% of the time.
-
-<Predict client:load
-  question="You regress one random walk of 100 steps on another, completely independent one, and repeat 1,000 times. In roughly what share of regressions will |t| exceed 2?"
-  options={['About 5%, as the test promises', 'About 15%', 'About 40%', 'About 75%']}
-  answer={3}
-  explain="About three in four. In the lab's 1,000 simulations, 75% of levels regressions had |t| > 2, against 6% when both series are differenced first. Granger and Newbold found a similar rate with 50 observations. Try it below."
-/>
-
-<div class="breakout">
-<SpuriousGenerator client:load />
-</div>
-
-Why does it happen? Each random walk drifts away from its starting point and stays there for long stretches. Two such series almost always end up trending in some direction over the sample, so they look related, and the t-test, built for independent errors, cannot tell a shared drift from a real link. The residuals are themselves a random walk, which is the tell-tale sign. Granger and Newbold's rule of thumb: be suspicious whenever $R^2$ is larger than the <Term def="A standard check of residual autocorrelation printed by many regression packages. It is near 2 when residuals are unrelated from one period to the next, and falls toward 0 when they wander like a random walk.">Durbin–Watson statistic</Term>.
+#### More data makes spurious regression worse
 
 <div class="breakout">
 <CodeLab client:load id="ch07-spurious" title="Simulate 1,000 spurious regressions" r={spurR} py={spurPy} pyPackages={['statsmodels']}
   goal="Show that regressions between independent random walks are 'significant' most of the time, that differencing fixes it, and that more data makes it worse." />
 </div>
 
-The last chart in the lab is the most unsettling: the false-alarm rate climbs from 57% with 25 observations to 88% with 400. More data does not rescue you, because with random walks the t-statistic grows with the square root of the sample size even when there is nothing there.<sup>[4](#refs)</sup>
+The lab repeats the experiment in differences (6% false alarms, close to the promised 5%). Its last chart is the most unsettling: the false-alarm rate climbs from 57% with 25 observations to 88% with 400. More data does not rescue you, because with random walks the t-statistic grows with the square root of the sample size even when there is nothing there.<sup>[4](#refs)</sup>
 
-<KeyIdea>Before regressing one trending series on another, ask whether each one wanders like a random walk. If so, regress changes on changes, or test for cointegration.</KeyIdea>
+#### Structural breaks: when the relationship changes
 
-Two ways out:
-
-- **Difference both series**, as we did with job gains and claims growth in this chapter. Changes of random walks are white noise, and the t-test works again. [Chapter 7](/chapters/arima/#spot-the-random-walk) shows how to spot a random walk and why differencing cures it. This is the formal version of the levels-versus-growth lesson from session 1.
-- **Test for <Term def="Two random-walk series are cointegrated if some combination of them is stationary: they wander, but together, tied by a long-run equilibrium.">cointegration</Term>.** Sometimes two wandering series really are tied together (consumption and income, or a stock's price in two markets). Differencing would throw away that long-run link. [Chapter 9](/chapters/var/) will show how to test for it and model it with an error-correction model.
-
-## Structural breaks: when the relationship changes
-
-Even a real relationship can change. A <Term def="A change, at some date, in the parameters of a model: the mean, the slope, or the variance.">structural break</Term> is a date after which the old model no longer fits. Forecasting with a model estimated across a break blends two worlds and fits neither.
+Even a real relationship can change. A structural break is a date after which the old model no longer fits. Forecasting with a model estimated across a break blends two worlds and fits neither.
 
 If you know the date in advance (a policy change, a pandemic), the **Chow test** (Chow, 1960) compares one model fitted to the whole sample with two models fitted before and after. If you don't know the date, compute the Chow F-statistic at **every** candidate date and take the largest: the **sup-F** (or QLR) test of Andrews (1993). The catch: the largest of many F-statistics is large by chance, so it needs its own, higher critical values.<sup>[5](#refs)</sup>
 
@@ -352,7 +424,7 @@ $$
 At a known date it follows an $F(k, n-2k)$ distribution. The sup-F statistic is $\max_\tau F(\tau)$ over the middle 70% of the sample ("15% trimming"). Its distribution was derived by Andrews (1993); for $k=1$ the 5% critical value is about 8.7 in Andrews's table (strucchange's approximation, used in the lab and the explorer, gives 8.6), compared with about 4 for a single F-test. `strucchange::Fstats` reports $k \cdot F(\tau)$, which is the same as $F(\tau)$ when $k = 1$. Bai and Perron (1998, 2003) extend the idea to several unknown breaks, as `breakpoints()` in the strucchange package does.<sup>[9](#refs)</sup>
 </Callout>
 
-### What a break means for a forecaster
+#### What a break means for a forecaster
 
 A significant break is a statement about which part of the past still describes the future. Read the job-growth result in those terms:
 
@@ -368,9 +440,9 @@ What changes in practice:
 With 15% trimming, the sup-F test never tests the first or last 15% of the dates. In the 60-year job-growth sample, that means **no break after 2010 can be detected**, and those are the years a forecaster cares about most. A recent break shows up first as a run of forecast errors with the same sign, long before any test can confirm it. So track your recent errors (Chapter 3's tools), and when they keep missing in one direction, re-estimate on a shorter, more recent window and compare.
 </Callout>
 
-### Handling COVID in a forecasting model
+#### Handling COVID in a forecasting model
 
-The lab's last step shows how much this matters. Fitted on 2010–2024 with the pandemic months left in, the claims slope is **−30.2**: eight times the −3.84 you get once those months are set aside. Your options:
+The break lab's last step shows how much this matters. Fitted on 2010–2024 with the pandemic months left in, the claims slope is **−30.2**: eight times the −3.84 you get once those months are set aside. Your options:
 
 | Approach | What it does | In the lab |
 |---|---|---|
@@ -384,9 +456,9 @@ The lab's last step shows how much this matters. Fitted on 2010–2024 with the 
 After 2020, forecasters used all of these: dropping the pandemic months, one dummy per month, or models that let the size of shocks jump temporarily. Lenza and Primiceri (2022), for example, show that dropping the extreme months may be acceptable for estimating the parameters, but not for forecasting, because it hides how uncertain the future has become. Their fix keeps the months and models the temporary jump in the size of shocks.<sup>[11](#refs)</sup> Whatever you choose, **say so**: "COVID months excluded from estimation" belongs in the footnote of every forecast you publish, because it changes the numbers.
 </Callout>
 
-## What did you know on forecast day?
+#### What did you know on forecast day?
 
-Before the final test, one more trap. A forecasting model may use only numbers that were **public on the day the forecast was made**. With weekly and monthly data released on different days, and revised afterwards, that is easy to get wrong. The most dramatic month in the data makes the point.
+A forecasting model may use only numbers that were **public on the day the forecast was made**. With weekly and monthly data released on different days, and revised afterwards, that is easy to get wrong. The most dramatic month in the data makes the point.
 
 <Predict client:load
   question="It is Friday, March 20, 2020. You want March's average weekly jobless claims for your jobs model. Four weeks end in March (on the 7th, 14th, 21st and 28th). How many of them have been published?"
@@ -411,54 +483,9 @@ In words: a **real-time** data set stores, for each forecast date, the numbers *
 Before any out-of-sample test, write one line per predictor: *what it measures, when it is released, and which month it is assigned to*. Then shift each predictor so that row *t* holds only what was public on forecast day: in R, `stats::lag(x, -1)` puts last month's value in this month's row; in pandas, `x.shift(1)`. Look-ahead bias is the classic way a model looks brilliant in a back-test and fails live: the model is quietly reading tomorrow's newspaper. If you can only get revised data, say so in the footnote ("pseudo out-of-sample, latest-vintage data"), because the real-time errors would have been larger.
 </Callout>
 
-## Does adding claims beat the AR?
+#### Extra practice
 
-Now the real test. Forget in-sample t-statistics: does adding claims make **next month's** payroll forecast more accurate than a model that only uses past payrolls? We run a <Term def="An evaluation that mimics real-time forecasting: for each target date, the model is estimated only on data before it, then scored on the value it did not see. 'Pseudo' because the data are today's revised figures, not what was available at the time.">pseudo out-of-sample</Term> test: for every month, fit on everything before it, forecast that month, record the error.
-
-<Callout type="pitfall" title="Leakage: was the predictor known when you forecast?">
-Standing at the end of month $t-1$ to forecast jobs in month $t$, you know claims through month $t-1$, not month $t$. A model that uses same-month claims is a <Term def="An estimate of the current period, made before the official number is published, using data that arrive sooner. Chapter 13 will build nowcasts properly.">nowcast</Term>: legitimate, but only once month $t$'s claims are in, which (as the forecast-day explorer showed) is usually just before that month's jobs report. Score a nowcast as if it were a one-month-ahead forecast and you have leaked the future into your test.
-</Callout>
-
-<Predict client:load
-  question="In the calm 2010–2019 decade, how much does adding last month's claims growth cut the RMSE of a one-month-ahead AR(2) forecast of jobs added?"
-  options={['Not at all: well under 1%', 'About 5%', 'About 15%', 'About 30%']}
-  answer={0}
-  explain="RMSE goes from 116.9 to 116.7 thousand jobs. In normal times, last month's job gains already contain what claims would tell you. Claims earn their keep around turning points, as the next lab shows."
-/>
-
-<div class="breakout">
-<CodeLab client:load id="ch07-oos" title="Scorecard: AR vs AR + claims, without leakage" r={oosR} py={oosPy}
-  packages={['forecast']} pyPackages={['statsmodels', 'scipy']}
-  goal="Run expanding-window one-month-ahead forecasts in four test periods and decide, with a Diebold–Mariano test, whether claims help." />
-</div>
-
-Read the scorecard column by column (RMSE, thousands of jobs):
-
-| Test period | AR(2) | + claims (t−1) | + claims (t), nowcast | What it says |
-|---|---|---|---|---|
-| Calm, 2010–2019 | 116.9 | 116.7 | 116.5 | No gain at all (DM p = 0.83) |
-| Great Recession, 2007–2010 | 166.2 | 163.4 | **150.4** | Lagged claims help a little (p = 0.20); the **nowcast** cuts error by 10% (p = 0.01) |
-| 2022 to Oct 2026, COVID months in training | **198.3** | 417.9 | 222.1 | Claims make the forecast **twice as bad** |
-| 2022 to Oct 2026, COVID months dropped | 149.4 | 150.3 | 149.0 | AR improves by a quarter; claims still add nothing |
-
-So, **do jobless claims tell us where jobs are going?** Honestly: not much, one month ahead, in normal times. Their value is concentrated around turning points, and mostly as a *nowcast* of the current month rather than a forecast of the next. And a model estimated through COVID without care can be worse than ignoring claims entirely. This pattern, indicators that look strong in one period and add little in another, is the main finding of Stock and Watson's large survey of asset prices as leading indicators of output and inflation.<sup>[7](#refs)</sup>
-
-Two more cautions. First, all errors here are around 100,000 to 200,000 jobs, and the Bureau of Labor Statistics itself puts the 90% confidence interval for the monthly payroll change at about ±122,000 from sampling error alone.<sup>[6](#refs)</sup> No model can be much more accurate than the data it is scored on. Second, this is *pseudo* out-of-sample: payrolls are revised for months after release, and we used today's revised numbers. A fully real-time test uses archived data vintages (FRED's companion database, ALFRED, stores them).
-
-## Your turn
-
-Three short tasks, each the kind of request an analyst gets in a week. Fill in the blanks (`______`) and press **Run & check**.
-
-**1. "Claims explain almost everything about jobs."** Your manager has seen a chart of claims and payrolls in levels over 2010–2019 with a correlation of −0.97. Check the claim the way this chapter taught you, using consumer prices as a "placebo" series that should have no link to hiring.
-
-<div class="breakout">
-<CodeLab client:load id="ch07-ex-growth" exercise title="Exercise: levels or growth rates? Check your manager's correlation" r={exGrR} solution={exGrSolR} check={exGrCheckR}
-  py={exGrPy} solutionPy={exGrSolPy} checkPy={exGrCheckPy}
-  goal="Compare correlations with payroll jobs in levels and in monthly growth rates, for claims and for a placebo series (CPI), over 2010–2019."
-  hints={['The monthly % change of a series is 100 times the change in its log from one month to the next.', 'In R: `g <- function(x) 100 * diff(log(x))`; in Python: `return 100 * np.log(x).diff()`.', 'The second blank applies the same function to the price index: `g(cpi)`.']} />
-</div>
-
-**2. Impact and long run.** Fill in the two blanks (`______`).
+**Impact and long run.** Fit an ADL(1,1) of jobs added on claims growth and turn its coefficients into the impact and long-run multipliers (the formulas are in the math box of the ADL section). Fill in the two blanks (`______`).
 
 <div class="breakout">
 <CodeLab client:load id="ch07-ex1" exercise title="Exercise: impact and long-run multipliers of an ADL(1,1)" r={exR} solution={exSolR} check={exCheckR}
@@ -467,25 +494,8 @@ Three short tasks, each the kind of request an analyst gets in a week. Fill in t
   hints={['The impact multiplier is the coefficient on same-month claims growth: in R it is the third coefficient, `b[3]`; in Python `b["dcl_0"]`.', 'The long-run multiplier adds up **all** claims coefficients before dividing: `(b[3] + b[4]) / (1 - b[2])`.']} />
 </div>
 
-**3. "How many jobs over the next three months?"** Weekly claims have jumped about 10% and look set to stay there. Your manager wants one number: the total jobs shortfall over this month and the next two. Trace the dynamic multipliers of the same ADL(1,1) month by month, by hand.
+</BeyondBasics>
 
-<div class="breakout">
-<CodeLab client:load id="ch07-ex-cum" exercise title="Exercise: the three-month cumulative effect of a jump in claims" r={exCumR} solution={exCumSolR} check={exCumCheckR}
-  py={exCumPy} solutionPy={exCumSolPy} checkPy={exCumCheckPy} packages={['dynlm']} pyPackages={['statsmodels']}
-  goal="Compute the dynamic multipliers for months 0, 1 and 2 of an ADL(1,1) and add them up into the cumulative effect of a lasting 10% jump in claims."
-  hints={['Each month\'s response = the claims coefficient for that lag (if the model has one) + phi times the previous month\'s response.', 'Month 1: `b1 + phi * m0`. Month 2: the model has no lag-2 claims term, so it is just `phi * m1`.', 'Expect m0 ≈ −11.0, m1 ≈ −10.0 and m2 ≈ −7.5 (thousands of jobs per 1% rise in claims), so the 10% total is about −285 thousand.']} />
-</div>
-
-## Chapter checklist
-
-- **Transform before you correlate.** Trending series correlate in levels whatever their link (claims −0.97 and CPI +0.98 with jobs in 2010–2019). Use growth rates or changes, and name the transformation, units and sample in every result.
-- **Weekly to monthly:** average the weeks for growth rates (the sum jumps in five-week months); assign each week to the month it ends in, and say so.
-- Classify indicators by **timing**: leading, coincident, lagging. Find the lead with the **cross-correlation function**, confirm it by shifting the series, and say it in words ("claims growth leads job growth by about seven months, *r* = −0.73"). A correlation is not a slope and not a cause.
-- Write **ADL models** with `dynlm(y ~ L(y, 1:p) + L(x, 0:q))` and read each coefficient in units. Report the **impact**, **cumulative** and **long-run** effects, and say which one you mean and whether the shock lasts.
-- Time-series errors are autocorrelated: report **Newey–West** standard errors, add lags, or use **regression with ARIMA errors**. Newey–West changes the interval, never the estimate; a big gap from plain errors means missing dynamics.
-- Never regress one **random walk** on another in levels: difference both, or test for **cointegration** ([Chapter 9](/chapters/var/)).
-- Test for **structural breaks** with Chow (known date) or **sup-F** and `breakpoints()` (unknown date). A break moves your baseline and estimation window; a one-date spike is an outlier. Treat COVID with pulse dummies or exclusion, and say so.
-- Judge an indicator **out of sample**, against an AR benchmark, using only data **public on forecast day**. Know each predictor's release lag, and remember that today's data are revised: real-time tests are tougher than pseudo out-of-sample ones.
 
 <InstructorKit
   minutes={150}
@@ -493,66 +503,64 @@ Three short tasks, each the kind of request an analyst gets in a week. Fill in t
   sessions={[
     { title: 'Session 1 · Do claims lead jobs? Reading lead-lag relationships and dynamic multipliers', plan: [
       '5 min · Hook: weekly claims every Thursday vs the monthly jobs report; the leading/coincident/lagging table',
-      '10 min · Predict "which indicator lags?", then the lead-lag explorer: snap each indicator to its best lead',
-      '12 min · Levels vs growth: the CPI-levels Predict, then the levels-vs-growth explorer; the class fills in the 2010–2019 table',
-      '10 min · Cross-correlation lab in pairs, with the weekly-to-monthly Predict; each pair writes the result as one sentence with units',
-      '13 min · ADL: read the coefficient table in words; the one-month-blip Predict; the multiplier-sentence explorer at month 2 and month 12',
-      '10 min · Plain vs Newey–West output side by side: say the 95% interval in words; why the gap closes in the ADL',
-      '15 min · Activity 1: Indicator draft (below)'
+      '8 min · Predict "which indicator lags?", then the lead-lag explorer: snap each indicator to its best lead',
+      '10 min · Levels vs growth: the CPI-levels Predict, then the levels-vs-growth explorer; the class fills in the 2010–2019 table',
+      '10 min · Cross-correlation lab in pairs; each pair writes the result as one sentence with units',
+      '15 min · ADL: the impulse explorer, the coefficient table in words, the one-month-blip Predict, the multiplier-sentence explorer at month 2 and month 12; run the ADL lab',
+      '12 min · Activity 1: Indicator draft (below)',
+      '15 min · Buffer: questions, catch-up'
     ] },
-    { title: 'Session 2 · Can you trust it? Spurious links, breaks and an honest forecast test', plan: [
+    { title: 'Session 2 · Can you trust it? Spurious links and an honest forecast test', plan: [
       '5 min · Warm-up: two students read their session-1 sentences (one cross-correlation, one multiplier); the class fixes units and wording',
-      '12 min · Spurious regression: Predict, then the generator (everyone clicks New pair five times); the lab\'s 75% vs 6%',
-      '15 min · Break hunter and break lab; discuss what the 2000 break does to a baseline forecast (1.73% vs 0.70% a year)',
-      '5 min · COVID: the treatments table and the "say so" footnote',
-      '10 min · Forecast-day Predict and explorer: March 2020, then a calm month; first estimate vs revised',
-      '13 min · Out-of-sample scorecard lab; read it column by column; answer "do claims tell us where jobs are going?"',
-      '15 min · Activity 2: Real-time audit (below); assign the three exercises as homework'
+      '12 min · Spurious regression: Predict, then the generator (everyone clicks New pair five times); the two ways out',
+      '18 min · Leakage pitfall and the calm-decade Predict; run the out-of-sample scorecard lab and read it column by column, including the COVID rows',
+      '15 min · Activity 2: Analyst memo (below)',
+      '5 min · Start Exercise 1 (levels or growth rates?); finish both exercises as homework',
+      '5 min · Wrap-up: answer "do claims tell us where jobs are going?" in one sentence',
+      '15 min · Buffer: questions, catch-up'
     ] }
   ]}
   objectives={[
-    'Explain why correlations between trending series in levels are misleading, and transform to growth rates or changes before correlating; aggregate weekly data to monthly correctly.',
-    'Classify economic indicators as leading, coincident or lagging, estimate a lead time with the cross-correlation function, and state the result in words with units.',
+    'Classify economic indicators as leading, coincident or lagging, and explain why correlations between trending series in levels are misleading; transform to growth rates or changes before correlating.',
+    'Estimate a lead time with the cross-correlation function and state the result in words, with units, without reading it as a slope or a cause.',
     'Estimate an ADL model with `dynlm`, read each coefficient in units, and compute and distinguish impact, cumulative and long-run effects of lasting and temporary shocks.',
-    'Explain why OLS standard errors are overstated with autocorrelated errors; read plain and Newey–West output side by side, and apply regression with ARIMA errors.',
-    'Demonstrate spurious regression by simulation and explain why differencing (or cointegration) is needed.',
-    'Test for structural breaks at known and unknown dates (Chow, sup-F, Bai–Perron), say what a break means for a forecast, and choose a defensible treatment of the COVID months.',
-    'Build a forecasting data set that respects publication lags and revisions, and evaluate an indicator-based forecast out of sample against an AR benchmark without look-ahead bias.'
+    'Demonstrate spurious regression and explain why differencing (or cointegration) is needed.',
+    'Evaluate an indicator-based forecast out of sample against an AR benchmark, using only data public on forecast day.',
+    'Optional extensions (Newey–West in depth, structural breaks, real-time data): see Beyond the basics.'
   ]}
   discussion={[
     'Your manager says: "Claims and payrolls have a correlation of −0.97, so claims explain 94% of jobs." Write a two-sentence reply that a non-economist would accept.',
     'For a headline about a 10% jump in claims, would you report the impact (−112,000), the 3-month total (−323,000) or the long-run effect (−1.03 million)? What else must the headline say?',
     'Claims cut the nowcast error by 10% in the Great Recession but did nothing in the 2010s. Would you pay for a data feed with that track record? What if it only mattered in recessions, when forecasts matter most?',
-    'The first estimate of March 2020 payrolls was −701,000; today it is −1.40 million. Which number should you use to judge a forecast made in April 2020, and why?',
     'Your 2026 model drops March 2020 to December 2021. Your manager asks: "Isn\'t that hiding the most important data we have?" How do you answer?'
   ]}
   misconceptions={[
     '“Two series with a correlation of −0.97 in levels are closely linked.” Any two trending series correlate strongly in levels; CPI correlates +0.98 with jobs in the 2010s. Correlate growth rates or changes.',
     '“A high correlation at some lag proves the indicator leads, and r = −0.73 means jobs fall 0.73% per 1% of claims.” A correlation measures how closely shapes match, not the size of the response; the lead must be stable and survive an out-of-sample test.',
     '“The impact multiplier is the effect of claims on jobs.” It is only the same-month effect; persistent job gains make the cumulative effect several times larger, and a temporary blip has a much smaller lasting effect than a jump that lasts.',
-    '“Newey–West standard errors change the coefficient” or “fix spurious regression.” They change only the standard error; with two random walks the slope estimate itself is meaningless.',
-    '“A huge F-statistic at March 2020 means the economy changed regime.” A spike at one date is the signature of outliers; a regime change raises F over a range of dates.',
+    '“A significant t-statistic in levels means the two series are related.” Two independent random walks give |t| > 2 about three times in four; difference both first.',
     '“Using this month’s claims to forecast this month’s jobs is fine because claims come out weekly.” Only weeks already published on forecast day may be used; scoring a nowcast as a forecast leaks future information.'
   ]}
 >
 
-**Activity 1 (session 1): Indicator draft (15 minutes).** Teams of three each "draft" one indicator in the lead-lag explorer: claims, building permits, industrial production or the unemployment rate.
+**Activity 1 (session 1): Indicator draft (12 minutes).** Teams of three each "draft" one indicator in the lead-lag explorer: claims, building permits, industrial production or the unemployment rate.
 
-1. **Predict (3 min).** Each team writes down whether its indicator leads, lags or moves with job growth, and by how many months.
-2. **Measure (7 min).** In the explorer (1990–2019), record the best lead and its correlation. Then tick *Include 2020 to today* and record both again. Write the result as one sentence that names the transformation (12-month % change), the lead in months and the sample.
-3. **Report (5 min).** Each team gives a 30-second verdict: "Would you put this indicator in a payroll forecasting model?"
+1. **Predict (2 min).** Each team writes down whether its indicator leads, lags or moves with job growth, and by how many months.
+2. **Measure (6 min).** In the explorer (1990–2019), record the best lead and its correlation. Then tick *Include 2020 to today* and record both again. Write the result as one sentence that names the transformation (12-month % change), the lead in months and the sample.
+3. **Report (4 min).** Each team gives a 30-second verdict: "Would you put this indicator in a payroll forecasting model?"
 
 *Expected results (1990–2019):* claims lead by 7 months (r = −0.73); building permits lead by 9 months (r = 0.68); industrial production is strongest at a 4-month lead (r = 0.80) and is best called roughly coincident; the unemployment rate lags by 12 months (r = −0.69). With 2020 onward included, the claims lead collapses to 1 month (r = −0.82) and the correlation at 7 months falls to −0.43. A good sentence: "The 12-month % change in claims is most strongly correlated with job growth seven months later (r = −0.73, 1990–2019)."
 
-**Activity 2 (session 2): Real-time audit (15 minutes).** Pairs use the forecast-day explorer.
+**Activity 2 (session 2): Analyst memo (15 minutes).** Pairs answer the chapter's question for a manager, using the ADL and the scorecard.
 
-1. **March 2020 (5 min).** Set the target month to March 2020. Record how many weekly claims readings are public on (a) March 1, (b) March 20, (c) April 2, the day before the jobs report, and the average of what is known on each day.
-2. **A calm month (5 min).** Repeat for November 2019 on November 20 and on December 5.
-3. **Footnote (5 min).** Write the one-sentence data footnote for a model that uses same-month claims: what is a nowcast, when is it legitimate, and what data vintage was used?
+1. **The size (6 min).** Work Exercise 2 (the three-month cumulative effect) together and write the shortfall as one sentence with the shock, the horizon and the units.
+2. **The value (5 min).** From the scorecard, write one sentence on whether claims improve a one-month-ahead forecast, and when.
+3. **The footnote (4 min).** Write the footnote: same-month or last month's claims, and what was done with the COVID months.
 
-*Expected results:* March 2020: (a) 0 of 4 weeks known; (b) 2 of 4, average about 241,000 a week; (c) 4 of 4, average about 2.34 million, all public before the April 3 jobs report, so a nowcast made on April 2 is legitimate. November 2019: on November 20, 2 of 5 weeks are public (average about 221,000, close to the full-month 224,000: in calm months the look-ahead error is small, which is exactly why it goes unnoticed until a month like March 2020); on December 5, all 5 are (average about 224,000), one day before the December 6 jobs report. The first estimate of March 2020 payrolls (−701,000) is half the revised figure (−1.40 million), so the footnote should say whether the test used first estimates or today's revised data.
+*Expected results:* m0 ≈ −11.0, m1 ≈ −10.0, m2 ≈ −7.5 thousand jobs per 1% rise in claims, so a lasting 10% jump is followed by about 285,000 fewer jobs over three months (ADL(1,1); the ADL(2,3) in the chapter gives about 323,000). Lagged claims add nothing in the calm 2010s (RMSE 116.9 vs 116.7 thousand) and help only a little in the Great Recession (166.2 vs 163.4); a same-month nowcast cuts the Great Recession error by 10% (150.4) but is legitimate only once the month's claims are public. With the COVID months in training, adding claims doubles the 2022–2026 error (417.9 vs 198.3), so the footnote must say they were excluded.
 
 </InstructorKit>
+
 
 <div class="refs" id="refs">
 

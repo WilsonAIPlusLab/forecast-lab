@@ -19,6 +19,8 @@ async def shoot(browser, slug, width, height, tag):
     await page.wait_for_timeout(4000)
     d = os.path.join(OUT, slug); os.makedirs(d, exist_ok=True)
     await page.screenshot(path=os.path.join(d, f"{tag}-00-hero.png"))
+    await page.evaluate("document.querySelectorAll('details.beyond').forEach(d => d.open = true)")   # include explorables in the optional box
+    await page.wait_for_timeout(1000)
     figs = await page.query_selector_all("figure.exp")
     for i, f in enumerate(figs):
         await f.scroll_into_view_if_needed()

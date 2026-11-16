@@ -1,16 +1,16 @@
 ---
 layout: ../../layouts/Chapter.astro
 slug: var
-minutes: 130
+minutes: 90
 sessions:
   - title: Build and read a VAR, then follow one surprise through it
-  - title: Who moves first? Ordering, variance shares, forecasts and long-run links
+  - title: Who moves first? Ordering, bands and an honest forecast scorecard
     starts: the-identification-problem-who-moves-first
 build:
   - An impulse-response dashboard showing how a surprise rate hike moves unemployment and inflation, quarter by quarter, with bootstrap bands
   - A Granger-causality map of which macro series help forecast which, and how that map changed after 1985
-  - A cointegration test and error-correction model for the 10-year and 3-month Treasury yields
-skills: [VAR, VARselect, causality, irf, Cholesky ordering, fevd, predict, ca.jo, cajorls, ur.df]
+  - A rolling-origin scorecard of VAR forecasts against univariate AR(4) and naive benchmarks
+skills: [VAR, VARselect, causality, irf, Cholesky ordering, predict]
 ---
 import CodeLab from '../../components/CodeLab.svelte';
 import Callout from '../../components/Callout.astro';
@@ -19,10 +19,10 @@ import Predict from '../../components/Predict.svelte';
 import Term from '../../components/Term.astro';
 import InstructorKit from '../../components/InstructorKit.astro';
 import SessionBreak from '../../components/SessionBreak.astro';
+import BeyondBasics from '../../components/BeyondBasics.astro';
 import ShockRipple from '../../components/ch09/ShockRipple.svelte';
 import OrderingSwitch from '../../components/ch09/OrderingSwitch.svelte';
 import GrangerDetective from '../../components/ch09/GrangerDetective.svelte';
-import FevdExplorer from '../../components/ch09/FevdExplorer.svelte';
 import CointLeash from '../../components/ch09/CointLeash.svelte';
 import LagWobble from '../../components/ch09/LagWobble.svelte';
 import CoefBudget from '../../components/ch09/CoefBudget.svelte';
@@ -60,17 +60,17 @@ import exPriceCheckPy from '../../labs/ch09/ex_price_level_check.py?raw';
 
 <p class="lede">The Federal Reserve has just raised its policy rate by more than markets expected. Your CFO wants to know two things before Monday's planning meeting: <strong>will this push up unemployment, and when?</strong> And will inflation actually come down, or could it rise first? A single regression can't answer this, because rates, jobs and prices all push on each other. This chapter gives you the tool economists built for exactly that question.</p>
 
-In earlier chapters, one variable did the forecasting work for another: claims predicted payrolls, the yield curve predicted recessions. The arrow pointed one way. In the macroeconomy the arrows point **both ways**. The Fed raises rates *because* inflation is high, and inflation later falls *because* rates went up. Unemployment drives the Fed's decisions, and the Fed's decisions drive unemployment. Treat any one of these as "the" cause and you get the story wrong.
+In earlier chapters the arrow pointed one way: claims predicted payrolls, the yield curve predicted recessions. In the macroeconomy the arrows point **both ways**. The Fed raises rates *because* inflation is high, and inflation later falls *because* rates went up. Treat any one of these as "the" cause and you get the story wrong.
 
-A <Term def="Vector autoregression: a system of regressions in which every variable is explained by its own past and the past of every other variable in the system.">VAR</Term> (vector autoregression) handles the feedback by refusing to choose. Every variable gets its own equation, and every equation contains the past of every variable. Christopher Sims proposed this in 1980 as an alternative to large models whose restrictions he called "incredible".<sup>[1](#refs)</sup> Forty years later VARs are standard at central banks, and Sims shared the 2011 Nobel Prize for this work.<sup>[2](#refs)</sup>
+A <Term def="Vector autoregression: a system of regressions in which every variable is explained by its own past and the past of every other variable in the system.">VAR</Term> (vector autoregression) handles the feedback by refusing to choose. Every variable gets its own equation, and every equation contains the past of every variable. Christopher Sims proposed this in 1980;<sup>[1](#refs)</sup> VARs are now standard at central banks, and Sims shared the 2011 Nobel Prize for this work.<sup>[2](#refs)</sup>
 
 <KeyIdea>A VAR lets every variable talk to every other. Its forecasts come for free; its stories about cause and effect need extra assumptions, and you must say which ones you made.</KeyIdea>
 
-<SessionBreak n={1} title="Build and read a VAR, then follow one surprise through it" goals={['Fit a small VAR and say why its variables enter as **rates**, not price levels', 'Explain why we read a VAR through **joint tests and impulse responses**, not coefficient by coefficient', 'Say what **Granger causality** does and does not mean', 'Read an impulse response out loud: **shock size, units, timing and band**']} />
+<SessionBreak n={1} title="Build and read a VAR, then follow one surprise through it" goals={['Fit a small VAR, choose its lags, and say why its variables enter as **rates**, not price levels', 'Explain why we read a VAR through **joint tests and impulse responses**, not coefficient by coefficient', 'Say what **Granger causality** does and does not mean', 'Read an impulse response out loud: **shock size, units, timing and band**']} />
 
 ## Every variable on lags of every variable
 
-We will use the small system Stock and Watson used to introduce VARs in the *Journal of Economic Perspectives*: inflation, unemployment and the federal funds rate, quarterly, 1960 to 2000, four lags.<sup>[3](#refs)</sup> (They measured inflation with the GDP price index; we use the CPI, which is seasonally adjusted, as is unemployment.) A VAR(4) for these three series is just three regressions:
+We will use the small system Stock and Watson used to introduce VARs: inflation, unemployment and the federal funds rate, quarterly, 1960 to 2000, four lags.<sup>[3](#refs)</sup> (They measured inflation with the GDP price index; we use the CPI.) A VAR(4) for these three series is just three regressions:
 
 | Equation | Left-hand side | Right-hand side |
 |---|---|---|
@@ -81,12 +81,12 @@ We will use the small system Stock and Watson used to introduce VARs in the *Jou
 Because every equation has the same regressors, each can be estimated by ordinary least squares, one at a time. That is all `VAR()` in R's `vars` package does.<sup>[12](#refs)</sup> This form is called the <Term def="The VAR written with only lagged variables on the right-hand side. Its errors are forecast errors, which are usually correlated across equations.">reduced form</Term>: nothing on the right-hand side is dated "this quarter", so it is a pure forecasting model.
 
 <Callout type="empirical" title="Why inflation enters as a rate, but unemployment and the funds rate as levels">
-Look at how each series goes into the VAR, because it sets the units of every answer later.
+How each series enters sets the units of every answer later.
 
-- **Prices enter as inflation.** The CPI is an index that has climbed for decades (1982–84 = 100). A VAR needs series that keep coming back to a typical level, so we use its growth rate: `400 * diff(log(cpi))` is the quarterly percent change at an **annual rate** (log change × 4 quarters × 100). That is the same "% per year" unit as an interest rate, so a 5% funds rate and 5% inflation can be compared directly. ([Chapter 1](/chapters/time-series-data/#transformations-every-analyst-uses) covers logs and growth rates; [Chapter 7](/chapters/arima/#the-cure-differencing) explains why a log difference is a growth rate.)
-- **Unemployment and the funds rate enter as they are.** Both are already rates in percent, with no built-in upward trend. Differencing them would answer a different question ("how fast is unemployment *changing*?") and throw away where the level is.
-- **Every response is then in percentage points.** A response of +0.12 for unemployment means 4.00% becomes 4.12%. A response of +0.28 for inflation means the *annualized inflation rate* is 0.28 points higher for that quarter. It does **not** mean prices are 0.28% higher; you will convert to the price level later in the chapter.
-- **Monthly data were turned into quarterly averages.** `fred(..., to = "quarter")` averages the three months in each quarter (see [Chapter 1](/chapters/time-series-data/#changing-frequency-sum-average-or-last-value)). So "one lag" means one quarter, and four lags reach back one year.
+- **Prices enter as inflation.** The CPI is an index that has climbed for decades. A VAR needs series that keep coming back to a typical level, so we use its growth rate: `400 * diff(log(cpi))` is the quarterly percent change at an **annual rate** (log change × 4 quarters × 100). That is the same "% per year" unit as an interest rate. ([Chapter 1](/chapters/time-series-data/#transformations-every-analyst-uses) covers logs and growth rates; [Chapter 7](/chapters/arima/#the-cure-differencing) explains why a log difference is a growth rate.)
+- **Unemployment and the funds rate enter as they are.** Both are already rates in percent, with no built-in upward trend. Differencing them would answer a different question ("how fast is unemployment *changing*?").
+- **Every response is then in percentage points.** A response of +0.12 for unemployment means 4.00% becomes 4.12%. A response of +0.28 for inflation means the *annualized inflation rate* is 0.28 points higher for that quarter. It does **not** mean prices are 0.28% higher.
+- **Monthly data were turned into quarterly averages** (see [Chapter 1](/chapters/time-series-data/#changing-frequency-sum-average-or-last-value)). So "one lag" means one quarter, and four lags reach back one year.
 </Callout>
 
 <Callout type="math" title="The VAR(p) in matrix form">
@@ -96,12 +96,16 @@ $$
 y_t = c + A_1 y_{t-1} + A_2 y_{t-2} + \dots + A_p y_{t-p} + e_t, \qquad \text{Var}(e_t) = \Sigma,
 $$
 
-where each $A_j$ is a $3\times 3$ matrix of coefficients. Row $i$ of the system is equation $i$ in the table above. The errors $e_t$ are the one-step-ahead forecast errors. They are serially uncorrelated but usually correlated **with each other**: $\Sigma$ is not diagonal. That off-diagonal correlation is the root of the identification problem later in this chapter.
-
-The number of coefficients grows fast: $k$ variables and $p$ lags give $k(kp+1)$ coefficients. Three variables and four lags give 39; six variables and twelve lags would give 438. That is why practical VARs stay small or use Bayesian shrinkage.
+where each $A_j$ is a $3\times 3$ matrix of coefficients. Row $i$ of the system is equation $i$ in the table above. The errors $e_t$ are the one-step-ahead forecast errors. They are serially uncorrelated but usually correlated **with each other**: $\Sigma$ is not diagonal. That correlation is the root of the identification problem later in this chapter.
 </Callout>
 
 How many lags? The same information criteria you met for ARIMA apply. `VARselect()` fits VAR(1) through VAR(8) and reports which lag each criterion prefers. Here all four criteria pick 3. We use 4 to match Stock and Watson; the conclusions below barely change.
+
+<Callout type="empirical" title="Choosing the lag length sensibly">
+- **Start from the calendar.** With quarterly data, 4 lags cover a year; with monthly data you need 12 for the same year.
+- **Let the criteria narrow it down.** When they disagree, AIC usually wants more lags and BIC (`SC` in R) fewer. BIC is often the safer choice for VARs, because each extra lag adds one coefficient per variable to every equation.<sup>[14](#refs)</sup>
+- **Check the answer survives a neighbour.** If your conclusion holds at p − 1 and p + 1 (here it holds from 2 to 8 lags), say so. If it flips, report that honestly.
+</Callout>
 
 <div class="breakout">
 <CodeLab client:load id="ch09-build" title="Build a three-variable VAR of the U.S. economy" r={buildR} py={buildPy} packages={['vars']} pyPackages={['statsmodels']} goal="Assemble quarterly inflation, unemployment and the funds rate, choose the lag length, and fit a VAR(4)." />
@@ -113,45 +117,20 @@ Look at the last output: the residuals of the unemployment and funds-rate equati
 
 The lab also printed the first rows of the unemployment equation. Pick one coefficient: the second lag of the funds rate, **+0.058**. Read it the way [Chapter 4](/chapters/regression/#reading-a-regression-like-an-analyst) taught you: *holding the other 12 regressors fixed*, a funds rate 1 point higher two quarters ago goes with an unemployment rate 0.058 points higher this quarter.
 
-That sentence is grammatically fine and economically useless, for three reasons:
+That sentence is economically useless:
 
-1. **"Holding the others fixed" never happens.** The funds rate one, two and three quarters ago move almost together. You cannot raise one lag and freeze its neighbours.
-2. **The neighbours point the other way.** The coefficients on lags 1 to 4 are −0.013, +0.058, −0.023 and +0.005. A hike shows up in all four over the following year, so the four partly cancel.
-3. **The effect also travels through the other equations.** A hike changes inflation and the funds rate itself next quarter, and *those* feed back into unemployment through their own lags. One coefficient sees none of that.
+1. **"Holding the others fixed" never happens.** The funds rate one, two and three quarters ago move almost together.
+2. **The neighbours point the other way.** The coefficients on lags 1 to 4 are −0.013, +0.058, −0.023 and +0.005, so they partly cancel.
+3. **The effect also travels through the other equations.** A hike changes inflation and the funds rate itself next quarter, and *those* feed back into unemployment.
 
 <Predict client:load
   question="In the VAR(4), none of the four funds-rate lags in the unemployment equation is significant at 5% on its own (the closest is lag 2, p = 0.065). What can you conclude?"
   options={['The funds rate has no effect on future unemployment', 'Nothing yet: the four lags may matter together, so test them jointly and look at the impulse response', 'The VAR has too few lags']}
   answer={1}
-  explain="Tested together, the four lags are significant (F-test p = 0.023). Individual coefficients on correlated lags have large standard errors, which is why VAR users read **joint tests** (Granger causality), **impulse responses** and **variance decompositions** instead of the coefficient table. Drag the lag length below and watch."
+  explain="Tested together, the four lags are significant (F-test p = 0.023). Individual coefficients on correlated lags have large standard errors, which is why VAR users read **joint tests** (Granger causality) and **impulse responses** instead of the coefficient table."
 />
 
-<div class="breakout">
-<LagWobble client:load />
-</div>
-
-As you drag from 2 to 8 lags, the individual coefficients keep changing size and sign, and most are insignificant. Meanwhile the impulse response tells the same story every time: unemployment rises for six to eight quarters and peaks between +0.10 and +0.20 points. The *sum* of the funds-rate coefficients barely moves either (+0.024 to +0.031). Only the VAR(1) looks different: with one lag the response cannot turn around, so it keeps climbing for four years. AIC and BIC both prefer 3 lags to 1.
-
-<KeyIdea>Read a VAR through what its coefficients do *together*: joint (Granger) tests, impulse responses and variance decompositions. A single VAR coefficient is almost never the answer to a business question.</KeyIdea>
-
-<Callout type="empirical" title="Choosing the lag length sensibly">
-- **Start from the calendar.** With quarterly data, 4 lags cover a year; with monthly data you need 12 for the same year.
-- **Let the criteria narrow it down.** `VARselect()` reports AIC, HQ, BIC (`SC`) and FPE. When they disagree, AIC usually wants more lags and BIC fewer; Hyndman and Athanasopoulos note that BIC is often the safer choice for VARs, because each extra lag adds one coefficient per variable to every equation (9 more in our three-variable VAR).<sup>[14](#refs)</sup> Here all four pick 3.
-- **Check the answer survives a neighbour.** If your conclusion holds at p − 1 and p + 1 (it does here, from 2 to 8), say so. If it flips, report that honestly.
-- **Check stability.** `roots(m)` prints one number per "echo" in the system; each must be below 1 for a surprise to fade away. Ours peak at 0.95: shocks fade, slowly. A root at or above 1 means responses never die out, a sign that a trending series went in without being turned into a rate or difference.
-</Callout>
-
-### Keep the system small
-
-Every variable you add brings a new lag of itself into *every* equation. The count grows with the square of the number of variables, while the data stay the same.
-
-<div class="breakout">
-<CoefBudget client:load />
-</div>
-
-<Callout type="empirical" title="Quarterly or monthly? More data points is not more information">
-Switching from quarterly to monthly data triples the observations, but to reach back one year you need 12 lags instead of 4, so each equation's coefficients triple too. The three-variable VAR has about 12 observations per coefficient at quarterly frequency (13 coefficients, 160 quarters) and about 13 at monthly frequency (37 coefficients, 480 months). Choose the frequency for the **question** (monthly if timing within the quarter matters, as when you argue that the Fed cannot react to this month's data), not to "get more data". And before you add a fifth or sixth variable, ask whether it helps forecast the others: that is exactly what a Granger test, next, measures.
-</Callout>
+<KeyIdea>Read a VAR through what its coefficients do *together*: joint (Granger) tests and impulse responses. A single VAR coefficient is almost never the answer to a business question.</KeyIdea>
 
 ## Granger causality: does X help forecast Y?
 
@@ -170,19 +149,13 @@ Below, every arrow is one such test in a two-variable VAR, for four series: infl
 <GrangerDetective client:load />
 </div>
 
-With 4 lags, 9 of the 12 links are significant at the 5% level in 1960–2000, but only 5 of 12 in 1985–2019. The term spread stops predicting unemployment (p = 0.004 before, 0.12 after), and unemployment stops predicting inflation. One link that **strengthens** is funds rate → spread. A plausible reason: the 3-month bill rate in the spread closely tracks the funds rate, and since the 1980s the Fed has moved its rate in more gradual, predictable steps, so today's funds rate says more about where short rates, and hence the spread, are heading.
+With 4 lags, 9 of the 12 links are significant at the 5% level in 1960–2000, but only 5 of 12 in 1985–2019. The term spread stops predicting unemployment (p = 0.004 before, 0.12 after), and unemployment stops predicting inflation. Predictive links are not laws of nature; they can fade.
+
+Inside the three-variable VAR, `causality(m, cause = "ffr")` tests whether the funds rate helps predict the *other two variables jointly*: it does (F = 2.53, p = 0.011). You will run a Granger test yourself in Task 1 at the end of the chapter.
 
 <Callout type="pitfall" title="Granger causality is not causality">
 "Granger-causes" means "helps predict". Nothing more. Weather forecasts Granger-cause rain: yesterday's forecast helps predict today's rain better than past rain alone. But the forecast does not cause the rain. In macroeconomics the trap is subtler: the funds rate may Granger-cause unemployment simply because the Fed reacts to information about the coming slowdown that the VAR does not contain. Use Granger tests to choose predictors, never to claim a policy works.
 </Callout>
-
-In R, `causality(m, cause = "ffr")` tests whether the funds rate helps predict the *other variables jointly* inside the three-variable VAR.
-
-<div class="breakout">
-<CodeLab client:load id="ch09-granger" title="Granger tests with causality()" r={grangerR} py={grangerPy} packages={['vars']} pyPackages={['statsmodels']} goal="Test whether each variable helps forecast the others, then see a famous predictive relationship fade." />
-</div>
-
-The funds rate helps predict inflation and unemployment (F = 2.53, p = 0.011), and so does each of the other two variables. Note that the pairwise tests in the graph and the system test in the lab answer slightly different questions: the system test controls for the third variable.
 
 ### Reading a Granger test: what it does and does not tell you
 
@@ -194,15 +167,9 @@ The funds rate helps predict inflation and unemployment (F = 2.53, p = 0.011), a
 
 And a large p-value does not prove X is useless: with few observations and many lags, the test has little power to see a real but small link.
 
-<Callout type="empirical" title="Make Granger tests behave">
-- **Test on rates, not trending levels.** Two series that both trend (say, the CPI level and nominal GDP) can appear to "predict" each other just because both go up. Use growth rates or other non-trending versions, as this chapter does.
-- **Fix the lag length first, then test.** Different lags can give different verdicts: in the graph above, switch between 2, 4 and 8 lags. Pick the lags with `VARselect()` *before* you look at p-values, not the lag that gives the answer you hoped for.
-- **Re-test on recent data** before you rely on an old relationship, and report both samples if they disagree.
-</Callout>
-
 ## Impulse responses: follow one surprise through time
 
-Granger tests say *whether* there is a link. An <Term def="The path a variable follows, period by period, after a one-time surprise (shock) to one equation of the VAR, holding all other shocks at zero.">impulse response function</Term> (IRF) says *how big* and *when*. Feed the VAR a one-time surprise in one equation, set all other future surprises to zero, and iterate the system forward. Because every variable depends on every other's past, the surprise ripples through the whole system.
+Granger tests say *whether* there is a link. An <Term def="The path a variable follows, period by period, after a one-time surprise (shock) to one equation of the VAR, holding all other shocks at zero.">impulse response function</Term> (IRF) says *how big* and *when*. Feed the VAR a one-time surprise in one equation, set all other future surprises to zero, and iterate the system forward.
 
 <Predict client:load
   question="The VAR is hit by a surprise **increase** in the funds rate. What does inflation do in the **first two quarters**?"
@@ -215,25 +182,23 @@ Granger tests say *whether* there is a link. An <Term def="The path a variable f
 <ShockRipple client:load />
 </div>
 
-Read the funds-rate shock carefully, because this is the chapter's question. A surprise hike of 0.76 percentage points (one standard deviation of the funds-rate residual) is followed by:
+This is the chapter's question. A surprise hike of 0.76 percentage points (one standard deviation of the funds-rate residual) is followed by:
 
-- **Unemployment:** almost nothing for a year, then a slow rise to **+0.12 percentage points after eight quarters** (two years). The 90% band excludes zero from quarter 4 to quarter 12. Monetary policy works with long lags.
+- **Unemployment:** almost nothing for a year, then a slow rise to **+0.12 percentage points after eight quarters** (two years). The 90% band excludes zero from quarter 4 to quarter 12.
 - **Inflation:** up 0.28 points in the next quarter, then, from about the sixth quarter on, roughly 0.1 point *below* baseline. That later decline is not statistically distinguishable from zero in this small VAR.
 - **The funds rate itself:** the hike fades by half within two quarters and has almost disappeared after three years (0.04 points left).
 
-Stock and Watson find the same slow build with these three variables, using a structural VAR in which the Fed sets its rate in response to recent inflation and unemployment (a backward-looking "Taylor rule"): after a one-point hike, inflation eventually falls by about 0.3 points and unemployment rises by about 0.2 points, with most of the action in the third year.<sup>[3](#refs)</sup>
-
 <Callout type="pitfall" title="The price puzzle: why a hike seems to raise inflation">
-In the early 1990s Christopher Sims noticed that small VARs often show prices *rising* after a monetary tightening.<sup>[5](#refs)</sup> His explanation: the Fed is forward-looking. It raises rates when it sees inflation coming, using information (commodity prices, surveys, staff forecasts) that a three-variable VAR does not contain. The VAR cannot tell a "hike because inflation is coming" apart from a "surprise hike", so some of the inflation that was coming anyway gets blamed on the hike. The standard remedy is to add commodity prices to the VAR. Try it: add `400 * diff(log(q("PPIACO")))` as a fourth variable before `ffr`. In our sample this shrinks the puzzle only a little (0.28 to 0.25 points), a reminder that a small VAR's "policy shock" is not a clean experiment.
+Christopher Sims noticed that small VARs often show prices *rising* after a monetary tightening.<sup>[5](#refs)</sup> His explanation: the Fed raises rates when it sees inflation coming, using information (commodity prices, surveys, staff forecasts) that a three-variable VAR does not contain. The VAR cannot tell a "hike because inflation is coming" apart from a "surprise hike", so some of the inflation that was coming anyway gets blamed on the hike. A small VAR's "policy shock" is not a clean experiment.
 </Callout>
 
 ### Reading an impulse response out loud
 
-An impulse-response chart is only useful once you can say it in one sentence. A good sentence answers five questions:
+An impulse-response chart is only useful once you can say it in one sentence. Answer five questions:
 
 1. **How big was the surprise, in the shock's own units?** `irf()` uses a one-standard-deviation shock: 0.76 percentage points for the funds rate. Nobody at the Fed thinks in 0.76-point moves, so rescale. Responses are *linear*: divide by 0.76 to get "per 1-point hike", multiply by 0.25 for a quarter-point hike.
 2. **In what units is the response?** Percentage points of unemployment; percentage points of *annualized* inflation; percentage points of the funds rate. These units come straight from how each variable entered the VAR.
-3. **Compared with what?** Every number is a gap from the path the economy would have taken **without** the surprise. "+0.12" does not mean unemployment rises to 0.12%, or rises by 0.12 *in total*; it means 0.12 points above where it would otherwise have been, at that quarter.
+3. **Compared with what?** Every number is a gap from the path the economy would have taken **without** the surprise. "+0.12" does not mean unemployment rises to 0.12%, or by 0.12 *in total*; it means 0.12 points above where it would otherwise have been, at that quarter.
 4. **When?** Count quarters from the shock (quarter 0). Say when the response peaks and how long it lasts.
 5. **How sure?** Read the band at that quarter, in words.
 
@@ -255,12 +220,10 @@ A 90% band is the range of responses that fit the data reasonably well. Say it l
 
 - **If the band straddles zero at a quarter, say "we cannot rule out no effect at that horizon"**, not "there is no effect". The inflation decline after year one is in this category.
 - **Don't read the wiggles.** After a one-s.d. hike the inflation response zig-zags (+0.28, +0.18, −0.13, −0.01 …) inside a band about 0.4 points wide. Report the overall shape, not each turn.
-- **Bootstrap bands move a little from run to run.** With `runs = 100` the edges shift by a few hundredths each time you run the lab; use more runs (500 or more) for anything you publish.
+- **Bootstrap bands move a little from run to run.** Use 500 or more runs for anything you publish.
 </Callout>
 
-<Callout type="empirical" title="A growth-rate response is not a level response">
-Because inflation entered the VAR as a growth rate, its impulse response is about the *rate* at which prices rise. To talk about the price **level**, add the inflation responses up and divide by 4 (each one is an annualized quarterly rate). Choose "Price level" in the reader: per 1-point hike, the CPI is about **0.15% higher** after two quarters and about **0.11% lower** after three years, and the band includes zero from the third quarter on. The same logic applies to any variable entered as a growth rate, such as GDP growth: the cumulated response, divided by 4 for annualized quarterly rates, is the effect on the level.
-</Callout>
+One more unit trap: because inflation entered as a rate, its response is about how fast prices rise, not about the price **level**. For the level, add up the inflation responses and divide by 4; the "Price level" option in the reader does this for you (more in Beyond the basics below).
 
 ### You are the analyst: answer the CFO
 
@@ -272,13 +235,13 @@ Your CFO's question from the top of the chapter was "will this push up unemploym
   hints={["The shock size is already stored in `size`: the funds rate's own response in the shock quarter, about 0.76 pp.", 'Quarter 0 is the first row. In R, h = 8 is row 9 and you subtract 1 from `which.max()`; in Python the row labels already are quarters, so use `.loc[8]` and `.idxmax()`.']} />
 </div>
 
-<SessionBreak n={2} title="Who moves first? Ordering, variance shares, forecasts and long-run links" goals={['Explain in plain words why the **ordering** of a VAR changes its impulse responses', 'Read **variance-decomposition shares** by horizon', 'Score VAR forecasts honestly against simple benchmarks', 'Recognize **cointegrated** series and read error-correction speeds']} />
+<SessionBreak n={2} title="Who moves first? Ordering, bands and an honest forecast scorecard" goals={['Explain in plain words why the **ordering** of a VAR changes its impulse responses', 'Defend an ordering and check whether the answer survives another one', 'Score VAR forecasts honestly against simple benchmarks', 'Run your own **Granger test** on the term spread']} />
 
 ## The identification problem: who moves first?
 
-There is a catch hidden in the word "surprise". The reduced-form errors are correlated: −0.43 between unemployment and the funds rate. When the funds-rate equation surprises, unemployment typically surprises too. So what is a "pure" funds-rate shock? To trace one, we have to split the correlated forecast errors into uncorrelated **structural shocks**, and the data alone cannot tell us how. This is the <Term def="The problem that many different structural models (different assumptions about which variables affect which within the same period) imply exactly the same reduced-form VAR, so the data cannot choose among them.">identification problem</Term>.
+The word "surprise" hides a catch. The reduced-form errors are correlated: −0.43 between unemployment and the funds rate. When the funds-rate equation surprises, unemployment typically surprises too. So what is a "pure" funds-rate shock? To trace one, we have to split the correlated forecast errors into uncorrelated **structural shocks**, and the data alone cannot tell us how. This is the <Term def="The problem that many different structural models (different assumptions about which variables affect which within the same period) imply exactly the same reduced-form VAR, so the data cannot choose among them.">identification problem</Term>.
 
-**Why ordering matters, in plain words.** Picture a quarter in which unemployment came in higher than forecast *and* the funds rate came in lower. Two stories fit. Story A: the economy weakened, and the Fed cut rates in response. Story B: the Fed cut rates by surprise, and (somehow) unemployment rose in the same quarter. The VAR only sees that the two surprises happened together; it cannot tell who moved first. An ordering is your answer to that question: it hands the shared part of the surprise to whichever variable you put **earlier**. If the surprises were uncorrelated there would be nothing to hand out, and the ordering would not matter. Ours are correlated (−0.13, +0.25 and −0.43 across the three pairs), so it does.
+**Why ordering matters, in plain words.** Picture a quarter in which unemployment came in higher than forecast *and* the funds rate came in lower. Two stories fit. Story A: the economy weakened, and the Fed cut rates in response. Story B: the Fed cut rates by surprise, and (somehow) unemployment rose in the same quarter. The VAR only sees that the two surprises happened together; it cannot tell who moved first. An ordering is your answer to that question: it hands the shared part of the surprise to whichever variable you put **earlier**. If the surprises were uncorrelated, the ordering would not matter. Ours are correlated, so it does.
 
 The most common solution is a recursive ordering, known as a <Term def="Factoring the error covariance matrix as Σ = PP′ with P lower-triangular. Applied to a VAR, it assumes the first variable reacts to no other shock within the period, the second reacts only to the first, and so on.">Cholesky decomposition</Term>. You list the variables in order. The first may react within the quarter to its own shock only; the second to the first and its own; the last to everything. Our baseline puts the Fed **last**: the Fed sees this quarter's inflation and unemployment before setting the rate, while prices and hiring respond to the rate only with a lag. That is an economic assumption, not a statistical result. Change it and see what happens.
 
@@ -288,12 +251,12 @@ The most common solution is a recursive ordering, known as a <Term def="Factorin
 
 Two things should surprise you:
 
-1. **Put the Fed first and the story flips.** A "hike" now raises inflation by 0.33 points on impact and 0.70 points the next quarter, and *lowers* unemployment for a year. Nothing in the data changed. The Fed-first ordering simply credits the funds rate with the same-quarter co-movement that the Fed-last ordering credits to inflation and unemployment.
-2. **Only the Fed's position matters for the Fed's shock.** With the Fed last (or first), swapping the other two variables leaves the funds-rate responses *exactly* unchanged. In general, the responses to a shock depend only on which variables come before it, not on their order among themselves.
+1. **Put the Fed first and the story flips.** A "hike" now raises inflation by 0.33 points on impact and 0.70 points the next quarter, and *lowers* unemployment for a year. Nothing in the data changed. The Fed-first ordering credits the funds rate with the same-quarter co-movement that the Fed-last ordering credits to inflation and unemployment.
+2. **Only the Fed's position matters for the Fed's shock.** With the Fed last (or first), swapping the other two variables leaves the funds-rate responses *exactly* unchanged.
 
 <Callout type="empirical" title="Defending an ordering in practice">
 - **Order by speed.** Put slow-moving variables (prices, employment, output) first and fast-moving ones (policy rates, then financial prices such as bond yields or stock indexes) last. A variable placed later is allowed to react to everything earlier *within the period*.
-- **Frequency changes how believable an ordering is.** "The Fed cannot affect prices and jobs within the period" is more plausible within a month than within a quarter, which is one reason many monetary-policy VARs use monthly data.
+- **Frequency changes how believable an ordering is.** "The Fed cannot affect prices and jobs within the period" is more plausible within a month than within a quarter.
 - **Report the alternative.** If the headline result (unemployment rises after a hike) survives the other orderings, say so; if only the short-run sign depends on the ordering (as here), say that too. Never shop among orderings for the answer you like.
 </Callout>
 
@@ -303,43 +266,12 @@ Two things should surprise you:
 Write the reduced-form errors as $e_t = B\,\varepsilon_t$, where $\varepsilon_t$ are uncorrelated structural shocks with unit variance. Then $\Sigma = BB'$. A symmetric $3\times3$ matrix $\Sigma$ has 6 distinct elements, but $B$ has 9 unknowns, so we need $9 - 6 = 3$ extra restrictions. The Cholesky choice sets $B$ lower-triangular: the three zeros above the diagonal are the three restrictions (the shaded zeros in the impact table above). These are **short-run restrictions**: they say what cannot happen *within the period*.
 
 The response of $y_{t+h}$ to $\varepsilon_t$ is $\Psi_h B$, where $\Psi_h$ are the moving-average coefficients of the VAR ($\Psi_0 = I$, $\Psi_h = \sum_{j=1}^{\min(h,p)} A_j \Psi_{h-j}$).
-
-An alternative is **long-run restrictions** (Blanchard and Quah, 1989): for example, assume demand shocks have no permanent effect on output, and let the data determine the short run.<sup>[6](#refs)</sup> Structural VARs with such restrictions are estimated in R with `vars::SVAR()` and `vars::BQ()`.
 </Callout>
 
 How sure are we about any single response? `irf(..., boot = TRUE)` answers with a <Term def="A resampling method: rebuild many artificial data sets from the fitted VAR and its resampled residuals, re-estimate the VAR on each, and use the spread of the resulting impulse responses as a confidence band.">bootstrap</Term>. It resamples the VAR's residuals to create artificial histories, re-estimates the VAR on each, and reports the middle 90% of the resulting responses.
 
 <div class="breakout">
 <CodeLab client:load id="ch09-irf" title="Impulse responses with bootstrap bands, two orderings" r={irfR} py={irfPy} packages={['vars']} pyPackages={['statsmodels']} goal="Trace the response to a surprise rate hike with 90% bands, then repeat with a different Cholesky ordering." />
-</div>
-
-## Variance decomposition: which shocks matter most?
-
-Impulse responses follow one shock at a time. A <Term def="Forecast error variance decomposition: the share of the variance of the h-step-ahead forecast error of each variable that is due to each structural shock.">forecast error variance decomposition</Term> (FEVD) adds them up. It asks: when the VAR's forecast of unemployment *h* quarters ahead turns out wrong, how much of the miss is due to each shock?
-
-Read an FEVD share like a pie chart of *surprises*: "eight quarters ahead, 8% of the uncertainty in our unemployment forecast comes from funds-rate surprises". Each row adds to 100%. A share says nothing about the *sign* of an effect, and nothing about the Fed's predictable reactions, only about its surprises.
-
-<Predict client:load
-  question="With the Fed ordered **last**, what share of unemployment's **one-quarter-ahead** forecast error comes from funds-rate shocks?"
-  options={['Exactly 0%', 'About 7%, the same as five years out', 'About a third, since there are three shocks']}
-  answer={0}
-  explain="Exactly zero, by assumption. Ordering the Fed last says unemployment cannot react to a funds-rate shock within the quarter, so one quarter ahead none of unemployment's forecast miss can come from it. Shares at short horizons often just repeat the ordering; the informative numbers are at longer horizons."
-/>
-
-Three lessons stand out:
-
-- **Horizon changes everything.** One quarter ahead, 98% of unemployment's forecast error is its own shock. Five years (20 quarters) ahead, inflation shocks account for 55%, unemployment shocks for 38% and funds-rate shocks for 7%.
-- **Policy surprises are a small source of fluctuations.** Funds-rate shocks never explain more than about 3% of inflation's forecast error, and at most 11% of unemployment's. This is a common VAR finding, and it does not mean policy is unimportant: most of what the Fed does is a *systematic* response to the economy, which the VAR attributes to the shocks the Fed is responding to.
-- **The FEVD inherits the ordering.** Switch to "Fed first": the funds-rate shock's share of unemployment's 20-quarter forecast error jumps from 7% to 27%.
-
-<Callout type="empirical" title="Three mistakes people make with FEVD shares">
-- **"Funds-rate shocks explain only 7%, so the Fed doesn't matter."** No: the FEVD counts *surprises*. The Fed's systematic reaction to inflation and unemployment is filed under those shocks.
-- **Reading horizon-1 shares as findings.** At short horizons the shares mostly restate the ordering (the 0% above). Look at 8 and 20 quarters.
-- **Quoting a share without the horizon and the ordering.** "Inflation shocks explain 55% of unemployment's forecast error variance *five years ahead, with the Fed ordered last*" is a result; "55%" alone is not.
-</Callout>
-
-<div class="breakout">
-<CodeLab client:load id="ch09-fevd" title="Forecast error variance decomposition" r={fevdR} py={fevdPy} packages={['vars']} pyPackages={['statsmodels']} goal="Decompose each variable's forecast errors by shock and horizon." />
 </div>
 
 ## Forecasting with a VAR: the honest scorecard
@@ -363,19 +295,128 @@ The VAR is also a forecasting model, and forecasts need no identification at all
 | AR(4), one per variable | **1.15** | **0.52** | 1.26 |
 | Naive (no change) | 1.16 | 0.55 | 1.27 |
 
-Be honest with your audience about results like this. Stock and Watson, scoring a related VAR over 1985–2000 (different inflation measure, different horizons, inflation averaged over the forecast period), found that their VAR did no worse than, or improved on, the univariate AR.<sup>[3](#refs)</sup> Over our shorter window and setup, it helps only for the funds rate. Nor did this VAR see the March–November 2001 recession coming: the fan in the lab above shows unemployment ending 2002 near the top of its 95% band.<sup>[13](#refs)</sup> Small VARs estimate many coefficients from limited data, and the extra estimation noise can cancel the extra information. Professional VAR forecasting systems cope by using more variables plus Bayesian shrinkage toward simple models.
+Be honest with your audience about results like this. Over this window the VAR helps only for the funds rate. Nor did it see the March–November 2001 recession coming: the fan in the lab above shows unemployment ending 2002 near the top of its 95% band.<sup>[13](#refs)</sup> Small VARs estimate many coefficients from limited data, and the extra estimation noise can cancel the extra information.
 
 <Callout type="business" title="Where VARs earn their keep">
 In practice VARs are prized less for raw accuracy than for **coherent scenarios**. A bank's stress test needs a path for rates, unemployment and inflation that hangs together. A VAR delivers that: condition on a rate path, and it produces consistent paths for the rest. Central banks also use VAR impulse responses as the yardstick that bigger models must reproduce.
 </Callout>
 
 <Callout type="intuition" title="Where this fits: from ADL to VAR">
-Each VAR equation is an autoregressive distributed lag (ADL) model, the dynamic regression of Chapter 8. The difference is one assumption. In Chapter 8, claims could move jobs but jobs could not move claims: the input was treated as *external*. A VAR drops that assumption and lets every variable respond to every other one.
+Each VAR equation is an autoregressive distributed lag (ADL) model, the dynamic regression of Chapter 8, with one difference: no input is treated as *external*. Every variable may respond to every other one.
 </Callout>
 
-## Cointegration: a drunk and her dog
+## Your turn
 
-So far every series has been stationary or close to it. Many important economic series are not. Interest rates at different maturities, consumption and income, prices of the same good in two cities: each pair **wanders** (it behaves like a random walk), yet the two never drift far apart. Michael Murray's classic illustration: a drunk wanders randomly out of a bar, and so does her dog. Each path is unpredictable, but whenever they drift apart she calls, he barks, and they move back toward each other.<sup>[7](#refs)</sup>
+**A treasury analyst asks:** does the slope of the yield curve help forecast unemployment? Fill in the two blanks and press **Run & check**.
+
+<div class="breakout">
+<CodeLab client:load id="ch09-ex1" exercise title="Exercise: does the term spread Granger-cause unemployment?" r={exR} solution={exSolR} check={exCheckR} py={exPy} solutionPy={exSolPy} checkPy={exCheckPy} packages={['vars']} pyPackages={['statsmodels']}
+  goal="Let BIC choose the lag length for a two-variable VAR of the term spread and unemployment (1960–2000), then test whether the spread Granger-causes unemployment."
+  hints={['In R, the BIC column of `VARselect()$selection` is named `"SC(n)"` (Schwarz criterion). In Python, the key is `"bic"`.', 'The second blank is the name of the variable doing the predicting: the `"spread"` column.']} />
+</div>
+
+Then say what your p-value does and does not tell the analyst, using the Granger table above.
+
+## Chapter checklist
+
+- A **VAR(p)** regresses every variable on *p* lags of every variable. Choose *p* with `VARselect()` (start from the calendar: 4 quarterly or 12 monthly lags per year) and fit with `VAR()`.
+- Enter trending series as **rates** (inflation = `400 * diff(log(cpi))`, annualized %) and series that are already rates (unemployment, interest rates) as they are. That choice sets the **units** of every impulse response.
+- Don't read VAR coefficients one by one: they flip sign across lags and are rarely significant alone. Read **joint tests and impulse responses**.
+- **Granger causality** (`causality()`) means "helps forecast", not "causes", and says nothing about size or sign.
+- **Read an impulse response out loud:** the shock's size and units (rescale the one-s.d. shock to 1 point or 25 basis points), the response's units, "compared with no surprise", the timing of the peak, and the band in words ("we cannot rule out no effect" when it straddles zero).
+- Impulse responses to "pure" shocks depend on the **Cholesky ordering**: the shared part of correlated surprises goes to whichever variable comes first. State the ordering, justify it by speed of reaction, and report the alternative. Beware the **price puzzle**.
+- A VAR's forecasts must still beat **univariate benchmarks**; often they don't.
+
+<BeyondBasics topics={['Lag length: coefficients wobble, responses hold', 'Checking stability', 'Keep the system small', 'More on Granger tests', 'From inflation to the price level', 'Commodity prices and the price puzzle', 'Long-run restrictions', 'Variance decomposition', 'Cointegration', 'Extra practice']}>
+
+#### Lag length: coefficients wobble, responses hold
+
+Drag the lag length from 2 to 8 and watch the funds-rate coefficients in the unemployment equation.
+
+<div class="breakout">
+<LagWobble client:load />
+</div>
+
+The individual coefficients keep changing size and sign, and most are insignificant. Meanwhile the impulse response tells the same story every time: unemployment rises for six to eight quarters and peaks between +0.10 and +0.20 points. The *sum* of the funds-rate coefficients barely moves either (+0.024 to +0.031). Only the VAR(1) looks different: with one lag the response cannot turn around, so it keeps climbing for four years. AIC and BIC both prefer 3 lags to 1.
+
+#### Checking stability
+
+`roots(m)` prints one number per "echo" in the system; each must be below 1 for a surprise to fade away. Ours peak at 0.95: shocks fade, slowly. A root at or above 1 means responses never die out, a sign that a trending series went in without being turned into a rate or difference.
+
+#### Keep the system small
+
+Every variable you add brings a new lag of itself into *every* equation. With $k$ variables and $p$ lags there are $k(kp+1)$ coefficients: three variables and four lags give 39; six variables and twelve lags would give 438. The count grows with the square of the number of variables, while the data stay the same. That is why practical VARs stay small or use Bayesian shrinkage.
+
+<div class="breakout">
+<CoefBudget client:load />
+</div>
+
+<Callout type="empirical" title="Quarterly or monthly? More data points is not more information">
+Switching from quarterly to monthly data triples the observations, but to reach back one year you need 12 lags instead of 4, so each equation's coefficients triple too. The three-variable VAR has about 12 observations per coefficient at quarterly frequency (13 coefficients, 160 quarters) and about 13 at monthly frequency (37 coefficients, 480 months). Choose the frequency for the **question** (monthly if timing within the quarter matters, as when you argue that the Fed cannot react to this month's data), not to "get more data". And before you add a fifth or sixth variable, ask whether it helps forecast the others: that is exactly what a Granger test measures.
+</Callout>
+
+#### More on Granger tests
+
+One link in the Granger graph **strengthens** after 1985: funds rate → spread. A plausible reason: the 3-month bill rate in the spread closely tracks the funds rate, and since the 1980s the Fed has moved its rate in more gradual, predictable steps, so today's funds rate says more about where short rates, and hence the spread, are heading.
+
+<Callout type="empirical" title="Make Granger tests behave">
+- **Test on rates, not trending levels.** Two series that both trend (say, the CPI level and nominal GDP) can appear to "predict" each other just because both go up. Use growth rates or other non-trending versions, as this chapter does.
+- **Fix the lag length first, then test.** Different lags can give different verdicts: in the Granger graph, switch between 2, 4 and 8 lags. Pick the lags with `VARselect()` *before* you look at p-values, not the lag that gives the answer you hoped for.
+- **Re-test on recent data** before you rely on an old relationship, and report both samples if they disagree.
+</Callout>
+
+The lab below runs `causality()` for every variable in the three-variable VAR, then compares the spread → unemployment link across two samples. Note that the pairwise tests in the graph and the system test in the lab answer slightly different questions: the system test controls for the third variable.
+
+<div class="breakout">
+<CodeLab client:load id="ch09-granger" title="Granger tests with causality()" r={grangerR} py={grangerPy} packages={['vars']} pyPackages={['statsmodels']} goal="Test whether each variable helps forecast the others, then see a famous predictive relationship fade." />
+</div>
+
+#### From inflation to the price level
+
+<Callout type="empirical" title="A growth-rate response is not a level response">
+Because inflation entered the VAR as a growth rate, its impulse response is about the *rate* at which prices rise. To talk about the price **level**, add the inflation responses up and divide by 4 (each one is an annualized quarterly rate). Choose "Price level" in the impulse-response reader: per 1-point hike, the CPI is about **0.15% higher** after two quarters and about **0.11% lower** after three years, and the band includes zero from the third quarter on. The same logic applies to any variable entered as a growth rate, such as GDP growth: the cumulated response, divided by 4 for annualized quarterly rates, is the effect on the level.
+</Callout>
+
+#### Adding commodity prices to fight the price puzzle
+
+The standard remedy for the price puzzle is to give the VAR the information the Fed watches, such as commodity prices. Try adding `400 * diff(log(q("PPIACO")))` as a fourth variable before `ffr`. In our sample this shrinks the puzzle only a little (0.28 to 0.25 points), a reminder that a small VAR's "policy shock" is not a clean experiment.
+
+#### Long-run restrictions
+
+The Cholesky ordering uses **short-run restrictions**: they say what cannot happen *within the period*. An alternative is **long-run restrictions** (Blanchard and Quah, 1989): for example, assume demand shocks have no permanent effect on output, and let the data determine the short run.<sup>[6](#refs)</sup> Structural VARs with such restrictions are estimated in R with `vars::SVAR()` and `vars::BQ()`.
+
+#### Variance decomposition: which shocks matter most?
+
+Impulse responses follow one shock at a time. A <Term def="Forecast error variance decomposition: the share of the variance of the h-step-ahead forecast error of each variable that is due to each structural shock.">forecast error variance decomposition</Term> (FEVD) adds them up. It asks: when the VAR's forecast of unemployment *h* quarters ahead turns out wrong, how much of the miss is due to each shock?
+
+Read an FEVD share like a pie chart of *surprises*: "eight quarters ahead, 8% of the uncertainty in our unemployment forecast comes from funds-rate surprises". Each row adds to 100%. A share says nothing about the *sign* of an effect, and nothing about the Fed's predictable reactions, only about its surprises.
+
+<Predict client:load
+  question="With the Fed ordered **last**, what share of unemployment's **one-quarter-ahead** forecast error comes from funds-rate shocks?"
+  options={['Exactly 0%', 'About 7%, the same as five years out', 'About a third, since there are three shocks']}
+  answer={0}
+  explain="Exactly zero, by assumption. Ordering the Fed last says unemployment cannot react to a funds-rate shock within the quarter, so one quarter ahead none of unemployment's forecast miss can come from it. Shares at short horizons often just repeat the ordering; the informative numbers are at longer horizons."
+/>
+
+Three lessons stand out:
+
+- **Horizon changes everything.** One quarter ahead, 98% of unemployment's forecast error is its own shock. Five years (20 quarters) ahead, inflation shocks account for 55%, unemployment shocks for 38% and funds-rate shocks for 7%.
+- **Policy surprises are a small source of fluctuations.** Funds-rate shocks never explain more than about 3% of inflation's forecast error, and at most 11% of unemployment's. This is a common VAR finding, and it does not mean policy is unimportant: most of what the Fed does is a *systematic* response to the economy, which the VAR attributes to the shocks the Fed is responding to.
+- **The FEVD inherits the ordering.** With the Fed ordered first, the funds-rate shock's share of unemployment's 20-quarter forecast error jumps from 7% to 27%.
+
+<Callout type="empirical" title="Three mistakes people make with FEVD shares">
+- **"Funds-rate shocks explain only 7%, so the Fed doesn't matter."** No: the FEVD counts *surprises*. The Fed's systematic reaction to inflation and unemployment is filed under those shocks.
+- **Reading horizon-1 shares as findings.** At short horizons the shares mostly restate the ordering (the 0% in the question above). Look at 8 and 20 quarters.
+- **Quoting a share without the horizon and the ordering.** "Inflation shocks explain 55% of unemployment's forecast error variance *five years ahead, with the Fed ordered last*" is a result; "55%" alone is not.
+</Callout>
+
+<div class="breakout">
+<CodeLab client:load id="ch09-fevd" title="Forecast error variance decomposition" r={fevdR} py={fevdPy} packages={['vars']} pyPackages={['statsmodels']} goal="Decompose each variable's forecast errors by shock and horizon." />
+</div>
+
+#### Cointegration: a drunk and her dog
+
+Every series in the main chapter is stationary or close to it. Many important economic series are not. Interest rates at different maturities, consumption and income, prices of the same good in two cities: each pair **wanders** (it behaves like a random walk), yet the two never drift far apart. Michael Murray's classic illustration: a drunk wanders randomly out of a bar, and so does her dog. Each path is unpredictable, but whenever they drift apart she calls, he barks, and they move back toward each other.<sup>[7](#refs)</sup>
 
 Two series are <Term def="Two nonstationary (I(1)) series are cointegrated if some linear combination of them, y − βx, is stationary. The combination is the long-run equilibrium; deviations from it are temporary.">cointegrated</Term> when each one wanders on its own, but a gap between them (one series minus β times the other) keeps coming back to a typical level. That gap is the leash. Interest rates are the textbook case: the expectations theory of the term structure says long rates are averages of expected future short rates, so the long rate and the short rate should move one-for-one in the long run.<sup>[8](#refs)</sup> Find the leash yourself.
 
@@ -421,19 +462,9 @@ The results line up:
 The same logic applies to household consumption and disposable income, the other classic cointegrated pair: income wanders, but consumption cannot drift arbitrarily far from it for long. To try it, use real series in logs for both (the bundled `DSPIC96` is real disposable income; `PCE` is *nominal* spending, so it would need deflating first).
 </Callout>
 
-## Your turn
+#### Extra practice
 
-Two short tasks put the whole chapter to work: one about *whether* a variable helps forecast another, one about turning an impulse response into the number your audience actually asked for.
-
-**Task 1. A treasury analyst asks:** does the slope of the yield curve help forecast unemployment? Fill in the two blanks and press **Run & check**.
-
-<div class="breakout">
-<CodeLab client:load id="ch09-ex1" exercise title="Exercise: does the term spread Granger-cause unemployment?" r={exR} solution={exSolR} check={exCheckR} py={exPy} solutionPy={exSolPy} checkPy={exCheckPy} packages={['vars']} pyPackages={['statsmodels']}
-  goal="Let BIC choose the lag length for a two-variable VAR of the term spread and unemployment (1960–2000), then test whether the spread Granger-causes unemployment."
-  hints={['In R, the BIC column of `VARselect()$selection` is named `"SC(n)"` (Schwarz criterion). In Python, the key is `"bic"`.', 'The second blank is the name of the variable doing the predicting: the `"spread"` column.']} />
-</div>
-
-**Task 2. Your pricing manager writes:** *"The chart says inflation is 0.37 points higher one quarter after a 1-point hike. Does that mean our input costs will be 0.37% higher? And where will the price level be in three years?"* Answer with the price level, not the inflation rate.
+**Your pricing manager writes:** *"The chart says inflation is 0.37 points higher one quarter after a 1-point hike. Does that mean our input costs will be 0.37% higher? And where will the price level be in three years?"* Answer with the price level, not the inflation rate.
 
 <div class="breakout">
 <CodeLab client:load id="ch09-ex-price" exercise title="Exercise: from an inflation response to the price level" r={exPriceR} solution={exPriceSolR} check={exPriceCheckR} py={exPricePy} solutionPy={exPriceSolPy} checkPy={exPriceCheckPy} packages={['vars']} pyPackages={['statsmodels']}
@@ -453,19 +484,7 @@ Two short tasks put the whole chapter to work: one about *whether* a variable he
   explain="A Granger test shows that past rates help forecast unemployment. A causal claim needs an identified structural model (such as the Cholesky ordering, with its stated assumptions), and even then the price puzzle reminds us how omitted information can distort the answer."
 />
 
-## Chapter checklist
-
-- A **VAR(p)** regresses every variable on *p* lags of every variable. Choose *p* with `VARselect()` (start from the calendar: 4 quarterly or 12 monthly lags per year), check that `roots()` are all below 1, and fit with `VAR()`.
-- Enter trending series as **rates** (inflation = `400 * diff(log(cpi))`, annualized %) and series that are already rates (unemployment, interest rates) as they are. That choice sets the **units** of every impulse response.
-- Don't read VAR coefficients one by one: they flip sign across lags and are rarely significant alone. Read **joint tests, impulse responses and variance decompositions**.
-- **Keep the system small.** Each added variable puts new lags in *every* equation; monthly data need three times the lags to cover the same year.
-- **Granger causality** (`causality()`) means "helps forecast", not "causes", and says nothing about size or sign. Fix the lags before testing, and re-test on recent data.
-- **Read an impulse response out loud:** the shock's size and units (rescale the one-s.d. shock to 1 point or 25 basis points), the response's units, "compared with no surprise", the timing of the peak, and the band in words ("we cannot rule out no effect" when it straddles zero).
-- An **inflation** response is not a **price-level** response: add up the responses and divide by 4 to get the % change in the price level.
-- Impulse responses to "pure" shocks depend on the **Cholesky ordering**: the shared part of correlated surprises goes to whichever variable comes first. State the ordering, justify it by speed of reaction, and report the alternative. Beware the **price puzzle**.
-- **FEVD** (`fevd()`) shares split forecast *surprises* by shock; quote them with the horizon and the ordering, and don't read horizon-1 shares as findings.
-- A VAR's forecasts must still beat **univariate benchmarks**; often they don't.
-- **Cointegrated** series wander together. Test with Engle–Granger (stricter critical values) or Johansen (`ca.jo()`), and model with a **VECM**.
+</BeyondBasics>
 
 <InstructorKit
   minutes={150}
@@ -473,38 +492,37 @@ Two short tasks put the whole chapter to work: one about *whether* a variable he
   sessions={[
     { title: 'Session 1 · Build and read a VAR, then follow one surprise through it', plan: [
       '5 min · Hook: the CFO question (will a surprise hike raise unemployment, and when?) and why one regression cannot answer it',
-      '12 min · Build the VAR live (build lab): why inflation enters as 400 × Δlog CPI and the rates as levels; VARselect, roots, residual correlation of −0.43',
-      '13 min · Reading the output: Predict on the insignificant funds-rate lags, the lag-wobble explorable (coefficients flip, the response holds), the coefficient budget and quarterly vs monthly',
-      '15 min · Granger causality: Predict on the Phillips-curve link, Granger detective (1960–2000 vs 1985–2019; 2, 4, 8 lags), the does / does-not table',
-      '12 min · Impulse responses: Predict on the price puzzle, shock ripple, the five-question sentence, the 25-bp Predict and the IRF reader',
+      '10 min · Build the VAR live (build lab): why inflation enters as 400 × Δlog CPI and the rates as levels; choosing lags with VARselect; residual correlation of −0.43',
+      '5 min · Reading the output: Predict on the insignificant funds-rate lags; read jointly, not one by one',
+      '12 min · Granger causality: Predict on the Phillips-curve link, Granger detective (1960–2000 vs 1985–2019), the does / does-not table',
+      '10 min · Impulse responses: Predict on the price puzzle, shock ripple, the five-question sentence, the 25-bp Predict and the IRF reader',
       '15 min · Activity: "Read it to the CFO" (below), then students run the 1-point-hike exercise',
-      '3 min · Exit ticket: one IRF sentence with size, units, baseline, timing and band'
+      '3 min · Exit ticket: one IRF sentence with size, units, baseline, timing and band',
+      '15 min · Buffer: questions, catch-up'
     ] },
-    { title: 'Session 2 · Who moves first? Ordering, variance shares, forecasts and long-run links', plan: [
+    { title: 'Session 2 · Who moves first? Ordering, bands and an honest forecast scorecard', plan: [
       '5 min · Warm-up: who moved first? "The economy weakened and the Fed cut" vs "the Fed cut and jobs fell" for one quarter of correlated surprises',
       '20 min · Activity: the Fed briefing (below) with the ordering switcher and the impulse-response lab',
-      '13 min · Variance decomposition: the 0% Predict, FEVD explorer by horizon and ordering, the three FEVD mistakes',
-      '10 min · Forecasting scorecard: Predict, rolling-origin lab, honest reporting of a VAR that loses to AR(4) for inflation',
-      '15 min · Cointegration: the leash explorable, Engle–Granger vs Johansen, reading the adjustment speeds',
-      '12 min · Your turn: Task 1 (spread Granger test) and Task 2 (inflation response to the price level); close with the checklist'
+      '15 min · Forecasting scorecard: Predict, rolling-origin lab, honest reporting of a VAR that loses to AR(4) for inflation',
+      '15 min · Your turn: the term-spread Granger exercise, then say what the p-value does and does not mean',
+      '5 min · Close with the checklist',
+      '15 min · Buffer: questions, catch-up'
     ] }
   ]}
   objectives={[
-    'Explain why feedback between variables calls for a system of equations, and fit a reduced-form VAR with `VARselect()` and `VAR()`, checking stability with `roots()`.',
+    'Explain why feedback between variables calls for a system of equations, and fit a reduced-form VAR with `VARselect()` and `VAR()`.',
     'Justify why each variable enters as a rate or a level, and state the units this gives every impulse response.',
-    'Explain why VAR coefficients are read jointly (Granger tests, IRFs, FEVD) rather than one by one, and why VARs must stay small.',
+    'Explain why VAR coefficients are read jointly (Granger tests, impulse responses) rather than one by one.',
     'Run and interpret Granger-causality tests, distinguishing predictive content from causation, size and sign.',
     'Read an impulse response in words: rescale the shock, and give units, baseline, timing of the peak and the band.',
     'Explain in plain words how the **Cholesky ordering** identifies shocks, and defend an ordering by speed of reaction.',
-    'Interpret a forecast error variance decomposition by horizon and ordering.',
     'Evaluate VAR forecasts against univariate benchmarks at rolling origins.',
-    'Test two I(1) series for cointegration with Engle–Granger and Johansen, and interpret the VECM adjustment speeds.'
+    'Optional extensions (variance decomposition, cointegration, stability, coefficient budget): see Beyond the basics.'
   ]}
   discussion={[
     'The baseline VAR says a surprise hike raises unemployment by only about 0.12 points. Does that mean monetary policy is weak? (Hint: most policy is systematic, not a surprise.)',
     'An intern reports "the CPI rises 0.37% after a 1-point hike". What corrections would you make? (Annualized rate, not level; one quarter only; give the band.)',
     'Which ordering would you defend for inflation, unemployment and the funds rate in **monthly** data? Would your answer change for daily data with a stock-market index?',
-    'A colleague wants to add six more variables to the VAR "to capture everything". Using the coefficient budget, what would you tell them?',
     'Unemployment helped predict inflation before 1985 but not after. Give two economic explanations, and one statistical one.'
   ]}
   misconceptions={[
@@ -512,10 +530,8 @@ Two short tasks put the whole chapter to work: one about *whether* a variable he
     '“None of the funds-rate lags is significant, so the funds rate does not matter.” Correlated lags are judged jointly (F-test p = 0.023 here) and through the impulse response.',
     '“A response of +0.12 means unemployment rises to 0.12%,” or “the effects add up to 0.12.” It is the gap from the no-shock path at that quarter, in percentage points.',
     '“An inflation response of +0.28 means prices are 0.28% higher.” It is the annualized inflation rate for one quarter; the price-level effect is the cumulated response divided by 4.',
-    '“Monthly data give three times the information.” They also need three times the lags to cover the same year.',
     '“The VAR estimates the effect of a rate hike.” Only after an identifying assumption, such as a Cholesky ordering, which the data cannot test.',
-    '“Swapping any two variables changes every impulse response.” Responses to a shock depend only on which variables are ordered before it.',
-    '“Use the usual ADF critical values on Engle–Granger residuals.” They are too lenient when β is estimated; use about −3.34 for two variables.'
+    '“Swapping any two variables changes every impulse response.” Responses to a shock depend only on which variables are ordered before it.'
   ]}
 >
 

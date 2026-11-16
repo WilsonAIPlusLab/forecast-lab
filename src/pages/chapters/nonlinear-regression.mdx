@@ -1,16 +1,16 @@
 ---
 layout: ../../layouts/Chapter.astro
 slug: nonlinear-regression
-minutes: 130
+minutes: 100
 sessions:
   - title: Will this client say yes? Logistic regression for business decisions
   - title: Will there be a recession next year? Probability forecasts for the economy
     starts: part-2-will-there-be-a-recession-next-year
 build:
-  - A campaign targeting plan for a real bank (gain curve, lift and profit) that says whom to call and what it will earn
-  - A recession-probability tracker in the style of the New York Fed's yield-curve model, with NBER recessions shaded
-  - A scorecard for probability forecasts built by hand (confusion matrix, ROC/AUC, Brier score and its decomposition, calibration), a leakage audit and an honest out-of-sample test
-skills: ['glm(family = binomial)', logit, probit, odds ratio, marginal effect, maximum likelihood, likelihood-ratio test, Newey–West, confusion matrix, ROC/AUC, gain & lift, Brier score, calibration]
+  - A campaign targeting plan for a real bank (confusion matrix, gain curve and profit) that says whom to call and what it will earn, with a leakage audit
+  - A yield-curve recession-probability model in the style of the New York Fed's, read in words for a board
+  - An honest out-of-sample test of probability forecasts with AUC, the Brier score and a calibration chart
+skills: ['glm(family = binomial)', logit, odds ratio, marginal effect, confusion matrix, ROC/AUC, gain & lift, leakage, Brier score, calibration]
 ---
 import CodeLab from '../../components/CodeLab.svelte';
 import Callout from '../../components/Callout.astro';
@@ -19,6 +19,7 @@ import SessionBreak from '../../components/SessionBreak.astro';
 import Predict from '../../components/Predict.svelte';
 import Term from '../../components/Term.astro';
 import InstructorKit from '../../components/InstructorKit.astro';
+import BeyondBasics from '../../components/BeyondBasics.astro';
 import LineBreaks from '../../components/nonlinear/LineBreaks.svelte';
 import OddsTranslator from '../../components/nonlinear/OddsTranslator.svelte';
 import MarginalEffects from '../../components/nonlinear/MarginalEffects.svelte';
@@ -80,9 +81,9 @@ import exCfoPy from '../../labs/ch08/ex_cfo.py?raw';
 import exCfoSolPy from '../../labs/ch08/ex_cfo_solution.py?raw';
 import exCfoCheckPy from '../../labs/ch08/ex_cfo_check.py?raw';
 
-<p class="lede">Two managers, two yes-or-no forecasts. A bank's marketing lead has a list of clients and a budget for phone calls: <strong>who is likely to say yes to a term deposit, and how far down the list should the team call?</strong> A manufacturer's head of planning is setting next year's budget: <strong>will the economy be in recession a year from now?</strong> Neither answer is a number on a smooth scale. Each is yes or no, and the useful forecast is a probability. [Chapter 4](/chapters/regression/)'s straight line handles that badly. This chapter bends it.</p>
+<p class="lede">Two managers, two yes-or-no forecasts. A bank's marketing lead has a list of clients and a budget for phone calls: <strong>who is likely to say yes to a term deposit, and how far down the list should the team call?</strong> A manufacturer's head of planning is setting next year's budget: <strong>will the economy be in recession a year from now?</strong> Each is yes or no, and the useful forecast is a probability. [Chapter 4](/chapters/regression/)'s straight line handles that badly. This chapter bends it.</p>
 
-You will work with two kinds of real data. Part 1 uses a Portuguese bank's telephone marketing campaigns, run between May 2008 and November 2010 and published by Moro, Cortez and Rita:<sup>[1](#refs)</sup> thousands of clients, one row each, no time order. Part 2 uses 66 years of monthly U.S. data from FRED: Treasury yields and the official recession dates. One tool, logistic regression, answers both questions. Yes/no forecasts are everywhere in business: will this customer buy, churn, default, click? Will the economy turn down?
+You will work with two kinds of real data. Part 1 uses a Portuguese bank's telephone marketing campaigns (2008–2010):<sup>[1](#refs)</sup> thousands of clients, one row each, no time order. Part 2 uses 66 years of monthly U.S. Treasury yields and recession dates from FRED. One tool, logistic regression, answers both questions.
 
 <KeyIdea>Keep the regression's straight line, but put it inside a curve. The line predicts the <strong>log-odds</strong>, and the logistic S-curve turns them into a probability that always stays between 0 and 1. Then judge the probabilities two ways: do they <strong>rank</strong> cases well (AUC), and do they <strong>mean what they say</strong> (calibration), on data the model has never seen?</KeyIdea>
 
@@ -90,15 +91,13 @@ You will work with two kinds of real data. Part 1 uses a Portuguese bank's telep
 
 ## Part 1. Will this client say yes?
 
-The bank file holds **4,119 clients**, a 10% random sample that the dataset's authors drew from the full file of 41,188 contacts.<sup>[1](#refs)</sup> For each client you know facts available *before* the call (age, job, the phone type, how many calls this campaign has made to the client, counting this one, the outcome of any previous campaign, and the economic climate that day, such as the 3-month <Term def="The Euro Interbank Offered Rate: the average interest rate at which large European banks lend to one another. The 3-month Euribor is a benchmark for short-term euro interest rates.">Euribor</Term> interest rate) and one outcome, `y`: did the client subscribe to a term deposit? Only **451 of 4,119 (10.9%)** did.
+The bank file holds **4,119 clients**, a 10% random sample of 41,188 contacts.<sup>[1](#refs)</sup> For each client you know facts available *before* the call (age, phone type, calls made so far, the outcome of any previous campaign, and the economic climate that day, such as the 3-month <Term def="The Euro Interbank Offered Rate: the average interest rate at which large European banks lend to one another. The 3-month Euribor is a benchmark for short-term euro interest rates.">Euribor</Term> interest rate) and one outcome, `y`: did the client subscribe to a term deposit? Only **451 of 4,119 (10.9%)** did.
 
-<Callout type="pitfall" title="No dates, so no time split">
-Chapter 3 insisted that the test set must come <em>after</em> the training set. This file has no dates: UCI drew the sample at random from a file ordered by date, so the row order carries no information about time.<sup>[1](#refs)</sup> The honest substitute is a <strong>stratified</strong> split: set aside 30% of the subscribers and 30% of the non-subscribers as a test set, fit on the rest, and treat the test clients as "the next campaign's call list". That answers <em>"how well will the model rank new clients from the same campaigns?"</em> It is kinder than a real next-campaign forecast, in which the economy (and the bank's script) may have changed. Keep that caveat in mind whenever you read a test score below.
-</Callout>
+The file has no dates, so a time split is impossible. Instead we set aside a **stratified** 30% of the subscribers and of the non-subscribers as test clients, "the next campaign's call list", and fit on the rest.
 
 ### Why a straight line breaks
 
-The obvious first move is Chapter 4's: code yes as 1 and no as 0 and run ordinary least squares. The fitted value is then read as the probability of a yes. This is the <Term def="An ordinary least-squares regression whose dependent variable is 0 or 1. Its fitted values are read as probabilities.">linear probability model</Term> (LPM). It is simple, and its slopes are easy to read: "one more point of Euribor lowers the chance of a yes by 5 percentage points." So what goes wrong?
+The obvious first move is Chapter 4's: code yes as 1 and no as 0 and run ordinary least squares. This is the <Term def="An ordinary least-squares regression whose dependent variable is 0 or 1. Its fitted values are read as probabilities.">linear probability model</Term> (LPM), and its slopes are easy to read. So what goes wrong?
 
 <Predict client:load
   question="A straight line is fitted through 0/1 data on clients. Can it predict a probability **below 0%** for some clients, even though no client can be less likely than certain not to subscribe?"
@@ -111,31 +110,13 @@ The obvious first move is Chapter 4's: code yes as 1 and no as 0 and run ordinar
 <LineBreaks client:load />
 </div>
 
-The explorer shows the three problems that every econometrics text lists for the LPM:<sup>[4](#refs)</sup>
+The explorer shows the LPM's three textbook problems:<sup>[4](#refs)</sup>
 
-1. **Forecasts outside [0, 1].** Fitted to all 4,119 clients with the five pre-call facts, the LPM gives 47 of them a negative probability; add the month and weekday of the call and the count jumps to 507. The logit, whatever you give it, never leaves the interval.
-2. **Heteroskedasticity by construction.** A 0/1 outcome with probability $p$ has variance $p(1-p)$. Clients with different $p$ have different error variances, so the usual OLS standard errors are wrong (robust ones are needed).
-3. **Constant marginal effects.** A straight line says a given change in a predictor moves the probability by the same amount for every client. The gold dots say otherwise: the share of yeses creeps up among low-score clients and climbs steeply among high-score ones, just as the S-curve does.
+1. **Forecasts outside [0, 1].** Fitted to all 4,119 clients, the LPM gives 47 of them a negative probability. The logit never leaves the interval.
+2. **Heteroskedasticity by construction.** A 0/1 outcome with probability $p$ has variance $p(1-p)$, so the usual OLS standard errors are wrong.
+3. **Constant marginal effects.** A straight line moves the probability by the same amount for every client. The gold dots bend like an S-curve instead.
 
-Now in code. The lab fits the LPM, a **logit** and a **probit** with the same five pre-call facts on the training clients, and counts the impossible predictions.
-
-<div class="breakout">
-<CodeLab client:load id="nl-lpm" title="LPM vs logit vs probit on bank clients" r={lpmR} py={lpmPy}
-  pyPackages={['statsmodels', 'scikit-learn']}
-  goal="Fit three models for a 0/1 outcome, count the predictions outside [0, 1], and compare how well each ranks the test clients." />
-</div>
-
-The lab ends with a surprise worth remembering. On the 1,237 test clients, the three models *rank* clients almost identically: the share of (subscriber, non-subscriber) pairs put in the right order is 0.733 for the LPM, 0.735 for the logit and 0.735 for the probit. The LPM's flaw is not whom it puts first. It is that its outputs are not usable as probabilities, and probabilities are what a business plan multiplies by money.
-
-<Callout type="math" title="The linear probability model and its variance">
-For a 0/1 outcome, $E[y \mid x] = P(y = 1 \mid x)$, so OLS of $y$ on $x$ models the probability directly:
-
-$$
-P(y_i = 1 \mid x_i) = \beta_0 + \beta_1 x_{1i} + \dots + \beta_k x_{ki}.
-$$
-
-Because $y_i$ is Bernoulli, $\operatorname{Var}(y_i \mid x_i) = p_i(1 - p_i)$, which changes from client to client: the errors are heteroskedastic by construction. Nothing in the formula stops $\hat p_i$ from leaving $[0, 1]$, and $\partial p / \partial x_j = \beta_j$ is the same at every point.
-</Callout>
+Oddly, the LPM still *ranks* the test clients almost as well as a logit (0.733 against 0.735 on the AUC you will meet below). Its flaw is that its outputs are not usable as probabilities, and a business plan multiplies probabilities by money.
 
 ### Odds, log-odds and the logistic curve
 
@@ -181,7 +162,7 @@ $$
 \ell(\beta) = \sum_{i=1}^{n} \Big[ y_i \log p_i + (1 - y_i)\log(1 - p_i) \Big].
 $$
 
-It has no closed-form maximum. R's `glm()` uses iteratively reweighted least squares (IRLS), a version of Newton's method; the explorers on this page run the same algorithm in your browser and match `glm()` to at least six decimals. The **probit** model replaces the logistic curve with the normal cumulative distribution, $p_i = \Phi(x_i'\beta)$; its coefficients are smaller, typically by a factor of about 1.6 to 1.8, and its probabilities are nearly identical.<sup>[2](#refs)</sup>
+It has no closed-form maximum, so `glm()` climbs to it step by step.
 </Callout>
 
 ### Fit it with `glm()` and read the odds ratios
@@ -199,29 +180,20 @@ Here is the output as a marketing analyst would put it in a memo (fitted on 2,88
 | Previous campaign: success (vs never contacted) | **6.41** | 4.04 to 10.17 | The single strongest signal: about six times the odds |
 | Previous campaign: failure (vs never contacted) | 0.77 | 0.53 to 1.10 | Interval includes 1: no clear difference |
 | Euribor rate, per percentage point | 0.66 | 0.60 to 0.71 | Each point higher cuts the odds by about a third |
-| Calls to this client in this campaign (counting the last one), per call | 0.91 | 0.84 to 0.99 | Each extra call goes with about 9% lower odds (but see the leakage section) |
+| Calls to this client in this campaign (counting the last one), per call | 0.91 | 0.84 to 0.99 | Each extra call goes with about 9% lower odds (but see Beyond the basics: the count partly records refusals) |
 | Landline instead of mobile | 0.68 | 0.47 to 0.97 | About a third lower odds on a landline |
 | Age, per year | 1.020 | 1.009 to 1.031 | Ten years older: $1.020^{10} \approx 1.21$, about 21% higher odds |
 
 <Callout type="pitfall" title="An odds ratio is an association, not a lever">
-The Euribor odds ratio does not mean the bank can raise subscriptions by lowering interest rates. The calls in this file happened at two very different rate levels (near 1% and near 5%; the marginal-effects explorer below shows the gap), and many other things differed between those periods: the economy, the competition, how the bank chose whom to call. As in Chapter 4, a coefficient describes how the outcome moved with a predictor in this sample. It is useful for ranking clients; it is not a controlled experiment.
+The Euribor odds ratio does not mean the bank can raise subscriptions by lowering interest rates. The calls happened near 1% and near 5% (only 2 of 4,119 in between), and much else differed between those periods. As in Chapter 4, a coefficient describes an association in this sample, not a controlled experiment, and "a client at 3%" reads the curve across an empty gap.
 </Callout>
 
 <Callout type="empirical" title="Say an odds ratio in words, with its unit">
-A memo line has four parts: **the change, its unit, what happens to the odds, and "holding the other facts fixed"**. Four habits make it right:
+A memo line has four parts: **the change, its unit, what happens to the odds, and "holding the other facts fixed"**. Two habits make it right:
 
 - **Turn the ratio into a percent change in the odds**:<sup>[21](#refs)</sup> $100 \times (\text{OR} - 1)$. Euribor: $100 \times (0.66 - 1) = -34\%$, so "each percentage point higher Euribor goes with 34% lower odds of a yes". Not "34 percentage points lower probability": the odds, not the probability, move by a fixed percentage.
 - **Rescale to a step a manager cares about.** Raise the odds ratio to the power of the step. A quarter point of Euribor (25 basis points, a typical central-bank move): $0.66^{0.25} = 0.90$, about 10% lower odds. A decade of age: $1.020^{10} = 1.21$. This is Chapter 4's [rescaling](/chapters/regression/#rescaling-units-what-changes-and-what-doesnt) idea, on the odds scale.
-- **For small coefficients, $b$ itself is close to the percent change.** The calls coefficient is $-0.091$; the exact change is $-8.7\%$ per call. The shortcut fails for big ones: the past-success coefficient is 1.86, but the odds rise by 541%.
-- **Stay where the data are.** The calls happened near 1% and near 5% Euribor, with only 2 of 4,119 in between. Any statement about "a client at 3%" reads the curve across an empty gap.
 </Callout>
-
-<Predict client:load kind="check"
-  question="The Euribor odds ratio is 0.66 per percentage point. Rates rise by a quarter point (25 basis points). By what factor are the odds of a yes multiplied?"
-  options={['About 0.17 (0.66 ÷ 4)', 'About 0.90', 'About 0.66', 'About 0.34']}
-  answer={1}
-  explain="Odds ratios multiply, so a quarter of a step is the **fourth root**: 0.66<sup>0.25</sup> = 0.90, about 10% lower odds. Four quarter-point rises in a row give 0.90 × 0.90 × 0.90 × 0.90 = 0.66, the full-point ratio again. Dividing by 4 would claim a quarter-point rise cuts the odds by 83%, far more than a whole point does."
-/>
 
 ### Marginal effects are not constant
 
@@ -233,9 +205,369 @@ Managers ask in percentage points, not odds: *"how much does one more point of E
 
 For a never-contacted 40-year-old on a mobile phone, one more point of Euribor lowers the chance of a yes by about 8 percentage points when rates are near 0.7% (where her probability is 26%), but by only about 2 points near 4.9% (where it is 5.6%). Same coefficient, $b = -0.421$; very different effects.
 
-Two summaries are common, and they can disagree. The <Term def="The average, over all clients in the sample, of each client's own marginal effect b·p(1 − p). The usual way to report a logit effect in percentage points.">average marginal effect</Term> (AME) computes each client's slope and averages them. The <Term def="The marginal effect computed once, for a hypothetical client whose every predictor is at its sample mean.">marginal effect at the mean</Term> (MEM) computes the slope for one hypothetical "average client". For Euribor the AME is **−3.41** percentage points per point and the MEM is **−2.92**; individual clients' effects range from about −10.5 to −0.1. The mean rate, 3.61%, sits in the empty gap between the two clusters of calls (only 2 of 4,119 calls were made at rates between 2% and 4%), and the "average client" is 3.6% "past success". The MEM describes a client who does not exist, which is why most applied work reports the AME.
+The usual one-number summary is the <Term def="The average, over all clients in the sample, of each client's own marginal effect b·p(1 − p). The usual way to report a logit effect in percentage points.">average marginal effect</Term> (AME): compute each client's slope and average them. For Euribor the AME is **−3.41** percentage points per point; individual clients' effects range from about −10.5 to −0.1.
 
 For a yes/no predictor, compute a *discrete change* instead: switching every training client from "never contacted" to "past success" raises the predicted probability by **25.7 percentage points** on average.
+
+### What the model says about one client
+
+A manager asks about a person: *"Should we call this client?"* Take the reference client from the odds Predict above: 40 years old, mobile phone, first call, never contacted, Euribor 4.9%. The model gives her 5.6%.
+
+<Callout type="empirical" title="Translate a probability before you hand it over">
+People read "out of 100" faster and more correctly than percentages.<sup>[20](#refs)</sup> So write a client-level answer in three lines:
+
+1. **The probability, as a count:** for the reference client, "5.6%: about 6 in 100 clients like her say yes."
+2. **Against the base rate:** 10.9% of all clients subscribed, so she is about half as likely as a typical client. A probability means little until you know what "normal" is.
+3. **In money:** at \$5 a call and \$50 a deposit, a call is worth $0.056 \times 50 - 5 = -\$2.18$ on average. Skip her, unless something the model does not see changes the picture.
+
+And never treat one outcome as a verdict. If she does say yes, the 5.6% was not "wrong": among 100 clients like her, about 6 should.
+</Callout>
+
+### From probability to decision: the confusion matrix
+
+A probability is not yet a call list. To act, you pick a <Term def="The probability above which a client is classified as a 'yes' (here: gets a phone call).">threshold</Term> and call everyone above it. Each threshold produces a <Term def="A 2×2 table that counts true positives, false positives, false negatives and true negatives for one threshold.">confusion matrix</Term>:
+
+| | Actually subscribed | Actually said no |
+|---|---|---|
+| **Predicted yes (called)** | True positive (TP): a reached buyer | False positive (FP): a wasted call |
+| **Predicted no (not called)** | False negative (FN): a missed buyer | True negative (TN): a call rightly skipped |
+
+Three metrics summarize it:
+
+| Metric | Formula | The question it answers |
+|---|---|---|
+| **Accuracy** | (TP + TN) / all | What share of clients did we classify correctly? |
+| **Precision** | TP / (TP + FP) | Of the clients we called, what share subscribed? |
+| **Recall** (sensitivity) | TP / (TP + FN) | Of all the subscribers, what share did we reach? |
+
+<Predict client:load
+  question="A model that **never** predicts a subscription, for any client, is scored on the 1,237 test clients. What is its accuracy?"
+  options={['About 11%', 'About 50%', 'About 89%', 'It cannot be computed']}
+  answer={2}
+  explain="**89.0%**: 1,101 of the 1,237 test clients said no, and 'always no' gets every one of them right. It also finds zero subscribers and earns nothing. This is the **accuracy paradox**: when one outcome is rare, accuracy rewards ignoring it. Our logit at the default 0.5 threshold scores 90.1%, barely better, while missing 110 of the 136 subscribers."
+/>
+
+<div class="breakout">
+<CodeLab client:load id="nl-classify" title="Confusion matrix, metrics, ROC/AUC and a gain table, by hand" r={classifyR} py={classifyPy} setup={setupBankR} pySetup={setupBankPy}
+  pyPackages={['statsmodels', 'scikit-learn']}
+  goal="Score the logit on the test clients at two thresholds, expose the accuracy paradox, trace the ROC curve, compute AUC and a decile gain table, and check how much AUC varies across splits." />
+</div>
+
+| Rule (1,237 test clients) | Called | TP | Accuracy | Precision | Recall | Profit |
+|---|---|---|---|---|---|---|
+| Logit, threshold 0.5 | 38 | 26 | **90.1%** | **68.4%** | 19.1% | \$1,110 |
+| Logit, threshold 0.10 | 400 | 93 | 71.7% | 23.2% | **68.4%** | **\$2,650** |
+| Call everyone | 1,237 | 136 | 11.0% | 11.0% | 100% | \$615 |
+| Always say no | 0 | 0 | 89.0% | — | 0% | \$0 |
+
+The 0.5 threshold wins on accuracy and precision and loses on the thing the business cares about. The profit column assumes, for illustration, that a call costs \$5 and a new deposit is worth \$50 to the bank. Then a call pays off when $p \times 50 \gt 5$, that is, when $p \gt 0.10$: a threshold set by economics, not by statistics.
+
+<Callout type="business" title="Choose the threshold from costs, not habit">
+With a cost $c$ per call and a value $V$ per success, call a client when $p \cdot V \gt c$, so the break-even threshold is $p^\ast = c / V$. The 50% default is right only if both errors cost the same. [Part 2](#from-probability-to-warning-pick-a-threshold) uses the same logic for recession warnings.
+</Callout>
+
+### Plan the campaign: ROC, AUC, gains and lift
+
+A threshold is one point. To see every possible threshold at once, rank the clients from most to least promising and walk down the list. Two curves come out of that walk:
+
+- The <Term def="Receiver operating characteristic curve: true-positive rate (recall) against false-positive rate (1 − specificity) for every threshold.">ROC curve</Term> plots the share of buyers reached against the share of non-buyers called. The area under it, the <Term def="Area under the ROC curve: the probability that a randomly chosen subscriber gets a higher score than a randomly chosen non-subscriber. 0.5 = coin flip, 1 = perfect ranking.">AUC</Term>, is the probability that a random subscriber outranks a random non-subscriber.
+- The <Term def="Cumulative share of all positives (buyers) found when you act on the top x% of the ranked list. Also called a cumulative gains or lift chart.">gain curve</Term> plots the share of buyers reached against the share of the *whole list* called. That is the chart a marketing manager reads: "call 30% of the list, reach 65% of the buyers". <Term def="Gain divided by the share called: how many times better than random calling. Lift 2 at 30% means the top 30% holds twice its share of buyers.">Lift</Term> divides that gain by the share called.
+
+<div class="breakout">
+<CampaignPlanner client:load />
+</div>
+
+What the planner shows for the honest, before-the-call model:
+
+- **A call budget is a threshold.** "Call the top 20%" is the same decision as "call everyone with a predicted probability of at least 17.8%".
+- **Gains.** Calling the top 10% of the list reaches 33% of subscribers (lift 3.3); the top 20% reaches 53% (lift 2.6); the top 30% reaches 65% (lift 2.2).
+- **Profit.** At \$5 per call and \$50 per deposit, profit peaks at **\$2,675** by calling the top 31% of the list (cut-off 11.8%, close to the 10% break-even). Calling everyone earns \$615.
+- **AUC 0.735**: a random subscriber outranks a random non-subscriber about three times in four.
+
+### Too good to be true: the leakage trap
+
+The bank's file has one more column we have not used: `duration`, the length of the call in seconds. Add it to the model and see what happens.
+
+<Predict client:load
+  question="The honest model's test AUC is 0.735. You add one column, the **length of the call**, and refit. What happens to the test AUC?"
+  options={['It barely moves', 'It rises to about 0.78', 'It jumps above 0.9', 'It falls, because the model overfits']}
+  answer={2}
+  explain="It jumps to **0.915**. A long call is partly a *record* of a yes: agreeing to a deposit takes a conversation, and not one of the 407 calls shorter than a minute ended in a subscription. But the call's length is unknown when you decide whom to call. The 'miracle' model cannot be used for the decision it was built for."
+/>
+
+<div class="breakout">
+<CodeLab client:load id="nl-leak" title="The leakage audit: what call duration does to AUC" r={leakR} py={leakPy} setup={setupBankR} pySetup={setupBankPy}
+  pyPackages={['statsmodels', 'scikit-learn']}
+  goal="Add the after-the-call variable duration to the logit, watch the test AUC jump from 0.735 to 0.915, and explain why the model is useless for targeting." />
+</div>
+
+The dataset's own documentation says it plainly: `duration` is not known before a call is made and should be discarded for a realistic predictive model.<sup>[1](#refs)</sup> Switch the campaign planner to **+ call duration** and every metric improves; that improvement is fake. This is the cross-sectional version of Chapter 3's look-ahead leakage.<sup>[7](#refs)</sup>
+
+**Before you trust any predictor, ask one question: would I know this value at the moment I make the forecast?** If not, it is leakage, however good the AUC looks.
+
+### Your turn: brief the marketing manager
+
+One short task. Fill in the blanks (`______`) and press **Run & check**.
+
+Your manager asks about one client before the team dials: a 40-year-old on a mobile phone, first call, Euribor at 4.9%. *"What are her chances, is the call worth \$5, and how much would a past success with her change things?"* Answer with a probability, an odds ratio, a change in percentage points and an expected value per call.
+
+<div class="breakout">
+<CodeLab client:load id="nl-ex-client" exercise title="Exercise: one client, in words and dollars" r={exClientR} solution={exClientSolR} check={exClientCheckR}
+  py={exClientPy} solutionPy={exClientSolPy} checkPy={exClientCheckPy} setup={setupBankR} pySetup={setupBankPy}
+  pyPackages={['statsmodels']}
+  goal="Predict one client's probability two ways, confirm that the ratio of the odds equals the odds ratio, and turn the difference into percentage points and dollars."
+  hints={['predict() returns log-odds unless you ask for type = "response" (Python: the .predict() method of the fitted model already returns probabilities).', 'Odds are p / (1 - p), so the blank inside the brackets is p itself. The change is the second probability minus the first: p[2] - p[1] in R, p[1] - p[0] in Python.', 'The expected value of a call is the chance of a yes times the value of a deposit ($50), minus the $5 cost.']} />
+</div>
+
+<SessionBreak n={2} title="Will there be a recession next year? Probability forecasts for the economy" goals={['Build the 12-months-ahead 0/1 target and read the spread in its units (percentage points)', 'Fit the yield-curve logit and say what it means in words', 'Read a calibration chart and score the forecasts honestly, out of sample']} />
+
+## Part 2. Will there be a recession next year?
+
+Now scale the question up from one client to the whole economy. You run planning at a manufacturer, and next year's budget depends on one question: **will there be a recession?** Nobody can answer yes or no with confidence, but you can attach a *probability* to it and check how good past probabilities were.
+
+In May 2023 the gap between the 10-year Treasury yield and the 3-month bill rate fell to **−1.57 percentage points**, its lowest monthly reading since 1981. That gap, the *yield-curve spread*, had turned negative ahead of nearly every U.S. recession since 1969. Yet through the latest data in this chapter (October 2026), no recession has been declared. In this part you build the famous model behind those warnings, score its probabilities and find out how much that false alarm cost it.
+
+The tool is Part 1's logit, but four things change:
+
+- **The rows are months in time order.** The test set must come after the training set ([Chapter 3](/chapters/benchmarks/)).
+- **The event is rare and a year away.** Only about 12% of months since 1959 were followed by a recession 12 months later.
+- **The answer arrives late.** The official referee dates recessions many months after the fact.
+- **The probability itself is the message.** A board reads "30% chance of recession" as a number, so it had better mean what it says.
+
+A model that says "30% chance" is not wrong when the event fails to happen; it would be wrong if events it called 30% happened 90% of the time. A forecast whose probabilities match the frequencies is <Term def="A probability forecast is calibrated when events it gives probability p happen about a fraction p of the time.">calibrated</Term>.
+
+Our event is a U.S. recession. The official referee is the <Term def="The National Bureau of Economic Research's Business Cycle Dating Committee. It dates U.S. business-cycle peaks and troughs after the fact.">NBER</Term> dating committee.<sup>[8](#refs)</sup> FRED turns its dates into a monthly indicator, `USREC`: 1 in every recession month, 0 otherwise.
+
+Our predictor is the <Term def="The 10-year Treasury yield minus the 3-month Treasury bill rate, in percentage points. Positive = normal upward-sloping yield curve; negative = inverted curve.">term spread</Term>: the 10-year Treasury yield (`GS10`) minus the 3-month bill rate (`TB3MS`), both monthly averages in percent. When short rates rise above long rates, the yield curve is <Term def="A yield curve on which short-term interest rates are higher than long-term ones, so the term spread is negative.">inverted</Term>.
+
+<Callout type="intuition" title="Why would bond yields predict recessions?">
+If markets expect the Fed to cut rates because the economy will weaken, long yields (which reflect expected short rates) fall below short ones. And an inverted curve often means policy is tight now, which slows the economy with a lag of about a year.<sup>[9](#refs)</sup> Neither story is a law of nature, which is why we test it.
+</Callout>
+
+<Callout type="empirical" title="The spread is in percentage points, and one point is a big move">
+Both yields are interest rates in percent per year, so their difference is measured in **percentage points** (pp). Bond traders count in **basis points**: 1 point = 100 basis points (bp). Three habits:
+
+- **Never quote a percent change of a spread.** It crosses zero, so "the spread fell 150%" means nothing. Say "fell by 150 basis points".
+- **Know the typical size.** Since 1959 the monthly spread has ranged from −2.65 to +4.42 points. The average month-to-month move is only 0.21 points, but over a year it changes by more than a full point about 37% of the time. So "one more point" in the coefficient table is a big but ordinary one-year swing.
+- **Check the measure.** News stories often quote the 10-year minus 2-year spread; measures differ by tenths of a point, which matters near zero.
+</Callout>
+
+### Build the target: a recession 12 months from now
+
+The question is about the future, so the target has to look forward. We follow the New York Fed: for each month *t*, the target is **whether month *t* + 12 is a recession month**.<sup>[10](#refs)</sup> Each row pairs *this* month's spread with the economy's state *a year later*; the last 12 rows have no answer yet, and those are the months we want to forecast.
+
+<Callout type="pitfall" title="The referee announces the score late">
+The NBER dates turning points only once it is confident: it announced the December 2007 peak on December 1, 2008, and even the fast call on the February 2020 peak came on June 8, 2020.<sup>[11](#refs)</sup> So the most recent zeros in `USREC` are <strong>provisional</strong>, and a backtest that uses outcomes a real-time forecaster could not yet know is a little too kind.
+</Callout>
+
+Why exactly a year? A budget or a hiring plan is set about a year ahead; the spread's warning tends to arrive roughly a year early; and it is the New York Fed's convention, so your numbers can be compared with its published ones.
+
+<Predict client:load
+  question="Your data frame has one row per month. For the row dated **January 2007**, which month's `USREC` value belongs in the 12-months-ahead target?"
+  options={['January 2006', 'January 2007', 'December 2007', 'January 2008']}
+  answer={3}
+  explain="**January 2008**: the target pairs this month's spread with the economy a year later. Its value is 1, because the NBER dated the business-cycle peak to December 2007 and FRED's `USREC` counts the recession from the following month. The row for December 2006 gets December 2007's value, which is 0. Shifting the wrong way (using last year's value) would build a model that 'predicts' the past."
+/>
+
+<div class="breakout">
+<SpreadReader client:load />
+</div>
+
+Start at **May 2023**: a spread of −1.57 points (−157 basis points). The row asks about May 2024, which was not a recession month, and the full-sample logit gives it 61.2%. Then press **Jan 2007**: a milder inversion (−0.22 points) gets 28.7%, and January 2008 *was* a recession month. A probability is a statement about many months like this one, not a verdict on one.
+
+<Callout type="empirical" title="Shift the right way, then check one row by hand">
+Lead/lag mistakes are the most common bug in forecasting code, and they fail silently: the model still fits, often *better*. Two checks take a minute:
+
+- **Print a known date.** The January 2007 row should show `rec = 0` and `rec_ahead = 1` (January 2008); the January 2008 row should show `rec = 1`. If `rec_ahead` turns on 12 months *after* the recession starts instead of before, the shift went the wrong way.
+- **Count the gaps.** A 12-month lead leaves exactly 12 missing targets, all at the end of the sample. Missing values at the start mean you built a lag, not a lead.
+</Callout>
+
+The first lab builds the target and tries Part 1's [linear probability model](#why-a-straight-line-breaks) (LPM): an ordinary regression of the 0/1 target on the spread.
+
+<div class="breakout">
+<CodeLab client:load id="ch08-target" title="Build the forward-looking target and fit a linear probability model" r={targetR} py={targetPy} pyPackages={['statsmodels']}
+  goal="Construct 'recession 12 months ahead' from USREC, check it by eye, and see the linear probability model predict impossible probabilities." />
+</div>
+
+The LPM goes below 0 in 145 months, as low as −0.16: the same flaw Part 1 found with bank clients. We need a curve that bends.
+
+### The same S-curve, fitted to 66 years of months
+
+As in Part 1, the [logit](#odds-log-odds-and-the-logistic-curve) passes a straight-line index, here $a + b \cdot \text{spread}$, through the S-curve, and maximum likelihood picks the curve that gives high probabilities to months followed by recession and low ones to the rest.
+
+The fitted curve crosses 50% only at a spread of about −1.1 points, and even a mildly inverted curve gives "only" 20 to 40%. Recessions are rare (about 12% of months since 1959 were followed by one 12 months later), so the model needs strong evidence before it calls one likely.
+
+#### Fit it with `glm()` and read the coefficients
+
+In R, a logit is one line: `glm(y ~ x, family = binomial(link = "logit"))`. Change `"logit"` to `"probit"` for a probit.
+
+<div class="breakout">
+<CodeLab client:load id="ch08-logit" title="Logit and probit with glm(): coefficients, odds and predicted probabilities" r={logitR} py={logitPy} setup={setupR} pySetup={setupPy} pyPackages={['statsmodels']}
+  goal="Estimate the yield-curve recession model as a logit and a probit, and translate the coefficients into odds ratios, probabilities and marginal effects." />
+</div>
+
+How to read the output (logit, fitted on January 1959 to October 2025). With one predictor whose effect swings this much, report marginal effects at a few chosen spreads:
+
+| Quantity | Value | Plain English |
+|---|---|---|
+| Slope $b$ | −1.014 | Each extra point of spread lowers the log-odds of recession a year later by about 1 |
+| <Term def="exp(b): the factor by which the odds p/(1 − p) are multiplied when the predictor rises by one unit.">Odds ratio</Term> $e^b$ | 0.363 | Each extra point of spread multiplies the odds by 0.36, cutting them by about 64% |
+| P(recession) at spread −1, 0, +1, +2 | 47%, 24%, 10%, 4% | The same one-point change matters much more near the middle of the S |
+| <Term def="The change in the predicted probability for a small change in a predictor, evaluated at a chosen value of that predictor. For a logit it equals b·p·(1 − p).">Marginal effect</Term> at spread 0 | −18.7 pp | Near a flat curve, one more point of spread lowers the probability by about 19 percentage points |
+| Marginal effect at spread +2 | −4.0 pp | With a steep curve, the probability is already low and barely moves |
+
+The probit gives nearly the same probabilities (45%, 25%, 11% and 4%), so the choice rarely matters. Logit coefficients are easier to explain as odds; the New York Fed's model happens to be a probit.
+
+<Predict client:load kind="check"
+  question="A colleague reads the slope −1.01 and says: 'A one-point rise in the spread lowers the recession probability by 1.01, that is, by 101 percentage points.' What is wrong?"
+  options={[
+    'Nothing, that is the definition of a slope',
+    'The slope is on the log-odds scale; the effect on the probability depends on where you start',
+    'The slope must be divided by 100 because the spread is in percent',
+    'Logit slopes cannot be interpreted at all'
+  ]}
+  answer={1}
+  explain="In a logit the coefficient moves the <strong>log-odds</strong>, not the probability. Translate it either as an odds ratio (e<sup>−1.01</sup> = 0.36) or as a marginal effect at a chosen spread: about −19 percentage points near a flat curve, but only −4 with a steep one."
+/>
+
+One warning: neighboring months have overlapping 12-month targets, so `glm()`'s standard errors are too small, here by more than half. [Beyond the basics](#under-the-hood-how-glm-finds-the-curve-and-how-sure-it-can-be) below shows the honest version.
+
+### The yield-curve recession model
+
+Estrella and Hardouvelis showed in 1991 that the yield-curve slope predicts U.S. recessions,<sup>[9](#refs)</sup> and Estrella and Mishkin found it the best single predictor beyond one quarter ahead.<sup>[12](#refs)</sup> The New York Fed publishes a monthly probability from the same recipe: a slightly different spread measure,<sup>[13](#refs)</sup> the same target, and a probit fitted on 1959–2009.<sup>[10](#refs)</sup> Its November 5, 2026 update put the probability of recession in October 2027 at **12.4%**.
+
+Now look at the whole history. Each forecast is drawn at the month it is *about*, so a good model's peaks should land on the grey recession bars.
+
+<div class="breakout">
+<RecessionRadar client:load />
+</div>
+
+What the radar shows, with the model frozen at the end of 1999 and a 30% threshold:
+
+- **2001 and 2008: right direction, imperfect timing.** Probabilities rose to about 44 to 49%, but the warning came early and faded before the recession months arrived.
+- **2020: a lucky call?** The curve briefly inverted in mid-2019 and the model rose to about 42% for mid-2020. The recession came from a pandemic no bond market predicted: a hit in the scoring, not proof.
+- **2023–24: the long false alarm.** The spread was negative for 25 straight months, the longest run since 1959, and the probability passed 50% for 21 of them. As of October 2026, no recession has been declared for the months those forecasts covered.
+
+Switch to **Fitted on all data** and the 2023 peak drops from 80% to 61%: once the model has seen the false alarm, it trusts inversions a little less. Only the real-time version shows what a forecaster would actually have said.
+
+Our logit, fitted on all known months, gives a **9.7%** chance that October 2027 is a recession month, against the New York Fed's 12.4%; the gap comes from the spread measure, logit versus probit and the estimation sample. Both tell the same story: with the curve back to a normal upward slope, the yield curve is no longer warning of recession.
+
+How would you say that to a board? Not "no recession", and not "9.7% recession". Try: *"The yield curve puts the chance that October 2027 is a recession month at about 10%, roughly 1 in 10. Since 1959, 11.8% of months were followed by a recession a year later, so that is a little below normal risk. If the curve flattened by a quarter point, the chance would rise to about 12%."* Every number has its unit, its date and a comparison; the exercise at the end builds it from code.
+
+### From probability to warning: pick a threshold
+
+A probability is not yet an action. Your CFO wants to know: **do we freeze hiring or not?** As with Part 1's [call list](#from-probability-to-decision-the-confusion-matrix), you choose a threshold. The <Term def="Hits ÷ all months followed by recession. Part 1 called it recall, or the true positive rate.">hit rate</Term> is the share of pre-recession months you flagged; the <Term def="False alarms ÷ all months not followed by recession. Also called the false positive rate.">false alarm rate</Term> is the share of calm months you flagged by mistake.
+
+The natural first guess, a 50% threshold, is a poor choice for rare events. In sample, only 21 of 802 months ever reached 50%, so the model flagged just **7 of 95** pre-recession months (a 7% hit rate). Lowering the threshold to 20% catches 56% of them, at the price of flagging 14% of calm months.
+
+If a missed recession costs your firm $k$ times as much as a false alarm, Part 1's break-even logic says warn when $p \gt 1/(1+k)$. With $k = 5$, warn above $1/6 \approx 17\%$. Choosing $k$ is a business judgment; the analyst's job is to deliver a well-calibrated probability and show the trade-off.
+
+### Scoring the probabilities themselves
+
+Two scores judge the whole set of probabilities, not one threshold.
+
+The <Term def="Area under the ROC curve. It equals the probability that a randomly chosen positive case gets a higher forecast than a randomly chosen negative case. 0.5 = coin flip, 1 = perfect ranking.">AUC</Term> (area under the ROC curve) measures **ranking**: the chance that a randomly chosen pre-recession month gets a higher probability than a randomly chosen calm month. In sample, the yield-curve logit scores **0.820**. A coin flip scores 0.5.
+
+The <Term def="Mean squared difference between the forecast probability and the 0/1 outcome. Lower is better; 0 is perfect.">Brier score</Term> measures **accuracy and calibration together**: the average of $(p_t - y_t)^2$.<sup>[16](#refs)</sup> On its own the number is hard to read, so compare it with <Term def="A constant forecast equal to the historical frequency of the event (here: the share of months followed by recession).">climatology</Term>, a forecast that always says the base rate. In sample, the logit's Brier score is **0.091** against **0.104** for climatology. The <Term def="1 − (Brier of the model ÷ Brier of the benchmark). Positive = better than the benchmark.">Brier skill score</Term>, 1 − 0.091 / 0.104 ≈ **13%**, says the model removes about an eighth of the benchmark's squared error.
+
+<div class="breakout">
+<Calibration client:load />
+</div>
+
+<Callout type="empirical" title="How to read a calibration chart">
+Read it group by group, like a table:
+
+- **Across** is what the model said (the group's average forecast); **up** is what happened (the share of those months followed by recession). The diagonal is "said = happened".
+- **Below the diagonal = overconfident** (it happened less often than forecast); **above = underconfident**.
+- **Weigh each dot by its size.** A group of 300 months that misses by 2 points is real information; a group of 10 that misses by 20 may be luck.
+</Callout>
+
+In sample, the forecasts below 20% are well calibrated, but above 40% the model is **overconfident**: the 32 months it scored between 40% and 60% (average 49%) were followed by recession only 25% of the time. Now press **Out of sample** and watch the Brier skill score turn negative.
+
+### The honest test: out of sample
+
+Everything so far was scored on the months the model was fitted to, which flatters any model ([Chapter 3](/chapters/benchmarks/)). So freeze the model at the end of 1999 and forecast 2000 onward, a period with three recessions and one long inversion that the model has never seen.
+
+<Predict client:load
+  question="On the Brier score, does the 1999 yield-curve model beat a constant forecast of the base rate over the test period January 2000 to October 2025?"
+  options={[
+    'Yes, comfortably, in every sub-period',
+    'Yes through 2019, but over the full period it does worse than the constant',
+    'No, it never beats the constant',
+    'The Brier score cannot be computed out of sample'
+  ]}
+  answer={1}
+  explain="Through 2019 the model clearly wins (Brier 0.084 against 0.103). Add the forecasts made since 2020, which include the 2022–24 warnings, and it loses: 0.102 against 0.084. Its AUC also falls, from 0.84 to 0.73."
+/>
+
+<div class="breakout">
+<CodeLab client:load id="ch08-oos" title="Out-of-sample test: a model frozen in 1999" r={oosR} py={oosPy} setup={setupR} pySetup={setupPy} pyPackages={['statsmodels', 'scikit-learn']}
+  goal="Train through 1999, forecast every month since, and score the forecasts against a constant base-rate benchmark over two test windows." />
+</div>
+
+| Test window | Months | AUC | Brier, model | Brier, climatology |
+|---|---|---|---|---|
+| Jan 2000 – Dec 2019 | 240 | 0.839 | **0.084** | 0.103 |
+| Jan 2000 – Oct 2025 | 310 | 0.734 | 0.102 | **0.084** |
+
+Two lessons:
+
+1. **A model can rank well and still lose to a constant.** The AUC is still 0.73, but the Brier score punishes confident mistakes hard: an 80% forecast for a calm month adds $0.8^2 = 0.64$, about eight times climatology's average (0.084).
+2. **The verdict depends on the window.** Six more years of data reversed the Brier comparison. Always say which period your accuracy numbers come from.
+
+In short, the model still ranked months better than chance, but its probabilities stopped meaning what they said (Beyond the basics below splits the Brier score to show this).
+
+## Your turn
+
+One short task for the economics desk. Fill in the blanks (`______`) and press **Run & check**.
+
+Your CFO wants one sentence: what does the yield curve say about a recession a year from now, and how much would it change if the curve flattened by 25 basis points? Compute the probability, the what-if, and the base rate to compare them with.
+
+<div class="breakout">
+<CodeLab client:load id="ch08-ex-cfo" exercise title="Exercise: brief the CFO in one sentence" r={exCfoR} solution={exCfoSolR} check={exCfoCheckR} py={exCfoPy} solutionPy={exCfoSolPy} checkPy={exCfoCheckPy} setup={setupR} pySetup={setupPy} pyPackages={['statsmodels']}
+  goal="Forecast the chance of recession 12 months after the latest month, redo it with a spread 25 basis points lower, and compare with the base rate."
+  hints={['A 0/1 target needs family = binomial in glm() (Python: smf.logit).', 'The spread is in percentage points, and 100 basis points = 1 point. So 25 basis points is 0.25, not 25.', 'The base rate is the average of the 0/1 target column, rec_ahead.']} />
+</div>
+
+## Chapter checklist
+
+- A straight line through 0/1 data (the **LPM**) can forecast impossible probabilities. The **logit** puts the line on the **log-odds** scale, `glm(y ~ x, family = binomial)`, and stays between 0 and 1.
+- **Read a coefficient in words, with its unit.** $e^{b}$ is an **odds ratio**: "34% lower odds per point", never "34 points lower probability". A quarter point is $0.66^{0.25} = 0.90$.
+- **Marginal effects**, $b\,p(1-p)$, are in percentage points and depend on where you start.
+- **Translate one case:** "about 6 in 100", against the base rate, in money.
+- Accuracy rewards ignoring a rare outcome; report **precision and recall**. Set the threshold from costs: $p \gt c/V$, or $p \gt 1/(1+k)$ for warnings.
+- **AUC** measures ranking; a **gain** chart turns it into a call list.
+- Ask of every predictor: **would I know it at forecast time?** If not, it is **leakage**.
+- **Build the target with a lead, not a lag**; check one date by hand. Quote spreads in **percentage points**.
+- The **Brier score** against climatology and a **calibration** chart judge whether probabilities mean what they say. Test **out of sample**.
+
+<BeyondBasics topics={['LPM vs logit vs probit', 'AME vs MEM and the divide-by-4 rule', 'One client, fact by fact', 'More checks on the campaign model', 'The S-curve by eye', 'Why logit and probit agree', 'Under the hood: likelihood, LR test, Newey–West', 'A recession tracker', 'The threshold game', 'Scoring by hand', 'Reliability against resolution', 'Other indicators', 'Extra practice']}>
+
+#### LPM vs logit vs probit on bank clients
+
+The lab fits the LPM, a **logit** and a **probit** with the same five pre-call facts on the training clients, and counts the impossible predictions.
+
+<div class="breakout">
+<CodeLab client:load id="nl-lpm" title="LPM vs logit vs probit on bank clients" r={lpmR} py={lpmPy}
+  pyPackages={['statsmodels', 'scikit-learn']}
+  goal="Fit three models for a 0/1 outcome, count the predictions outside [0, 1], and compare how well each ranks the test clients." />
+</div>
+
+On the 1,237 test clients, the three models *rank* clients almost identically: the share of (subscriber, non-subscriber) pairs put in the right order is 0.733 for the LPM, 0.735 for the logit and 0.735 for the probit.
+
+<Callout type="math" title="The linear probability model and its variance">
+For a 0/1 outcome, $E[y \mid x] = P(y = 1 \mid x)$, so OLS of $y$ on $x$ models the probability directly:
+
+$$
+P(y_i = 1 \mid x_i) = \beta_0 + \beta_1 x_{1i} + \dots + \beta_k x_{ki}.
+$$
+
+Because $y_i$ is Bernoulli, $\operatorname{Var}(y_i \mid x_i) = p_i(1 - p_i)$, which changes from client to client: the errors are heteroskedastic by construction. Nothing in the formula stops $\hat p_i$ from leaving $[0, 1]$, and $\partial p / \partial x_j = \beta_j$ is the same at every point.
+</Callout>
+
+#### Marginal effects: the average client and the divide-by-4 rule
+
+A second summary, the <Term def="The marginal effect computed once, for a hypothetical client whose every predictor is at its sample mean.">marginal effect at the mean</Term> (MEM), computes the slope for one hypothetical "average client". The two can disagree: for Euribor the AME is −3.41 percentage points per point and the MEM is **−2.92**. The mean rate, 3.61%, sits in the empty gap between the two clusters of calls (only 2 of 4,119 calls were made at rates between 2% and 4%), and the "average client" is 3.6% "past success". The MEM describes a client who does not exist, which is why most applied work reports the AME.
 
 <Callout type="math" title="The marginal effect p(1 − p)β, and the divide-by-4 rule">
 Differentiate the logistic curve with respect to $x_j$:
@@ -262,9 +594,9 @@ where $\Lambda$ is the logistic function. For a 0/1 predictor, use the discrete 
   explain="By the divide-by-4 rule, the slope βp(1 − p) is steepest at p = 0.5, where it equals β/4 = −0.42/4 ≈ −0.105, about **−10.5 percentage points**. Most clients in this file have probabilities near 5–15%, far from 0.5, so their effects are much smaller: the AME is −3.4 points."
 />
 
-### What the model says about one client
+#### Build a client's probability one fact at a time
 
-Odds ratios and marginal effects describe the model. A manager asks about a person: *"Should we call this client?"* To answer, build the client's probability one fact at a time. Start from a reference client the model gives 5.6% (40 years old, mobile phone, first call, never contacted, Euribor 4.9%: the client from the odds Predict above). Each fact where your client differs adds its coefficient times the difference to the log-odds. Add them up, then translate the total back into a probability.
+Start from the reference client the model gives 5.6% (40 years old, mobile phone, first call, never contacted, Euribor 4.9%). Each fact where your client differs adds its coefficient times the difference to the log-odds. Add them up, then translate the total back into a probability.
 
 <div class="breakout">
 <ClientScorecard client:load />
@@ -272,78 +604,17 @@ Odds ratios and marginal effects describe the model. A manager asks about a pers
 
 Try **Best prospect**: a 77-year-old reached on a mobile phone while Euribor was 0.9%, whose previous campaign had succeeded. Age adds 0.72 to the log-odds, the low rate 1.68 and the past success 1.86, and 5.6% becomes **80.9%**. The bars for the low rate and the past success are about the same length, so they multiply the odds by about the same factor (5.4 and 6.4). On the probability scale they would look very different depending on which came first. That is why the model adds on the log-odds scale and you translate only at the end.
 
-<Callout type="empirical" title="Translate a probability before you hand it over">
-People read "out of 100" faster and more correctly than percentages.<sup>[20](#refs)</sup> So write a client-level answer in three lines:
+#### More checks on the campaign model
 
-1. **The probability, as a count:** for the reference client, "5.6%: about 6 in 100 clients like her say yes."
-2. **Against the base rate:** 10.9% of all clients subscribed, so she is about half as likely as a typical client. A probability means little until you know what "normal" is.
-3. **In money:** at \$5 a call and \$50 a deposit, a call is worth $0.056 \times 50 - 5 = -\$2.18$ on average. Skip her, unless something the model does not see changes the picture.
-
-And never treat one outcome as a verdict. If she does say yes, the 5.6% was not "wrong": among 100 clients like her, about 6 should.
+<Callout type="pitfall" title="No dates, so no time split">
+Chapter 3 insisted that the test set must come <em>after</em> the training set. This file has no dates, and its rows are in random order.<sup>[1](#refs)</sup> The honest substitute is a <strong>stratified</strong> split: set aside 30% of the subscribers and 30% of the non-subscribers as a test set and fit on the rest. That answers <em>"how well will the model rank new clients from the same campaigns?"</em>, which is kinder than a real next-campaign forecast, in which the economy may have changed.
 </Callout>
 
-### From probability to decision: the confusion matrix
+Two more metrics come from the same confusion matrix. **Specificity**, TN / (TN + FP), is the share of non-subscribers left alone. **F1**, $2 \cdot \frac{\text{precision} \cdot \text{recall}}{\text{precision} + \text{recall}}$, is high only if both precision and recall are: 0.299 at the 0.5 threshold, 0.347 at 0.10 and 0.198 for calling everyone. Credit-scoring teams often report the <Term def="2 × AUC − 1: a rescaling of AUC so that 0 is random ranking and 1 is perfect. Common in credit scoring.">Gini coefficient</Term>, $2\,\text{AUC} - 1$ (0.470 here), instead of AUC; it carries the same information.
 
-A probability is not yet a call list. To act, you pick a <Term def="The probability above which a client is classified as a 'yes' (here: gets a phone call).">threshold</Term> and call everyone above it. Each threshold produces a <Term def="A 2×2 table that counts true positives, false positives, false negatives and true negatives for one threshold.">confusion matrix</Term>:
+**Quieter leakage: the call count.** Each row records a client's *last* call, and `campaign` counts the calls to that client, the last one included. A client who says yes is not called again, while one who keeps saying no may be called many times, so a high count partly records earlier refusals. When you decide whether to dial, you do know how many calls you have made, so the column passes the test. But its odds ratio of 0.91 reflects how the bank stopped calling as well as how persistence works, so do not read it as "each extra call lowers the chance".
 
-| | Actually subscribed | Actually said no |
-|---|---|---|
-| **Predicted yes (called)** | True positive (TP): a reached buyer | False positive (FP): a wasted call |
-| **Predicted no (not called)** | False negative (FN): a missed buyer | True negative (TN): a call rightly skipped |
-
-Five metrics summarize it:
-
-| Metric | Formula | The question it answers |
-|---|---|---|
-| **Accuracy** | (TP + TN) / all | What share of clients did we classify correctly? |
-| **Precision** | TP / (TP + FP) | Of the clients we called, what share subscribed? |
-| **Recall** (sensitivity) | TP / (TP + FN) | Of all the subscribers, what share did we reach? |
-| **Specificity** | TN / (TN + FP) | Of all the non-subscribers, what share did we leave alone? |
-| **F1** | $2 \cdot \frac{\text{precision} \cdot \text{recall}}{\text{precision} + \text{recall}}$ | One number that is high only if both precision and recall are |
-
-<Predict client:load
-  question="A model that **never** predicts a subscription, for any client, is scored on the 1,237 test clients. What is its accuracy?"
-  options={['About 11%', 'About 50%', 'About 89%', 'It cannot be computed']}
-  answer={2}
-  explain="**89.0%**: 1,101 of the 1,237 test clients said no, and 'always no' gets every one of them right. It also finds zero subscribers and earns nothing. This is the **accuracy paradox**: when one outcome is rare, accuracy rewards ignoring it. Our logit at the default 0.5 threshold scores 90.1%, barely better, while missing 110 of the 136 subscribers."
-/>
-
-<div class="breakout">
-<CodeLab client:load id="nl-classify" title="Confusion matrix, metrics, ROC/AUC and a gain table, by hand" r={classifyR} py={classifyPy} setup={setupBankR} pySetup={setupBankPy}
-  pyPackages={['statsmodels', 'scikit-learn']}
-  goal="Score the logit on the test clients at two thresholds, expose the accuracy paradox, trace the ROC curve, compute AUC and a decile gain table, and check how much AUC varies across splits." />
-</div>
-
-| Rule (1,237 test clients) | Called | TP | Accuracy | Precision | Recall | F1 | Profit |
-|---|---|---|---|---|---|---|---|
-| Logit, threshold 0.5 | 38 | 26 | **90.1%** | **68.4%** | 19.1% | 0.299 | \$1,110 |
-| Logit, threshold 0.10 | 400 | 93 | 71.7% | 23.2% | **68.4%** | **0.347** | **\$2,650** |
-| Call everyone | 1,237 | 136 | 11.0% | 11.0% | 100% | 0.198 | \$615 |
-| Always say no | 0 | 0 | 89.0% | — | 0% | — | \$0 |
-
-The 0.5 threshold wins on accuracy and precision and loses on the thing the business cares about. The profit column assumes, for illustration, that a call costs \$5 and a new deposit is worth \$50 to the bank. Then a call pays off when $p \times 50 \gt 5$, that is, when $p \gt 0.10$: a threshold set by economics, not by statistics.
-
-<Callout type="business" title="Choose the threshold from costs, not habit">
-With a cost $c$ per call and a value $V$ per success, call a client when $p \cdot V \gt c$, so the break-even threshold is $p^\ast = c / V$. The 50% default is right only if a missed buyer and a wasted call cost the same, which is almost never true. [Part 2](#from-probability-to-warning-pick-a-threshold) uses the same logic for recession warnings, where the costs are a false alarm and a missed recession.
-</Callout>
-
-### Plan the campaign: ROC, AUC, gains and lift
-
-A threshold is one point. To see every possible threshold at once, rank the clients from most to least promising and walk down the list. Two curves come out of that walk:
-
-- The <Term def="Receiver operating characteristic curve: true-positive rate (recall) against false-positive rate (1 − specificity) for every threshold.">ROC curve</Term> plots the share of buyers reached against the share of non-buyers called. The area under it, the <Term def="Area under the ROC curve: the probability that a randomly chosen subscriber gets a higher score than a randomly chosen non-subscriber. 0.5 = coin flip, 1 = perfect ranking.">AUC</Term>, is the probability that a random subscriber outranks a random non-subscriber.
-- The <Term def="Cumulative share of all positives (buyers) found when you act on the top x% of the ranked list. Also called a cumulative gains or lift chart.">gain curve</Term> plots the share of buyers reached against the share of the *whole list* called. That is the chart a marketing manager reads: "call 30% of the list, reach 65% of the buyers". <Term def="Gain divided by the share called: how many times better than random calling. Lift 2 at 30% means the top 30% holds twice its share of buyers.">Lift</Term> divides that gain by the share called.
-
-<div class="breakout">
-<CampaignPlanner client:load />
-</div>
-
-What the planner shows for the honest, before-the-call model:
-
-- **A call budget is a threshold.** "Call the top 20%" is the same decision as "call everyone with a predicted probability of at least 17.8%".
-- **Gains.** Calling the top 10% of the list reaches 33% of subscribers (lift 3.3); the top 20% reaches 53% (lift 2.6); the top 30% reaches 65% (lift 2.2).
-- **Profit.** At \$5 per call and \$50 per deposit, profit peaks at **\$2,675** by calling the top 31% of the list (385 clients, cut-off probability 11.8%, close to the 10% break-even). Calling everyone earns \$615.
-- **AUC 0.735**, Gini 0.470. Credit-scoring teams often report the <Term def="2 × AUC − 1: a rescaling of AUC so that 0 is random ranking and 1 is perfect. Common in credit scoring.">Gini coefficient</Term> instead of AUC; it carries the same information.
+**Odds-ratio shortcut.** For small coefficients, $b$ itself is close to the percent change in the odds. The calls coefficient is $-0.091$; the exact change is $-8.7\%$ per call. The shortcut fails for big ones: the past-success coefficient is 1.86, but the odds rise by 541%.
 
 <Callout type="empirical" title="Check the probabilities before you multiply them by money">
 The profit column treats a 20% forecast as "a 20% chance". Check that it is, on clients the model has not seen. Sort the 1,237 test clients into ten equal groups by predicted probability and compare each group's average forecast with its actual share of yeses. The top tenth was forecast at 38.4% on average and 36.3% subscribed; the next tenth, 19.7% against 21.8%. Among the lowest tenth the model said 2.4% and 4.0% subscribed: small numbers, since 4% of 124 clients is 5 people. Close enough to plan with. Part 2 runs the same check on recession forecasts and finds a very different answer.
@@ -369,141 +640,9 @@ $$
 where $r_i$ is client $i$'s rank among all scores (lowest = 1). The Gini coefficient is $2\,\text{AUC} - 1$.
 </Callout>
 
-### Too good to be true: the leakage trap
+#### Fit the S-curve by eye
 
-The bank's file has one more column we have not used: `duration`, the length of the call in seconds. Add it to the model and see what happens.
-
-<Predict client:load
-  question="The honest model's test AUC is 0.735. You add one column, the **length of the call**, and refit. What happens to the test AUC?"
-  options={['It barely moves', 'It rises to about 0.78', 'It jumps above 0.9', 'It falls, because the model overfits']}
-  answer={2}
-  explain="It jumps to **0.915**. A long call is partly a *record* of a yes: agreeing to a deposit takes a conversation, and not one of the 407 calls shorter than a minute ended in a subscription. But the call's length is unknown when you decide whom to call. The 'miracle' model cannot be used for the decision it was built for."
-/>
-
-<div class="breakout">
-<CodeLab client:load id="nl-leak" title="The leakage audit: what call duration does to AUC" r={leakR} py={leakPy} setup={setupBankR} pySetup={setupBankPy}
-  pyPackages={['statsmodels', 'scikit-learn']}
-  goal="Add the after-the-call variable duration to the logit, watch the test AUC jump from 0.735 to 0.915, and explain why the model is useless for targeting." />
-</div>
-
-The dataset's own documentation says it plainly: `duration` "highly affects the output target", is not known before a call is made, and should be included only for benchmark purposes and discarded for a realistic predictive model.<sup>[1](#refs)</sup> The median subscriber's call lasted 458 seconds against 165 for everyone else. Switch the campaign planner to **+ call duration** and every metric improves; that improvement is fake. This is the cross-sectional version of Chapter 3's look-ahead leakage.<sup>[7](#refs)</sup>
-
-**Before you trust any predictor, ask one question: would I know this value at the moment I make the forecast?** If not, it is leakage, however good the AUC looks.
-
-Leakage can also be quieter. Each row records a client's *last* call, and `campaign` counts the calls to that client, the last one included. A client who says yes is not called again, while one who keeps saying no may be called many times, so a high count partly records earlier refusals. When you decide whether to dial, you do know how many calls you have made, so the column passes the test. But its odds ratio of 0.91 reflects how the bank stopped calling as well as how persistence works, so do not read it as "each extra call lowers the chance".
-
-### Your turn: brief the marketing manager
-
-Two short tasks. Fill in the blanks (`______`) and press **Run & check**.
-
-**Task 1.** Your manager asks about one client before the team dials: a 40-year-old on a mobile phone, first call, Euribor at 4.9%. *"What are her chances, is the call worth \$5, and how much would a past success with her change things?"* Answer with a probability, an odds ratio, a change in percentage points and an expected value per call.
-
-<div class="breakout">
-<CodeLab client:load id="nl-ex-client" exercise title="Exercise: one client, in words and dollars" r={exClientR} solution={exClientSolR} check={exClientCheckR}
-  py={exClientPy} solutionPy={exClientSolPy} checkPy={exClientCheckPy} setup={setupBankR} pySetup={setupBankPy}
-  pyPackages={['statsmodels']}
-  goal="Predict one client's probability two ways, confirm that the ratio of the odds equals the odds ratio, and turn the difference into percentage points and dollars."
-  hints={['predict() returns log-odds unless you ask for type = "response" (Python: the .predict() method of the fitted model already returns probabilities).', 'Odds are p / (1 - p), so the blank inside the brackets is p itself. The change is the second probability minus the first: p[2] - p[1] in R, p[1] - p[0] in Python.', 'The expected value of a call is the chance of a yes times the value of a deposit ($50), minus the $5 cost.']} />
-</div>
-
-**Task 2.** The marketing team can afford to call only 20% of the next list. How many subscribers will it reach, and how many of its calls will succeed?
-
-<div class="breakout">
-<CodeLab client:load id="nl-ex-logit" exercise title="Exercise: the top-20% call list" r={exLogitR} solution={exLogitSolR} check={exLogitCheckR}
-  py={exLogitPy} solutionPy={exLogitSolPy} checkPy={exLogitCheckPy} setup={setupBankR} pySetup={setupBankPy}
-  pyPackages={['statsmodels']}
-  goal="Fit the logit, predict probabilities for the test clients, call the top 20%, and compute recall and precision."
-  hints={['A logit is a glm() with family = binomial (Python: smf.logit).', 'predict() returns log-odds unless you ask for type = "response" (Python: .predict()).', 'Recall divides the subscribers you reached by all subscribers: sum(test$yes == 1).']} />
-</div>
-
-<SessionBreak n={2} title="Will there be a recession next year? Probability forecasts for the economy" goals={['Build the 12-months-ahead 0/1 target and read the spread in its units (percentage points)', 'Fit the yield-curve logit and say what it means in words, with honest standard errors', 'Read a probability forecast and a calibration chart, and score the forecasts out of sample']} />
-
-## Part 2. Will there be a recession next year?
-
-Now scale the question up from one client to the whole economy. You run planning at a manufacturer, and next year's budget depends on one question: **will there be a recession?** Nobody can answer yes or no with confidence. But you can attach a *probability* to it, check how good past probabilities were, and decide in advance how high that probability must be before you cut hiring.
-
-In May 2023 the gap between the 10-year Treasury yield and the 3-month bill rate fell to **−1.57 percentage points**, its lowest monthly reading since 1981. That gap, the *yield-curve spread*, had turned negative ahead of every U.S. recession since 1969 except one (before 1990 it only flattened to about +0.1). Many forecasters expected a downturn. Yet through the latest data in this chapter (October 2026), the NBER has not declared one. In this part you build the famous model behind those warnings, look under its hood, learn to score probability forecasts properly, and find out exactly how much that two-year false alarm cost it.
-
-The tool is Part 1's logit, but four things change:
-
-- **The rows are months in time order.** The test set must come after the training set ([Chapter 3](/chapters/benchmarks/)), and neighboring months are not independent draws.
-- **The event is rare and a year away.** Only about 12% of months since 1959 were followed by a recession 12 months later.
-- **The answer arrives late.** The official referee dates recessions many months after the fact.
-- **The probability itself is the message.** Part 1 used probabilities mainly to *rank* clients. A board reads "30% chance of recession" as a number, so it had better mean what it says.
-
-That last point has a name. A model that says "30% chance" is not wrong when the event fails to happen; it would be wrong if events it called 30% happened 90% of the time. A forecast whose probabilities match the frequencies is <Term def="A probability forecast is calibrated when events it gives probability p happen about a fraction p of the time.">calibrated</Term>, and calibration will matter a lot by the end of the chapter.
-
-Our event is a U.S. recession. The official referee is the <Term def="The National Bureau of Economic Research's Business Cycle Dating Committee. It dates U.S. business-cycle peaks and troughs after the fact.">NBER</Term> dating committee, which defines a recession as a significant decline in economic activity that is spread across the economy and lasts more than a few months.<sup>[8](#refs)</sup> FRED turns its dates into a monthly indicator, `USREC`: 1 in every recession month, 0 otherwise.
-
-Our predictor is the <Term def="The 10-year Treasury yield minus the 3-month Treasury bill rate, in percentage points. Positive = normal upward-sloping yield curve; negative = inverted curve.">term spread</Term>: the 10-year Treasury yield (`GS10`) minus the 3-month bill rate (`TB3MS`), both monthly averages in percent. When short rates rise above long rates, the yield curve is <Term def="A yield curve on which short-term interest rates are higher than long-term ones, so the term spread is negative.">inverted</Term>.
-
-<Callout type="intuition" title="Why would bond yields predict recessions?">
-Two stories fit together. First, a long-term yield roughly reflects the short rates that investors expect over the coming years. If markets expect the Fed to cut rates, usually because they expect the economy to weaken, long yields fall below short ones. Second, an inverted curve often means monetary policy is tight right now: the Fed has pushed short rates up to fight inflation, and tight money slows the economy with a lag of a year or so.<sup>[9](#refs)</sup> Neither story is a law of nature, which is why we test the relationship rather than assume it.
-</Callout>
-
-<Callout type="empirical" title="The spread is in percentage points, and one point is a big move">
-Both yields are interest rates in percent per year, so their difference is measured in **percentage points** (pp). Bond traders count in **basis points**: 1 point = 100 basis points (bp). Three habits:
-
-- **Never quote a percent change of a spread.** It crosses zero, so "the spread fell 150%" means nothing. Say "the spread fell from +1.2 to −0.3 points" or "by 150 basis points".
-- **Know the typical size.** Since 1959 the monthly spread has ranged from −2.65 to +4.42 points, with a standard deviation of 1.24. The average month-to-month move is only 0.21 points, but over a year the spread changes by more than a full point about 37% of the time. So "one more point" in the coefficient table is a big but ordinary one-year swing; for a single month, think in quarter points.
-- **Check the measure.** The New York Fed uses a bond-equivalent bill rate, FRED's `TB3MS` is on a discount basis, and many news stories quote the 10-year minus 2-year spread instead. They differ by tenths of a point, which matters near zero. Write down which spread you use.
-</Callout>
-
-### Build the target: a recession 12 months from now
-
-The question is about the future, so the target has to look forward. We follow the New York Fed: for each month *t*, the target is **whether month *t* + 12 is a recession month**.<sup>[10](#refs)</sup> In code, that means shifting `USREC` back by 12 months, so that each row pairs *this* month's spread with the economy's state *a year later*. The last 12 rows have no answer yet, and those are exactly the months we want to forecast.
-
-<Callout type="pitfall" title="The referee announces the score late">
-The NBER dates turning points only once it is confident, often many months later. It announced the December 2007 peak on December 1, 2008, and the July 1990 peak in April 1991. The fastest call in recent history, the February 2020 peak, came on June 8, 2020.<sup>[11](#refs)</sup> Two consequences for you:
-<ul>
-<li>The most recent zeros in `USREC` are <strong>provisional</strong>. If the NBER later declares a recession that started in 2026, the last few targets in this part flip from 0 to 1.</li>
-<li>A real-time forecaster never knows the latest outcomes. When you backtest, use only outcomes that would have been known, or accept that your test is a little too kind.</li>
-</ul>
-</Callout>
-
-Why exactly a year? Three reasons. A budget, a hiring plan or an inventory order is set about a year ahead, so that is the horizon a planner needs. The spread's warning tends to arrive roughly a year early, as the radar below will show. And it is the New York Fed's convention, so your numbers can be compared with its published ones. (The exercise at the end tries the looser target "any recession within 12 months", and it scores worse.)
-
-<Predict client:load
-  question="Your data frame has one row per month. For the row dated **January 2007**, which month's `USREC` value belongs in the 12-months-ahead target?"
-  options={['January 2006', 'January 2007', 'December 2007', 'January 2008']}
-  answer={3}
-  explain="**January 2008**: the target pairs this month's spread with the economy a year later. Its value is 1, because the NBER dated the business-cycle peak to December 2007 and FRED's `USREC` counts the recession from the following month. The row for December 2006 gets December 2007's value, which is 0. Shifting the wrong way (using last year's value) would build a model that 'predicts' the past."
-/>
-
-<div class="breakout">
-<SpreadReader client:load />
-</div>
-
-Start at **May 2023**: the 3-month bill paid 5.14% and the 10-year bond 3.57%, a spread of −1.57 points (−157 basis points). The row asks about May 2024, which was not a recession month, and the full-sample logit gives it 61.2%, about 5.2 times the base rate. Then press **Jan 2007**: a milder inversion (−0.22 points) gets 28.7%, and January 2008 *was* a recession month. A probability is a statement about many months like this one, not a verdict on a single month.
-
-<Callout type="empirical" title="Shift the right way, then check one row by hand">
-Lead/lag mistakes are the most common bug in forecasting code, and they fail silently: the model still fits, often *better*. Two checks take a minute:
-
-- **Print a known date.** The January 2007 row should show `rec = 0` and `rec_ahead = 1` (January 2008); the January 2008 row should show `rec = 1`. If `rec_ahead` turns on 12 months *after* the recession starts instead of before, the shift went the wrong way.
-- **Count the gaps.** A 12-month lead leaves exactly 12 missing targets, all at the end of the sample. Missing values at the start mean you built a lag, not a lead.
-</Callout>
-
-The first lab builds the target and tries Part 1's [linear probability model](#why-a-straight-line-breaks) (LPM): an ordinary regression of the 0/1 target on the spread.
-
-<Predict client:load
-  question="You fit a straight line through 0/1 data: the higher the spread, the lower the recession probability. What does that line predict when the curve is very steep, say a spread of +4 points?"
-  options={['A small positive probability, like 2%', 'Exactly 0%', 'A negative probability', 'It depends on the sample size']}
-  answer={2}
-  explain="A straight line has no floor. Our LPM is 0.247 − 0.093 × spread, which crosses zero at a spread of about 2.7 points. Steeper than that, it predicts a <strong>negative</strong> chance of recession: in 145 of the 814 months since 1959."
-/>
-
-<div class="breakout">
-<CodeLab client:load id="ch08-target" title="Build the forward-looking target and fit a linear probability model" r={targetR} py={targetPy} pyPackages={['statsmodels']}
-  goal="Construct 'recession 12 months ahead' from USREC, check it by eye, and see the linear probability model predict impossible probabilities." />
-</div>
-
-The LPM never goes above 1 here (its highest fitted value is 0.49), but it goes below 0 in 145 months, as low as −0.16. These are the same flaws Part 1 found with bank clients: a probability of −16% is meaningless, and the straight line says each extra point of spread has the same effect whether the curve is deeply inverted or very steep. We need a curve that bends.
-
-### The same S-curve, fitted to 66 years of months
-
-As in Part 1, the [logit](#odds-log-odds-and-the-logistic-curve) passes a straight-line index, here $a + b \cdot \text{spread}$, through an S-shaped function that keeps every probability between 0 and 1, and it is fitted by maximum likelihood: the best curve gives high probabilities to months that were followed by recession and low probabilities to months that were not.
-
-Try it yourself before the computer does it.
+Before `glm()` does it, try fitting the recession curve yourself.
 
 <div class="breakout">
 <SCurveExplorer client:load />
@@ -515,6 +654,8 @@ Three things to notice:
 - **The fitted curve crosses 50% at a spread of about −1.1 points.** Even a mildly inverted curve gives "only" 20 to 40%. Recessions are rare (about 12% of months since 1959 were followed by one 12 months later), so the model needs strong evidence before it calls one likely.
 - **Most dots overlap.** Plenty of months with a negative spread were *not* followed by recession 12 months later. The spread is informative, not decisive.
 
+#### Why logit and probit agree
+
 <Callout type="math" title="The recession model in Part 1's notation">
 The model is Part 1's logit with one predictor and a target dated a year ahead:
 
@@ -524,51 +665,16 @@ P(y_{t+12} = 1 \mid s_t) = \frac{1}{1 + e^{-(a + b\,s_t)}}
 \log\frac{p}{1-p} = a + b\,s_t ,
 $$
 
-so $b$ is the change in the **log-odds** for a one-point change in today's spread $s_t$. The probit uses $p = \Phi(a + b\,s_t)$ instead. Both are fitted by maximum likelihood with `glm()`'s IRLS algorithm, which the explorer above also runs; the [next section](#under-the-hood-how-glm-finds-the-curve-and-how-sure-it-can-be) opens it up. One difference from Part 1 matters: the rows are months in time order, so neighboring months share most of their information, and the usual `glm()` standard errors are too small. That section measures by how much.
+so $b$ is the change in the **log-odds** for a one-point change in today's spread $s_t$.
 </Callout>
 
-#### Fit it with `glm()` and read the coefficients
-
-In R, a logit is one line: `glm(y ~ x, family = binomial(link = "logit"))`. Change `"logit"` to `"probit"` for a probit.
-
-<div class="breakout">
-<CodeLab client:load id="ch08-logit" title="Logit and probit with glm(): coefficients, odds and predicted probabilities" r={logitR} py={logitPy} setup={setupR} pySetup={setupPy} pyPackages={['statsmodels']}
-  goal="Estimate the yield-curve recession model as a logit and a probit, and translate the coefficients into odds ratios, probabilities and marginal effects." />
-</div>
-
-How to read the output (logit, fitted on January 1959 to October 2025). Part 1 summarized marginal effects with one average over all clients. With a single predictor whose effect swings this much, it is more useful to report them at a few chosen spreads:
-
-| Quantity | Value | Plain English |
-|---|---|---|
-| Slope $b$ | −1.014 | Each extra point of spread lowers the log-odds of recession a year later by about 1 |
-| <Term def="exp(b): the factor by which the odds p/(1 − p) are multiplied when the predictor rises by one unit.">Odds ratio</Term> $e^b$ | 0.363 | Each extra point of spread multiplies the odds by 0.36, cutting them by about 64% |
-| P(recession) at spread −1, 0, +1, +2 | 47%, 24%, 10%, 4% | The same one-point change matters much more near the middle of the S |
-| <Term def="The change in the predicted probability for a small change in a predictor, evaluated at a chosen value of that predictor. For a logit it equals b·p·(1 − p).">Marginal effect</Term> at spread 0 | −18.7 pp | Near a flat curve, one more point of spread lowers the probability by about 19 percentage points |
-| Marginal effect at spread +2 | −4.0 pp | With a steep curve, the probability is already low and barely moves |
-
-The probit gives nearly the same probabilities (45%, 25%, 11% and 4% at the same spreads) and a very similar log-likelihood (−237.0 against −238.6 for the logit). In practice the choice between logit and probit rarely matters. Logit coefficients are easier to explain as odds; the New York Fed's model happens to be a probit.
+The **probit** model replaces the logistic curve with the normal cumulative distribution, $p_i = \Phi(x_i'\beta)$; its coefficients are smaller, typically by a factor of about 1.6 to 1.8, and its probabilities are nearly identical.<sup>[2](#refs)</sup>
 
 <Callout type="intuition" title="Why logit and probit agree: a hidden 'recession pressure'">
 Picture an unobserved index of recession pressure, $y^\ast_t = a + b\,s_t + \varepsilon_t$, and suppose a recession follows whenever $y^\ast_t \gt 0$. Then $P(y = 1) = P(\varepsilon_t \gt -(a + b\,s_t))$. If the shock $\varepsilon$ has a logistic distribution you get the logit; if it is standard normal you get the probit. The two distributions have almost the same bell shape, but the logistic one is wider: its standard deviation is $\pi/\sqrt{3} \approx 1.81$ rather than 1. So the logit needs coefficients about 1.6 to 1.8 times larger to describe the same probabilities. Here the logit slope is 1.81 times the probit slope (−1.014 against −0.560), and the intercept 1.68 times. The curves differ only far out in the tails, where there are few months to tell them apart.<sup>[2](#refs)</sup>
 </Callout>
 
-<Predict client:load kind="check"
-  question="A colleague reads the slope −1.01 and says: 'A one-point rise in the spread lowers the recession probability by 1.01, that is, by 101 percentage points.' What is wrong?"
-  options={[
-    'Nothing, that is the definition of a slope',
-    'The slope is on the log-odds scale; the effect on the probability depends on where you start',
-    'The slope must be divided by 100 because the spread is in percent',
-    'Logit slopes cannot be interpreted at all'
-  ]}
-  answer={1}
-  explain="In a logit the coefficient moves the <strong>log-odds</strong>, not the probability. Translate it either as an odds ratio (e<sup>−1.01</sup> = 0.36) or as a marginal effect at a chosen spread: about −19 percentage points near a flat curve, but only −4 with a steep one."
-/>
-
-### Under the hood: how `glm()` finds the curve, and how sure it can be
-
-<Callout type="tip" title="Optional depth">
-In class we take only the three bold answers below (about 5 minutes). The lab and the math box are for students who want to see the machinery; nothing later in the course depends on them.
-</Callout>
+#### Under the hood: how `glm()` finds the curve, and how sure it can be
 
 This section is about trust: how the computer picks the curve, whether the spread really helps, and how precise the slope is. The three answers are in bold below; the formulas stay in the "Show the math" box.
 
@@ -622,57 +728,27 @@ $$
 where $g_t = x_t (y_t - \hat p_t)$ is month $t$'s contribution to the gradient. With $L = 0$ it reduces to the robust (heteroskedasticity-only) version. For an $h$-step-ahead target, choose $L$ of at least $h - 1$ = 11; the lab uses 24 to allow for slow-moving errors. In R, `sandwich::NeweyWest()` computes it for a fitted model; in Python, `fit(cov_type="HAC", cov_kwds={"maxlags": 24})`.
 </Callout>
 
-### The yield-curve recession model
-
-This model has a pedigree. Arturo Estrella and Gikas Hardouvelis showed in 1991 that the slope of the yield curve predicts U.S. output growth and NBER recessions.<sup>[9](#refs)</sup> Estrella and Frederic Mishkin then compared many financial indicators and found that beyond one quarter ahead, the yield-curve slope was the best single predictor of recessions, and out of sample it usually did better alone than combined with other variables.<sup>[12](#refs)</sup>
-
-The Federal Reserve Bank of New York publishes a monthly recession probability based on this work.<sup>[10](#refs)</sup> Its recipe:
-
-- **Predictor:** the 10-year Treasury yield minus the 3-month Treasury bill rate, monthly averages. The New York Fed converts the bill rate to a *bond-equivalent* basis; FRED's `TB3MS` is on a discount basis, so our spread differs slightly.<sup>[13](#refs)</sup>
-- **Target:** whether the economy is in recession **12 months later**, the same target you just built.
-- **Model:** a probit estimated on January 1959 to December 2009, with intercept −0.5333 and slope −0.6330.
-
-Its November 5, 2026 update put the October 2026 spread at 0.98 points and the probability of recession in October 2027 at **12.4%**.<sup>[10](#refs)</sup>
-
-Now look at the whole history. Each forecast is drawn at the month it is *about*, so a good model's peaks should land on the grey recession bars.
+#### A recession-probability tracker, New York Fed style
 
 <Predict client:load
   question="Consider a model fitted only on data up to 1999. In May 2023 the spread was −1.57 points. What probability did that model give to a recession in May 2024?"
   options={['About 20%', 'About 40%', 'About 60%', 'About 80%']}
   answer={3}
-  explain="About <strong>80%</strong>. The 1999 model has an even steeper slope than the full-sample one, because inversions before 2000 were followed by recessions so reliably. Every one of its 21 forecasts above 50% made after 1999 was issued between December 2022 and September 2024, and none was followed by a recession. Find that episode in the radar below."
+  explain="About <strong>80%</strong>. The 1999 model has an even steeper slope than the full-sample one, because inversions before 2000 were followed by recessions so reliably. Every one of its 21 forecasts above 50% made after 1999 was issued between December 2022 and September 2024, and none was followed by a recession. Find that episode in the radar in Part 2."
 />
-
-<div class="breakout">
-<RecessionRadar client:load />
-</div>
-
-What the radar shows, with the model frozen at the end of 1999 and a 30% threshold:
-
-- **2001 and 2008: right direction, imperfect timing.** The spread inverted in 2000 and again in 2006–07, and probabilities rose to about 44 to 49%. But the spread's warning comes early and fades: by 2008 the Fed was cutting rates, the curve was steep again, and the model's probabilities had dropped right when the recession months arrived. Out of sample, it flagged only 9 of the 28 recession months.
-- **2020: a lucky call?** The curve briefly inverted in mid-2019 and the model rose to about 42% for mid-2020. A recession did come, but it was caused by a pandemic that no bond market predicted. Count it as a hit in the scoring, but not as proof.
-- **2023–24: the long false alarm.** From November 2022 to November 2024 the spread was negative for 25 straight months, the longest run since 1959 in this data. The model's probability passed 50% for 21 of them. As of October 2026, no recession has been declared for the months those forecasts covered. In total, 39 of 282 calm months were flagged at the 30% threshold.
-
-Switch to **Fitted on all data** and the 2023 peak drops from 80% to 61%: once the model has seen the false alarm, it learns to trust inversions a little less. Only the real-time version shows what a forecaster would actually have said.
 
 <div class="breakout">
 <CodeLab client:load id="ch08-timeline" title="A recession-probability tracker, New York Fed style" r={timelineR} py={timelinePy} setup={setupR} pySetup={setupPy} pyPackages={['statsmodels', 'scipy']}
   goal="Fit the model on every month with a known outcome, forecast the next 12 months, plot the probability against NBER recessions, and compare it with the New York Fed's published coefficients." />
 </div>
 
-Our logit gives a **9.7%** chance that October 2027 is a recession month. The New York Fed's coefficients applied to our spread give 11.2%, and its own published figure is 12.4%. The gap between those two is entirely the spread measure (0.98 points on the New York Fed's bond-equivalent basis, 1.08 on ours); the rest of the gap to our 9.7% comes from logit versus probit and the different estimation sample. All three tell the same story: with the curve back to a normal upward slope, the yield curve is no longer warning of recession.
-
-How would you say that to a board? Not "no recession", and not "9.7% recession". Try: *"The yield curve puts the chance that October 2027 is a recession month at about 10%, roughly 1 in 10. Since 1959, 11.8% of months were followed by a recession a year later, so that is a little below normal risk. If the curve flattened by a quarter point, the chance would rise to about 12%."* Every number has its unit, its date and a comparison. The last exercise asks you to produce exactly this sentence from code.
-
 <Callout type="pitfall" title="Has the curve stopped working?">
-Nobody knows yet, and you should be wary of confident answers in either direction. In the middle of the 2023–24 episode, economists were already warning that the nominal spread "could be less informative than it has been in the past", for example because long-run and short-run inflation expectations had diverged unusually.<sup>[14](#refs)</sup> Others have argued that a near-term forward spread, built from expected short rates over the next 18 months, is a cleaner signal than the 10-year minus 3-month spread.<sup>[15](#refs)</sup> And the NBER lag means the final verdict on 2024–26 is not in. What you *can* say precisely is how much the episode hurt the model's track record. That is the next two sections.
+Nobody knows yet, and you should be wary of confident answers in either direction. In the middle of the 2023–24 episode, economists were already warning that the nominal spread "could be less informative than it has been in the past", for example because long-run and short-run inflation expectations had diverged unusually.<sup>[14](#refs)</sup> Others have argued that a near-term forward spread, built from expected short rates over the next 18 months, is a cleaner signal than the 10-year minus 3-month spread.<sup>[15](#refs)</sup> And the NBER lag means the final verdict on 2024–26 is not in. What you *can* say precisely is how much the episode hurt the model's track record. The out-of-sample test in Part 2 and the reliability/resolution split below measure it.
 </Callout>
 
-### From probability to warning: pick a threshold
+#### The threshold game: every recession threshold at once
 
-A probability is not yet an action. Your CFO wants to know: **do we freeze hiring or not?** As with Part 1's [call list](#from-probability-to-decision-the-confusion-matrix), you choose a threshold and read the confusion matrix. Forecasters of economic events use their own words for its cells: a **hit** is a warning followed by recession, a **false alarm** a warning followed by none, a **miss** a recession nobody warned of. The <Term def="Hits ÷ all months followed by recession. Part 1 called it recall, or the true positive rate.">hit rate</Term> is the share of pre-recession months you flagged; the <Term def="False alarms ÷ all months not followed by recession. Also called the false positive rate.">false alarm rate</Term> is the share of calm months you flagged by mistake.
-
-The natural first guess, a 50% threshold, is a poor choice for rare events. In sample, only 21 of 802 months ever reached 50%, so the model flagged just **7 of 95** pre-recession months (a 7% hit rate). Lowering the threshold to 20% catches 56% of them, at the price of flagging 14% of calm months.
+Slide the threshold and set the cost ratio yourself.
 
 <div class="breakout">
 <ThresholdGame client:load />
@@ -694,13 +770,7 @@ This is the same break-even logic as Part 1's $p^\ast = c/V$: act when the expec
 Not the analyst alone. The threshold encodes a value judgment about the cost of errors. A bank deciding whether to raise loan-loss reserves, a retailer deciding on holiday inventory and a central bank deciding on policy face very different costs. Your job is to deliver a well-calibrated probability **and** to show decision makers the trade-off, ideally as a chart like the threshold game above. Report the probability itself, not just "recession: yes".
 </Callout>
 
-### Scoring the probabilities themselves
-
-The confusion matrix depends on one threshold. Two scores judge the whole set of probabilities instead.
-
-The <Term def="Area under the ROC curve. It equals the probability that a randomly chosen positive case gets a higher forecast than a randomly chosen negative case. 0.5 = coin flip, 1 = perfect ranking.">AUC</Term> (area under the ROC curve) measures **ranking**: the chance that a randomly chosen pre-recession month gets a higher probability than a randomly chosen calm month. In sample, the yield-curve logit scores **0.820**. A coin flip scores 0.5.
-
-The <Term def="Mean squared difference between the forecast probability and the 0/1 outcome. Lower is better; 0 is perfect.">Brier score</Term> measures **accuracy and calibration together**: the average of $(p_t - y_t)^2$. It was proposed by the meteorologist Glenn Brier in 1950 for weather forecasts.<sup>[16](#refs)</sup> On its own the number is hard to read, so compare it with <Term def="A constant forecast equal to the historical frequency of the event (here: the share of months followed by recession).">climatology</Term>, a forecast that always says the base rate. In sample, the logit's Brier score is **0.091** against **0.104** for climatology. The <Term def="1 − (Brier of the model ÷ Brier of the benchmark). Positive = better than the benchmark.">Brier skill score</Term> is therefore 1 − 0.091 / 0.104 ≈ **13%**: the model removes about an eighth of the benchmark's squared error.
+#### Scoring the recession model by hand
 
 <Predict client:load
   question="In sample, the 32 months the model gave between 40% and 60% (49% on average) were followed by a recession only **25%** of the time. On a calibration chart, with the forecast across and the actual share up, where does that group's dot sit, and what does it say?"
@@ -710,59 +780,13 @@ The <Term def="Mean squared difference between the forecast probability and the 
 />
 
 <div class="breakout">
-<Calibration client:load />
-</div>
-
-<Callout type="empirical" title="How to read a calibration chart">
-Read it group by group, like a table:
-
-- **Across** is what the model said (the group's average forecast); **up** is what happened (the share of those months followed by recession). The diagonal is "said = happened".
-- **Below the diagonal = overconfident** (it happened less often than forecast); **above = underconfident**.
-- **Weigh each dot by its size.** A group of 300 months that misses by 2 points is real information; a group of 10 that misses by 20 may be luck. Recessions are rare, so the high-probability groups are always the small ones.
-- **Look hardest near your decision threshold.** If you act at 15–20%, calibration in that range matters more than at 70%.
-</Callout>
-
-In sample, the forecasts below 20% are well calibrated: months given about 15% were followed by recession 16% of the time. Above 40% the model is **overconfident**. The 32 months it scored between 40% and 60% (average 49%) were followed by recession only 25% of the time. Now press **Out of sample** and watch the Brier skill score turn negative.
-
-<div class="breakout">
 <CodeLab client:load id="ch08-scoring" title="Confusion matrix, ROC, AUC, Brier score and calibration, by hand" r={scoringR} py={scoringPy} setup={setupR} pySetup={setupPy} pyPackages={['statsmodels', 'scikit-learn']}
   goal="Score the yield-curve logit with the full toolkit for probability forecasts, using only base R (and check the AUC against scikit-learn in Python)." />
 </div>
 
-### The honest test: out of sample
-
-Everything so far was scored on the same months the model was fitted to. As [Chapter 3](/chapters/benchmarks/) insisted, that flatters any model. So freeze the model at the end of 1999 and forecast 2000 onward, a period with three recessions and one long inversion that the model has never seen. (The last training rows, dated 1999, have targets in 2000, so no test outcome leaks into the fit. A strict real-time forecaster would also have lacked those 2000 outcomes, so the test is still slightly kind to the model.)
-
-<Predict client:load
-  question="On the Brier score, does the 1999 yield-curve model beat a constant forecast of the base rate over the test period January 2000 to October 2025?"
-  options={[
-    'Yes, comfortably, in every sub-period',
-    'Yes through 2019, but over the full period it does worse than the constant',
-    'No, it never beats the constant',
-    'The Brier score cannot be computed out of sample'
-  ]}
-  answer={1}
-  explain="Through 2019 the model clearly wins (Brier 0.084 against 0.103). Add the forecasts made since 2020, which include the 2022–24 warnings, and it loses: 0.102 against 0.084. Its AUC also falls, from 0.84 to 0.73."
-/>
-
-<div class="breakout">
-<CodeLab client:load id="ch08-oos" title="Out-of-sample test: a model frozen in 1999" r={oosR} py={oosPy} setup={setupR} pySetup={setupPy} pyPackages={['statsmodels', 'scikit-learn']}
-  goal="Train through 1999, forecast every month since, and score the forecasts against a constant base-rate benchmark over two test windows." />
-</div>
-
-| Test window | Months | AUC | Brier, model | Brier, climatology |
-|---|---|---|---|---|
-| Jan 2000 – Dec 2019 | 240 | 0.839 | **0.084** | 0.103 |
-| Jan 2000 – Oct 2025 | 310 | 0.734 | 0.102 | **0.084** |
-
-Two lessons:
-
-1. **A model can rank well and still lose to a constant.** Even over the full period the AUC is 0.73, well above a coin flip. But the Brier score punishes confident mistakes hard: a forecast of 80% for a month with no recession adds $0.8^2 = 0.64$ to the squared error, about eight times the climatology forecast's average (0.084). The largest squared errors came from forecasts made in 2007 and 2008, which missed the timing of the Great Recession, and from those made in 2023 and 2024, the long false alarm.
-2. **The verdict depends on the window.** Through 2019 the yield curve looked like a superb indicator; six more years of data reversed the Brier comparison. Always say which period your accuracy numbers come from.
-
 #### Why it lost: reliability against resolution
 
-*Optional depth: the one-sentence takeaway is in the last paragraph of this subsection.* The lab's last step takes the Brier score apart. Group the forecasts into ten bins (0–10%, 10–20%, …) and three pieces appear:<sup>[17](#refs)</sup>
+The out-of-sample lab's last step takes the Brier score apart. Group the forecasts into ten bins (0–10%, 10–20%, …) and three pieces appear:<sup>[17](#refs)</sup>
 
 - <Term def="The average squared gap between each bin's average forecast and the share of its months that actually saw the event. The calibration-error part of the Brier score: lower is better.">Reliability</Term>: how far each bin's forecasts sit from what happened in that bin. This is the calibration error; lower is better.
 - <Term def="How much the event rates of the forecast bins differ from the overall event rate. The part of the Brier score that rewards telling risky cases from safe ones: higher is better.">Resolution</Term>: how different the bins' actual outcomes are from the overall rate. This is the ability to tell risky months from calm ones; higher is better.
@@ -786,7 +810,7 @@ $$
 The identity is exact when every forecast in a bin is the same; with ten bins the gap here is below 0.002. The Brier skill score against the window's base rate is approximately $(\text{resolution} - \text{reliability}) / \text{uncertainty}$.
 </Callout>
 
-### Can other indicators help?
+#### Can other indicators help?
 
 The yield curve is only one signal. Three others are popular: the <Term def="Moody's Baa corporate bond yield minus the 10-year Treasury yield (FRED: BAA10Y). It widens when investors fear defaults.">credit spread</Term> (`BAA10Y`), initial jobless claims (`ICSA`, seasonally adjusted, which [Chapter 8](/chapters/dynamic-regression/) studies in depth) and University of Michigan consumer sentiment (`UMCSENT`, not seasonally adjusted). Adding them to a logit is easy: `glm(y ~ spread + baa + claims, ...)`. Whether they *help* is an out-of-sample question. Because the credit spread starts in 1986, this test trains on 1986–2005 and evaluates on 2006 onward, and it asks the question at two horizons.
 
@@ -813,19 +837,35 @@ The 3-month and 12-month models are separate fits, each with its own shifted tar
 In the predictors lab, replace `ahead3` and `ahead12` with a 6-month-ahead target (`c(z$rec[-(1:6)], rep(NA, 6))`). At which horizon does the spread overtake claims? Then try `T10Y2Y` (10-year minus 2-year) in place of `GS10 - TB3MS`, loaded with `fred("T10Y2Y", to = "month")`.
 </Callout>
 
-## Your turn
+#### Extra practice
 
-Two short tasks for the economics desk. Fill in the blanks (`______`) and press **Run & check**.
+Two more quick checks, a Part 1 exercise and a Part 2 exercise.
 
-**Task 1.** Your CFO wants one sentence: what does the yield curve say about a recession a year from now, and how much would it change if the curve flattened by 25 basis points? Compute the probability, the what-if, and the base rate to compare them with.
+<Predict client:load kind="check"
+  question="The Euribor odds ratio is 0.66 per percentage point. Rates rise by a quarter point (25 basis points). By what factor are the odds of a yes multiplied?"
+  options={['About 0.17 (0.66 ÷ 4)', 'About 0.90', 'About 0.66', 'About 0.34']}
+  answer={1}
+  explain="Odds ratios multiply, so a quarter of a step is the **fourth root**: 0.66<sup>0.25</sup> = 0.90, about 10% lower odds. Four quarter-point rises in a row give 0.90 × 0.90 × 0.90 × 0.90 = 0.66, the full-point ratio again. Dividing by 4 would claim a quarter-point rise cuts the odds by 83%, far more than a whole point does."
+/>
+
+<Predict client:load
+  question="You fit a straight line through 0/1 data: the higher the spread, the lower the recession probability. What does that line predict when the curve is very steep, say a spread of +4 points?"
+  options={['A small positive probability, like 2%', 'Exactly 0%', 'A negative probability', 'It depends on the sample size']}
+  answer={2}
+  explain="A straight line has no floor. Our LPM is 0.247 − 0.093 × spread, which crosses zero at a spread of about 2.7 points. Steeper than that, it predicts a <strong>negative</strong> chance of recession: in 145 of the 814 months since 1959."
+/>
+
+**The top-20% call list.** The marketing team can afford to call only 20% of the next list. How many subscribers will it reach, and how many of its calls will succeed?
 
 <div class="breakout">
-<CodeLab client:load id="ch08-ex-cfo" exercise title="Exercise: brief the CFO in one sentence" r={exCfoR} solution={exCfoSolR} check={exCfoCheckR} py={exCfoPy} solutionPy={exCfoSolPy} checkPy={exCfoCheckPy} setup={setupR} pySetup={setupPy} pyPackages={['statsmodels']}
-  goal="Forecast the chance of recession 12 months after the latest month, redo it with a spread 25 basis points lower, and compare with the base rate."
-  hints={['A 0/1 target needs family = binomial in glm() (Python: smf.logit).', 'The spread is in percentage points, and 100 basis points = 1 point. So 25 basis points is 0.25, not 25.', 'The base rate is the average of the 0/1 target column, rec_ahead.']} />
+<CodeLab client:load id="nl-ex-logit" exercise title="Exercise: the top-20% call list" r={exLogitR} solution={exLogitSolR} check={exLogitCheckR}
+  py={exLogitPy} solutionPy={exLogitSolPy} checkPy={exLogitCheckPy} setup={setupBankR} pySetup={setupBankPy}
+  pyPackages={['statsmodels']}
+  goal="Fit the logit, predict probabilities for the test clients, call the top 20%, and compute recall and precision."
+  hints={['A logit is a glm() with family = binomial (Python: smf.logit).', 'predict() returns log-odds unless you ask for type = "response" (Python: .predict()).', 'Recall divides the subscribers you reached by all subscribers: sum(test$yes == 1).']} />
 </div>
 
-**Task 2.** The New York Fed's target asks whether the economy is in recession in month *t* + 12. A more natural-sounding question is whether **any** of the next 12 months is a recession month. Build that target, fit the logit, and compare the two AUCs.
+**A 'within 12 months' target.** The New York Fed's target asks whether the economy is in recession in month *t* + 12. A more natural-sounding question is whether **any** of the next 12 months is a recession month. Build that target, fit the logit, and compare the two AUCs.
 
 <div class="breakout">
 <CodeLab client:load id="ch08-ex1" exercise title="Exercise: a 'within 12 months' target" r={exR} solution={exSolR} check={exCheckR} py={exPy} solutionPy={exSolPy} checkPy={exCheckPy} setup={setupR} pySetup={setupPy} pyPackages={['statsmodels', 'scikit-learn']}
@@ -833,54 +873,43 @@ Two short tasks for the economics desk. Fill in the blanks (`______`) and press 
   hints={['The window runs from month i + 1 to month i + 12, so the first blank is how many months ahead the window ends.', 'A 0/1 target needs `family = binomial` in `glm()` (in Python: `smf.logit`).']} />
 </div>
 
-## Chapter checklist
-
-- A straight line through 0/1 data (the **LPM**) can forecast probabilities below 0 or above 1, has heteroskedastic errors by construction and forces constant effects. It still ranks reasonably well.
-- The **logit** puts the line on the **log-odds** scale: `glm(y ~ x, family = binomial)`. The **probit** gives nearly the same probabilities; its coefficients are smaller by a factor of about 1.6 to 1.8.
-- **Read a coefficient in words, with its unit.** $e^{b}$ is an **odds ratio**: "each point of Euribor goes with 34% lower odds" ($100 \times (\text{OR} - 1)$), never "34 points lower probability". Rescale by powers: a quarter point is $0.66^{0.25} = 0.90$. Stay inside the range of the data.
-- **Report effects in percentage points as marginal effects**, $b\,p(1-p)$: averaged over clients (AME) or at chosen values. They depend on where you start; $b/4$ is the most they can be.
-- **Translate for one case:** probability → "about 6 in 100 like her" → compared with the base rate → in money ($p \times V - c$). One outcome cannot prove a probability right or wrong.
-- Both models are fitted by **maximum likelihood** (IRLS). Test added predictors with a **likelihood-ratio test**; McFadden's pseudo-R² of 0.2 to 0.4 is already a good fit.
-- A threshold turns probabilities into actions. Report **precision, recall, specificity and F1**, not just accuracy, which rewards ignoring a rare outcome. Set the threshold from costs: call when $p \gt c/V$; warn of a recession when $p \gt 1/(1+k)$ if a miss costs $k$ times a false alarm.
-- **ROC/AUC** measures ranking; **gain and lift** charts turn ranking into "call x% of the list, reach y% of buyers"; the **Brier score**, its **reliability/resolution** split and a **calibration** chart judge whether the probabilities mean what they say. A dot below the diagonal means overconfident.
-- Ask of every predictor: **would I know it at forecast time?** Call duration fails, and its AUC of 0.915 is leakage.
-- For time series, **build the target with a lead, not a lag** (`USREC` 12 months ahead; check one known date by hand; the latest values are provisional). Quote the **spread in percentage points** (1 point = 100 basis points), never as a percent change. Use **Newey–West** standard errors for overlapping targets, and test **out of sample**: the yield-curve model beat a constant through 2019 but lost to it once the 2022–24 false alarm entered the window.
+</BeyondBasics>
 
 <InstructorKit
-  data={['bank_marketing', 'GS10', 'TB3MS', 'USREC', 'BAA10Y', 'ICSA', 'UMCSENT']}
+  data={['bank_marketing', 'GS10', 'TB3MS', 'USREC']}
   sessions={[
     { title: 'Will this client say yes? Logistic regression for business decisions', plan: [
       '5 min · Hook: two managers, two yes/no questions. Predict: can a straight line give a negative probability? Show **LineBreaks**.',
-      '8 min · Run the LPM lab: 70 impossible forecasts, yet nearly the same ranking (0.733 vs 0.735).',
-      '14 min · Odds and odds ratios: Predict (6.4× the odds is 28%, not 36%), **OddsTranslator**, odds lab. Read the odds-ratio table aloud in words; Predict on the quarter-point rescaling (0.90).',
-      '10 min · One client: **ClientScorecard** (reference 5.6%, best prospect 80.9%); then **MarginalEffects** and the divide-by-4 check (AME −3.4 pp).',
-      '30 min · Activity: campaign war room (below): confusion matrix, accuracy paradox, **CampaignPlanner**, profit-maximizing share of the list.',
+      '12 min · Odds and odds ratios: Predict (6.4× the odds is 28%, not 36%), **OddsTranslator**, odds lab. Read the odds-ratio table aloud in words, with units (a quarter point of Euribor is 0.66^0.25 = 0.90).',
+      '8 min · **MarginalEffects**: the same coefficient moves the probability by 8 points or 2 (AME −3.4 pp). One client in three lines: 5.6%, "about 6 in 100", −$2.18 per call.',
+      '25 min · Activity: campaign war room (below): confusion matrix, accuracy paradox, **CampaignPlanner**, profit-maximizing share of the list.',
       '6 min · Leakage: Predict on call duration (AUC 0.735 → 0.915), run the leakage lab, ask "would I know it at decision time?"',
-      '2 min · Exit ticket: write one odds ratio as a memo line, with its unit. Homework: the two Part 1 exercises.'
+      '4 min · Exit ticket: write one odds ratio as a memo line, with its unit. Homework: the Part 1 exercise.',
+      '15 min · Buffer: questions, catch-up'
     ] },
     { title: 'Will there be a recession next year? Probability forecasts for the economy', plan: [
       '5 min · Hook: May 2023, spread −1.57 points, no recession (yet). Predict: which month’s USREC goes in the January 2007 row?',
-      '10 min · **SpreadReader**: one row of the data, the 12-month lead, units (points vs basis points). Run the target lab (145 negative LPM forecasts).',
-      '10 min · Logit lab: slope −1.01, odds ratio 0.36, P = 47%, 24%, 10%, 4% at spreads −1, 0, 1, 2; Predict on "101 percentage points".',
-      '5 min · Under the hood, light: the log-likelihood table and the Newey–West Predict (0.114 → 0.247). Leave the math box for reading.',
-      '10 min · Scoring: Brier 0.091 vs 0.104 for climatology; calibration Predict (below the diagonal = overconfident) and **Calibration** in and out of sample.',
-      '30 min · Activity: recession call desk (below): **RecessionRadar**, **ThresholdGame**, out-of-sample lab, a board sentence.',
-      '5 min · Wrap-up: read today’s 9.7% against the 11.8% base rate. Homework: the two Part 2 exercises; optional predictors lab.'
+      '8 min · **SpreadReader** and the target lab: the 12-month lead, units (points vs basis points), 145 negative LPM forecasts.',
+      '8 min · Logit lab: slope −1.01, odds ratio 0.36, P = 47%, 24%, 10%, 4% at spreads −1, 0, 1, 2; Predict on "101 percentage points".',
+      '7 min · Scoring: AUC 0.820, Brier 0.091 vs 0.104 for climatology; **Calibration** in and out of sample (below the diagonal = overconfident).',
+      '27 min · Activity: recession call desk (below): **RecessionRadar**, the out-of-sample lab, a cost-based threshold, a board sentence.',
+      '5 min · Wrap-up: read today’s 9.7% against the 11.8% base rate. Homework: the CFO exercise.',
+      '15 min · Buffer: questions, catch-up'
     ] }
   ]}
   objectives={[
     'Explain the three problems of the linear probability model and show predictions outside [0, 1] on client data and on recession data.',
-    'Fit logit and probit models with `glm()`, convert coefficients to **odds ratios** with confidence intervals, and move between probability, odds and log-odds.',
+    'Fit a logit with `glm()`, convert coefficients to **odds ratios** with confidence intervals, and move between probability, odds and log-odds.',
     'State an odds ratio in words with its unit, as a percent change in the odds, rescaled to a realistic step (e.g. a quarter point of Euribor), without extrapolating beyond the data.',
-    'Compute and interpret **marginal effects**: the average marginal effect, the effect at the mean and the effect at a chosen value.',
+    'Compute and interpret **marginal effects** in percentage points: the average marginal effect and the effect at a chosen value.',
     'Translate one case’s forecast into a natural frequency ("about 6 in 100"), a comparison with the base rate and an expected value in dollars.',
-    'Explain maximum likelihood and IRLS, run a **likelihood-ratio test**, and explain why overlapping 12-month targets call for **Newey–West** standard errors.',
-    'Build a confusion matrix at a chosen threshold, compute accuracy, precision, recall, specificity and F1, explain the **accuracy paradox**, and set a threshold from the costs of each error.',
-    'Trace ROC and gain curves by hand, compute AUC, lift and Gini, and turn a gain curve into a targeting decision with a budget.',
+    'Build a confusion matrix at a chosen threshold, compute accuracy, precision and recall, explain the **accuracy paradox**, and set a threshold from the costs of each error.',
+    'Read ROC and gain curves, interpret AUC and lift, and turn a gain curve into a targeting decision with a budget.',
     'Detect **leakage** by asking whether a predictor is known at forecast time.',
-    'Construct a forward-looking binary target from the NBER recession indicator, check its alignment on a known date, explain the 12-month horizon, and explain why its latest values are provisional.',
+    'Construct a forward-looking binary target from the NBER recession indicator, check its alignment on a known date, and explain why its latest values are provisional.',
     'Read the term spread in percentage points and basis points, and know its typical size.',
-    'Evaluate probability forecasts with the **Brier score** against climatology, its reliability/resolution decomposition and a calibration chart, in and out of sample.'
+    'Evaluate probability forecasts with the **Brier score** against climatology and a calibration chart, in and out of sample.',
+    'Optional extensions (likelihood-ratio test, Newey–West, Brier decomposition, extra predictors): see Beyond the basics.'
   ]}
   discussion={[
     'A vendor reports 92% accuracy for a model that predicts which customers will churn, when 9% of customers churn each year. What two numbers would you ask for before being impressed?',
@@ -901,18 +930,17 @@ Two short tasks for the economics desk. Fill in the blanks (`______`) and press 
     '“To predict next year, put last year’s USREC in the row.” That is a lag. The target needs a lead: the January 2007 row gets January 2008’s value.',
     '“A 30% forecast was wrong because no recession happened.” A single outcome cannot refute a probability; only calibration over many forecasts can.',
     '“A dot below the calibration diagonal means the model is too cautious.” It means the opposite: events happened less often than forecast, so the model is overconfident.',
-    '“Use a 50% threshold.” For rare events this catches almost nothing (7 of 95 pre-recession months here). The right threshold depends on the cost of each error.',
-    '“glm() standard errors are fine for monthly data.” With overlapping 12-month targets they are less than half the honest Newey–West ones.'
+    '“Use a 50% threshold.” For rare events this catches almost nothing (7 of 95 pre-recession months here). The right threshold depends on the cost of each error.'
   ]}
 >
 
-One 30-minute activity per session. Teams of three. Data file for the first: [bank_marketing.csv](/data/bank_marketing.csv).
+One activity per session (25–27 minutes). Teams of three. Data file for the first: [bank_marketing.csv](/data/bank_marketing.csv).
 
-**Session 1 activity: campaign war room (30 minutes).**
+**Session 1 activity: campaign war room (25 minutes).**
 
 1. **Predict (5 min).** Give each team a cost per call and a value per deposit: A = \$5 and \$50, B = \$5 and \$100, C = \$8 and \$40, D = \$5 and \$30. Before touching code, each team writes down what share of the list it expects to call and whether calling everyone would make money.
-2. **Plan (15 min).** Teams run the classification lab, then change the `profit` line (or use the campaign planner for team A) to find the share of the list that maximizes profit on the test clients.
-3. **Brief (10 min).** Each team presents one slide: the break-even probability $c/V$, the share called, expected subscribers, profit, and one sentence on why calling everyone is or is not a good idea.
+2. **Plan (12 min).** Teams run the classification lab, then change the `profit` line (or use the campaign planner for team A) to find the share of the list that maximizes profit on the test clients.
+3. **Brief (8 min).** Each team presents one slide: the break-even probability $c/V$, the share called, expected subscribers, profit, and one sentence on why calling everyone is or is not a good idea.
 
 *Expected results (five-fact logit, 1,237 test clients):*
 
@@ -925,16 +953,16 @@ One 30-minute activity per session. Teams of three. Data file for the first: [ba
 
 In every case the profit-maximizing cut-off probability lands near $c/V$ (11.8%, 3.4%, 18.5% and 17.6%). Higher value per deposit pushes the team to call much more of the list; for teams C and D, calling everyone loses money.
 
-**Session 2 activity: recession call desk (30 minutes).** The same teams now play an economics desk advising a company's board.
+**Session 2 activity: recession call desk (27 minutes).** The same teams now play an economics desk advising a company's board.
 
 1. **Predict (5 min).** Before running anything, each team writes down the probability it would have given in May 2023 for a recession by May 2024, and the threshold at which it would advise the board to freeze hiring.
-2. **Model (10 min).** Run the timeline lab and the out-of-sample lab. Record the 1999-frozen model's probability for May 2024 and the full-sample model's.
-3. **Decide (10 min).** In the threshold game, set the cost ratio the team believes fits its company (a retailer, a bank, a hospital) and read off the cheapest threshold. Would it have frozen hiring in 2023?
+2. **Model (10 min).** In the recession radar, read the probability for May 2024 from the model frozen in 1999 and from the full-sample model. Run the out-of-sample lab and record the Brier scores for both test windows.
+3. **Decide (7 min).** Each team picks the cost ratio $k$ it believes fits its company (a retailer, a bank, a hospital) and computes the threshold $1/(1+k)$. Would it have frozen hiring in 2023?
 4. **Brief (5 min).** One slide: today's probability, the threshold, the decision, and one sentence on how much to trust the model.
 
-*Expected results:* the frozen 1999 model gives about **80%** for May 2024; the full-sample logit about **61%**. With a cost ratio of 5, the cheapest threshold is about 14% in sample and 16% out of sample, so every team using the model would have warned in 2023, a false alarm as of the latest data. Through 2019 the model beats climatology on the Brier score (0.084 against 0.103); through October 2025 it loses (0.102 against 0.084), because its reliability penalty grew about tenfold. The latest reading is 9.7% for October 2027 (12.4% in the New York Fed's own published version). Use the gap between teams' gut probabilities and the model to discuss overconfidence.
+*Expected results:* the frozen 1999 model gives about **80%** for May 2024; the full-sample logit about **61%**. With $k = 5$ the threshold is $1/6 \approx 17\%$, so every team using the model would have warned in 2023, a false alarm as of the latest data. Through 2019 the model beats climatology on the Brier score (0.084 against 0.103); through October 2025 it loses (0.102 against 0.084). The latest reading is 9.7% for October 2027 (12.4% in the New York Fed's own published version). Use the gap between teams' gut probabilities and the model to discuss overconfidence.
 
-**Variations.** (a) Add `month` to the bank logit (it is known before the call: the campaign schedule) and compare test AUC. (b) Replace the bank logit with a probit and confirm that the gain table barely changes. (c) In the under-the-hood lab, set `L <- 0` and then `L <- 48` and watch the Newey–West standard error move.
+**Variations.** (a) Add `month` to the bank logit (it is known before the call: the campaign schedule) and compare test AUC. (b) For stronger groups: the threshold game, the Newey–West lab and the extra-predictors lab in Beyond the basics.
 
 </InstructorKit>
 

@@ -1,17 +1,16 @@
 ---
 layout: ../../layouts/Chapter.astro
 slug: uncertainty
-minutes: 120
+minutes: 90
 sessions:
-  - title: Reading and auditing a forecast's band
-  - title: "From bands to decisions: quantiles, combinations and conformal intervals"
-    starts: score-a-whole-distribution-quantiles-and-pinball-loss
+  - title: Reading a band and bringing it back to dollars
+  - title: Auditing the band and turning it into a decision
+    starts: audit-the-promise-coverage
 build:
+  - A dollar forecast with an honest, lopsided band from a model fitted in logs, with the median and the bias-adjusted mean side by side
   - A coverage audit that checks whether your 80% and 95% intervals really contain the truth 80% and 95% of the time
   - A stocking recommendation ("stock $40,466 million for a 71% service level") computed from a forecast distribution and the costs of being wrong
-  - A combination forecast and split-conformal intervals you can put around any model
-  - A dollar forecast with an honest, lopsided band from a model fitted in logs, with the median and the bias-adjusted mean side by side
-skills: [forecast(level=), bootstrap, simulate, exp() back-transform, biasadj, coverage, quantiles, pinball loss, newsvendor, combination, conformal]
+skills: [forecast(level=), bootstrap, simulate, exp() back-transform, biasadj, coverage, quantiles, newsvendor, combination]
 ---
 import CodeLab from '../../components/CodeLab.svelte';
 import Callout from '../../components/Callout.astro';
@@ -20,6 +19,7 @@ import SessionBreak from '../../components/SessionBreak.astro';
 import Predict from '../../components/Predict.svelte';
 import Term from '../../components/Term.astro';
 import InstructorKit from '../../components/InstructorKit.astro';
+import BeyondBasics from '../../components/BeyondBasics.astro';
 import SpaghettiFan from '../../components/ch10/SpaghettiFan.svelte';
 import CoverageAudit from '../../components/ch10/CoverageAudit.svelte';
 import Newsvendor from '../../components/ch10/Newsvendor.svelte';
@@ -61,11 +61,11 @@ import cvCheckPy from '../../labs/ch10/ex_coverage_check.py?raw';
 
 <p class="lede">It is late summer and you plan December inventory for a chain of clothing stores. The forecast says December sales will be about \$40 billion. Your buyer asks the real question: <strong>should we order exactly the forecast, or more, and if more, how much more?</strong> A single number cannot answer that. You need to know how wrong the forecast could be, and what each kind of mistake costs.</p>
 
-Every forecast so far in this course has come with a fan of shaded bands. This chapter takes those bands seriously. You will learn what they promise and how to say it in plain words, bring them back to dollars from a model fitted in logs, check whether they keep the promise on real data (often they don't), score them, turn them into a stocking decision, and build intervals that hold up better.
+Every forecast so far in this course has come with a fan of shaded bands. This chapter takes those bands seriously. You will learn what they promise and how to say it in plain words, bring them back to dollars from a model fitted in logs, check whether they keep the promise on real data (often they don't), turn them into a stocking decision, and see why an average of two forecasts often beats both.
 
 <KeyIdea>A forecast is not a number. It is a range of possible futures, each with a probability. Decisions come from the range, not from the middle.</KeyIdea>
 
-<SessionBreak n={1} title="Reading and auditing a forecast's band" goals={['Read an 80% and a 95% interval out loud, and explain why bands widen with the horizon', 'Forecast in logs and bring the forecast back to dollars: the median, the mean and a lopsided band', 'Audit coverage on recent data, allowing for luck and counting misses by side']} />
+<SessionBreak n={1} title="Reading a band and bringing it back to dollars" goals={['Read an 80% and a 95% interval out loud, and explain why bands widen with the horizon', 'Forecast in logs and bring the forecast back to dollars: the median, the mean and a lopsided band']} />
 
 ## A forecast is a cloud of possible futures
 
@@ -86,16 +86,6 @@ Watch what happens when you switch from **Paths** to **Fan**. The fan is not a d
 
 <Callout type="pitfall" title="A prediction interval is not a confidence interval">
 A <strong>confidence interval</strong> is about a fixed unknown <em>parameter</em>, such as average monthly growth. Collect more data and it shrinks toward zero width. A <strong>prediction interval</strong> is about a future <em>observation</em>. It includes the unavoidable month-to-month noise, so it never shrinks to zero, however much history you have. When a manager asks "how sure are we about next December?", the answer is a prediction interval. Reporting a confidence interval for the mean instead makes the forecast look far more certain than it is.
-</Callout>
-
-<Callout type="math" title="Why the fan widens: h-step variance">
-For a random walk $y_t = y_{t-1} + \varepsilon_t$ with shock variance $\sigma^2$, the $h$-step forecast error is the sum of $h$ independent shocks, so its variance is $h\sigma^2$ and its standard deviation grows like $\sqrt{h}$. For simple exponential smoothing, ETS(A,N,N), the variance is
-
-$$
-\sigma_h^2 = \sigma^2\left[1 + (h-1)\alpha^2\right],
-$$
-
-and a normal interval is $\hat y_{T+h|T} \pm z\,\sigma_h$, with $z = 1.28$ for 80% and $1.96$ for 95%. Models with trend and seasonality have longer formulas of the same kind (Hyndman & Athanasopoulos, 2021, section 8.7).<sup>[9](#refs)</sup> Three assumptions hide inside: the model is right, its parameters are known exactly, and the shocks are normal and as large as in the past. Chatfield (1993) showed that such intervals tend to be too narrow in practice, precisely because real forecasts break these assumptions.<sup>[1](#refs)</sup>
 </Callout>
 
 There are three standard ways to compute intervals from a fitted model, and the lab compares all three on the December 2019 example:
@@ -135,7 +125,7 @@ Three habits make that sentence honest:
 <IntervalReader client:load />
 </div>
 
-Drag the month slider. One month ahead the 80% band is about ±2.5% of the forecast; twelve months ahead about ±3.1%; twenty-four months ahead about ±5.4%, more than twice as wide as the one-month band. The band widens because errors pile up. Next month's forecast starts from a level we already know. A forecast two years out starts from a level that will itself have been pushed around by 23 months of surprises, and every one of those shocks carries forward. The lower chart shows one more thing: the three lines keep the same proportions at every horizon. The 95% band is always about 1.5 times the 80% band, and the 50% band about half of it.
+Drag the month slider. One month ahead the 80% band is about ±2.5% of the forecast; twelve months ahead about ±3.1%; twenty-four months ahead about ±5.4%, more than twice as wide as the one-month band. The band widens because errors pile up: a forecast two years out starts from a level that 23 months of surprises will have pushed around. The lower chart shows the 95% band staying about 1.5 times the 80% band at every horizon.
 
 <Callout type="pitfall" title="Four things a band does not say">
 <ul>
@@ -147,7 +137,7 @@ Drag the month slider. One month ahead the 80% band is about ±2.5% of the forec
 </Callout>
 
 <Callout type="empirical" title="Report the band, not just the point">
-A point forecast alone invites false precision: "\$666 billion" sounds like a promise. Put the 80% band in the same sentence, in the same units, rounded to what the data can support (\$645 to \$687 billion, not \$645.39 billion). In a table, give the point and the band side by side for each month, and say which level you used. In a chart, shade the band and draw history in a different color. And when you forecast a whole year, show the band for every month: its widening is information your manager needs.
+A point forecast alone invites false precision: "\$666 billion" sounds like a promise. Put the 80% band in the same sentence, in the same units, rounded to what the data can support (\$645 to \$687 billion, not \$645.39 billion). Say which level you used. When you forecast a whole year, show the band for every month: its widening is information your manager needs.
 </Callout>
 
 ## Forecasting in logs, and coming back to dollars
@@ -202,7 +192,9 @@ Your manager asks for next October's oil price "in dollars, with a range, and th
   hints={['Undo a natural log with exp() in R or np.exp() in Python.', 'For the band, exp() the log-scale lower limit, which the code stored as lo.', 'The mean multiplies the median by exp(sigma^2 / 2) in R, or np.exp(sigma**2 / 2) in Python: square the log spread, then halve it.']} />
 </div>
 
-In R the answer is a median of \$102.07, an 80% band of \$60.16 to \$173.17, and a mean of \$111.13 a barrel, 8.9% above the median. Look at the band: \$42 of room below the median and \$71 above. Python's statsmodels gives nearly the same numbers (median \$102.07, band \$60.38 to \$172.52, mean \$111.00). The explorable's numbers differ a little because it uses a simpler smoothing model.
+In R the answer is a median of \$102.07, an 80% band of \$60.16 to \$173.17, and a mean of \$111.13 a barrel, 8.9% above the median. Look at the band: \$42 of room below the median and \$71 above. Python gives nearly the same numbers; the explorable differs a little because it uses a simpler model.
+
+<SessionBreak n={2} title="Auditing the band and turning it into a decision" goals={['Audit coverage on real data and count the misses by side', 'Turn asymmetric costs into a stocking quantile with the **newsvendor** rule', 'Explain why **averaging** two forecasts can cancel their errors']} />
 
 ## Audit the promise: coverage
 
@@ -228,25 +220,108 @@ What the audit found for retail sales (R version):
 | 2022–2026 | 87.5 | 96.4 | 94.7 | 98.2 |
 | **All** | **80.0** | **92.1** | **86.9** | **93.1** |
 
-Two patterns are typical of real forecasting. Coverage is too low exactly when it matters most, in a crisis. And after the crisis the model has learned that the world is volatile, so its intervals stay too wide for years. The Python version simulates its intervals and lands slightly differently (82.1% overall one month ahead), with the same pattern by era.
+Two patterns are typical of real forecasting. Coverage is too low exactly when it matters most, in a crisis. And after the crisis the model has learned that the world is volatile, so its intervals stay too wide for years. The Python version (82.1% overall one month ahead) shows the same pattern by era.
 
-Now audit two series yourself, with two kinds of interval. The explorable fits a model once on 2000–2009 and then forecasts every month one step ahead.
+<Callout type="empirical" title="Audit coverage on recent data, and count the misses by side">
+<ul>
+<li><strong>Audit the last 12 to 24 months every quarter</strong>, out of sample: for each month, was the actual inside the band you published <em>before</em> it happened? Report it as "X of N".</li>
+<li><strong>Allow for luck.</strong> With 24 months, anything from 16 to 22 hits is consistent with an honest 80% band (Beyond the basics below shows why). Act on counts outside that range, or on a trend over several audits.</li>
+<li><strong>Count misses above and below separately.</strong> An honest band misses about equally on both sides. In the December 2019 lab above, 18 of the 21 misses were above the band: the forecast was not just too uncertain, it was too low. Lopsided misses call for fixing the point forecast, not just widening the band.</li>
+<li><strong>Say which window the band remembers.</strong> A band estimated on data that include 2020 will look "safe" for years (too wide), and one estimated on calm years will break in the next shock.</li>
+</ul>
+</Callout>
+
+## From uncertainty to a decision: the newsvendor
+
+A forecast distribution can be summarized by its <Term def="The value below which a given share of outcomes falls. The 0.9 quantile of December sales is the level that sales stay below with 90% probability.">quantiles</Term>. The 0.9 quantile says "the truth will be below this value 9 times out of 10." The endpoints of an 80% band are the 0.1 and 0.9 quantiles, and the median is the 0.5 quantile. A stocking decision needs exactly one of these numbers. Which one depends on what each kind of mistake costs.
+
+Back to the buyer. Suppose every dollar of demand you cannot serve loses 60 cents of margin, and every dollar of leftover stock loses 25 cents in markdowns and holding costs. Ordering the forecast exactly is a coin flip: half the time you run out. Because running out costs more than having leftovers, you should order more. The classic <Term def="A model for a one-time stocking decision under uncertain demand: choose the quantity that minimizes the expected cost of overstocking and understocking.">newsvendor model</Term> says exactly how much more.
+
+<KeyIdea>Stock the quantile of the demand forecast at the **critical ratio**: the cost of being one unit short, divided by (cost of one unit short + cost of one unit left over).</KeyIdea>
+
+With a shortage cost of 0.60 and a leftover cost of 0.25, the critical ratio is 0.60 / (0.60 + 0.25) = 0.60 / 0.85 ≈ 0.71. You stock the 71st percentile of December demand, and accept running out in about 29% of Decembers. The critical ratio *is* the <Term def="Here, the probability that stock covers all demand in the period (sometimes called the cycle service level).">service level</Term> that this cost structure justifies. Stock above the point forecast is <Term def="Inventory held above expected demand to protect against forecast errors.">safety stock</Term>.
 
 <div class="breakout">
-<CoverageAudit client:load />
+<Newsvendor client:load />
 </div>
 
-Try three things. With the **normal formula** on retail sales, 2010–2019 coverage sits well above 80% (93%): the errors of 2000–2009, recession included, were larger than those of the calm 2010s, so the intervals were too wide. Look at the lower chart in 2020: rolling coverage collapses. Then switch to **jobless claims**, a series with one gigantic shock, and compare 2020–2021 at 80% and at 95%. At 80%, rolling conformal does *worse* than the formula there (46% against 71%); at 95% it does far better (96% against 75%). No method is reliable through a shock like that, and which one fails less depends on the level you ask for.
+Drag the understock cost up: the stock line moves right into the tail, and the green share grows. Make leftovers more expensive than shortages and the optimal stock drops *below* the point forecast. Safety stock can be negative. (The explorable uses a simpler model than the lab, so its dollars differ by a few percent.)
 
-<Callout type="business" title="Report coverage next to accuracy">
-Forecast teams report MAE and MAPE every month. Few report whether their intervals keep their promises. Add one line to your scorecard: "80% intervals contained the actual value in X% of the last 24 months." If X is far from 80, every safety-stock and staffing decision built on those intervals is miscalibrated in the same direction.
+<div class="breakout">
+<CodeLab client:load id="ch10-newsvendor" title="A December stocking recommendation" r={nvR} py={nvPy} packages={['forecast']} pyPackages={['statsmodels']} goal="Turn a simulated demand distribution into a stock level, a service level and an expected saving." />
+</div>
+
+The R lab recommends **\$40,466 million** of December 2026 stock (valued at retail), \$350 million above the point forecast of \$40,116 million. Expected cost falls from \$216.3 million to \$185.7 million. That saving of about \$31 million comes purely from using the *distribution* instead of the point forecast.
+
+<Callout type="empirical" title="Asymmetric costs call for an asymmetric target">
+<ul>
+<li><strong>Ask for two numbers, not one.</strong> Before you forecast for a decision, ask what one unit short costs and what one unit left over costs. Their ratio, short ÷ (short + over), tells you which quantile to deliver.</li>
+<li><strong>Short costs more → aim above the point.</strong> Call-center staffing, spare parts, a store's best seller in December. The department store's ratio of 0.71 means stocking the 71st percentile.</li>
+<li><strong>Leftovers cost more → aim below the point.</strong> Fresh food, fashion, anything marked down after the season. The discount chain in the exercise below has a ratio of 0.40 and stocks below the median.</li>
+<li><strong>Equal costs → the median.</strong> That is the only case where "order the forecast" is right, and only if the forecast is the median.</li>
+<li><strong>Report the target with its service level</strong>: "stock \$40.5 billion; this covers December demand about 7 years in 10." A manager can argue with a service level; nobody can argue with a bare number.</li>
+</ul>
 </Callout>
 
-<Callout type="intuition" title="How did the best forecasters do?">
-The M4 competition (2018) asked entrants for 95% prediction intervals on 100,000 series. The organizers report that most methods underestimated uncertainty, a long-known weakness of forecasting, and that only the two leading methods came close to the promised 95% coverage.<sup>[3](#refs)</sup> Well-calibrated intervals are hard, even for experts.
+## Don't pick, average: forecast combination
+
+You now have several models on the scorecard: ETS, ARIMA, seasonal naive. Choosing the winner from one test period is risky, because the ranking changes with the period. Bates and Granger (1969) showed that a weighted average of two forecasts can have a smaller error variance than either one.<sup>[2](#refs)</sup> Fifty years of evidence since then says a *simple* average is hard to beat. In the M4 competition, 12 of the 17 most accurate methods were combinations, mostly of statistical models.<sup>[3](#refs)</sup>
+
+<div class="breakout">
+<CombinationWeights client:load />
+</div>
+
+Start with **Furniture**. Exponential smoothing and seasonal naive score almost the same alone (MAE about \$356 and \$354 million), but the 50/50 blend cuts the error to \$211 million. The reason is in the panel: smoothing ran \$339 million too high on average, seasonal naive \$295 million too low, and averaging cancels much of both. Now try **Sporting goods**, where both methods erred in the same direction: blending cannot help. On **Total retail**, seasonal naive is so much worse that the 50/50 blend loses to smoothing alone (MAE \$11,823 against \$7,796 million). Combination is insurance, not magic.
+
+### Why errors cancel, and how to read a weight
+
+Think of two forecasters guessing the same number. If one tends to guess high when the other guesses low, their average lands closer to the truth than either guess. If both guess high together, averaging only gives you a high guess with a different name. Combination helps exactly as much as the two forecasts' errors **disagree**. In the furniture example the errors had opposite signs on average, so they cancelled; in sporting goods they pointed the same way, so they could not.
+
+A combination weight is easy to misread. A blend of "70% smoothing, 30% seasonal naive" says that, in this test window, the best mix leaned on smoothing. It does **not** say smoothing is 70% right, or that it "explains" 70% of sales. The explorable makes the point: the best weight on smoothing was 52% for furniture, 70% for health and personal care, 0% for sporting goods and 92.5% for total retail, all found *after* seeing the answers.
+
+## Your turn
+
+This is the payoff of the chapter: a stocking recommendation that uses the whole forecast distribution, not just its middle. A discount chain has thin margins and heavy markdowns: each dollar of unmet demand costs \$0.30, each leftover dollar costs \$0.45. Fill in the two blanks and press **Run & check**.
+
+<div class="breakout">
+<CodeLab client:load id="ch10-ex1" exercise title="Exercise: stock for a discount chain" r={exR} solution={exSolR} check={exCheckR} py={exPy} solutionPy={exSolPy} checkPy={exCheckPy} packages={['forecast']} pyPackages={['statsmodels']}
+  goal="Compute the critical ratio for the discount chain and the optimal December stock from the simulated demand."
+  hints={['The critical ratio is the cost of running short divided by the sum of both costs: `cu / (cu + co)`.', 'The optimal stock is the demand quantile at that ratio, so the second blank is the object `cr`.']} />
+</div>
+
+**Then write the memo.** A good uncertainty memo has four sentences, and you now have every number it needs. Use this template for the discount chain:
+
+1. **The forecast, with its band:** "December 2026 clothing-store sales: about \$\_\_ million (median), 80% band \$\_\_ to \$\_\_ million."
+2. **The track record:** "Our 80% one-month-ahead sales bands caught the actual value in \_\_% of months since 2015, but only \_\_% in 2020–2021."
+3. **The decision:** "Because leftovers cost more than shortages (critical ratio 0.40), stock \$\_\_ million, below the median."
+4. **The risk:** "We expect to run out in about 6 Decembers in 10, and accept that because each leftover dollar costs more than a lost sale."
+
+## Chapter checklist
+
+- **Read a band out loud:** point, range and frequency. "We expect \$645 to \$687 billion; a band like this catches the truth about 8 times in 10." Misses go both ways, about 1 in 10 each side for an 80% band.
+- A 95% band is about **1.5 times as wide** as an 80% band. Bands **widen with the horizon** because shocks pile up. Pick the level for the decision.
+- A prediction interval covers a future **observation** and never shrinks to zero; a confidence interval covers a **parameter**.
+- Intervals come from a formula, a residual bootstrap or simulated paths. All share the model's assumptions, and all can fail together when the world changes.
+- **Back from logs:** `exp()` of the log forecast is the **median**; `exp()` each band endpoint (the band stays 80% but becomes lopsided); the **mean** needs a bias adjustment of about $1 + \sigma^2/2$, which matters only for volatile series. Use the mean when numbers will be added up.
+- **Audit coverage** out of sample, by horizon and by era, and on the **last 12 to 24 months**. Allow for luck (16 to 22 hits of 24 is normal for an 80% band) and count misses **above and below** separately. "80% on average" can hide 58% in a crisis and 88% afterward.
+- **Asymmetric costs, asymmetric target:** stock the demand quantile at short ÷ (short + over). That ratio is your service level, and safety stock can be negative.
+- A **simple average** of forecasts helps when the errors disagree and cannot help when they point the same way. A combination weight describes one test window, not a model's importance.
+
+<BeyondBasics topics={['Why the fan widens, in formulas', 'How much luck to allow in a coverage audit', 'Pinball loss', 'Newsvendor formulas and a longer history', 'Combining eight retail series', 'Split conformal intervals', 'Extra practice: a two-year coverage audit']}>
+
+#### Why the fan widens, in formulas
+
+<Callout type="math" title="Why the fan widens: h-step variance">
+For a random walk $y_t = y_{t-1} + \varepsilon_t$ with shock variance $\sigma^2$, the $h$-step forecast error is the sum of $h$ independent shocks, so its variance is $h\sigma^2$ and its standard deviation grows like $\sqrt{h}$. For simple exponential smoothing, ETS(A,N,N), the variance is
+
+$$
+\sigma_h^2 = \sigma^2\left[1 + (h-1)\alpha^2\right],
+$$
+
+and a normal interval is $\hat y_{T+h|T} \pm z\,\sigma_h$, with $z = 1.28$ for 80% and $1.96$ for 95%. Models with trend and seasonality have longer formulas of the same kind (Hyndman & Athanasopoulos, 2021, section 8.7).<sup>[9](#refs)</sup> Three assumptions hide inside: the model is right, its parameters are known exactly, and the shocks are normal and as large as in the past. Chatfield (1993) showed that such intervals tend to be too narrow in practice, precisely because real forecasts break these assumptions.<sup>[1](#refs)</sup>
 </Callout>
 
-### Coverage in words, and how much luck to allow
+#### Coverage in words, and how much luck to allow
 
 Coverage is easy to say in plain words: "our 80% bands caught the actual value in 20 of the last 24 months." The hard part is judging that sentence. Twenty-four months is a small sample. Even a perfectly honest 80% band does not catch exactly 19.2 months out of 24; like a coin that lands heads 80% of the time, it scores a little more in some years and a little less in others. So before you call a band broken, ask how many hits luck alone could explain.
 
@@ -263,34 +338,15 @@ Coverage is easy to say in plain words: "our 80% bands caught the actual value i
 
 With the 80% band over the last 24 months, the simple band caught **20 of 24** months (83%). The bars show that an honest band scores between 16 and 22 in about 93% of 24-month audits, so 20 is no cause for alarm. The misses split 3 above and 1 below: slightly lopsided, which fits a naive forecast that ignores the steady growth of sales. Switch to **95%**: 24 of 24, also within the range of luck. Press **Flip an honest audit** a few times. Even a perfect band produces runs of misses and the odd lopsided year. Coverage needs a long record, which is why the rolling audit above uses more than ten years.
 
-<Callout type="empirical" title="Audit coverage on recent data, and count the misses by side">
-<ul>
-<li><strong>Audit the last 12 to 24 months every quarter</strong>, out of sample: for each month, was the actual inside the band you published <em>before</em> it happened? Report it as "X of N".</li>
-<li><strong>Allow for luck.</strong> With 24 months, anything from 16 to 22 hits is consistent with an honest 80% band. Act on counts outside that range, or on a trend over several audits.</li>
-<li><strong>Count misses above and below separately.</strong> An honest band misses about equally on both sides. In the December 2019 lab above, 18 of the 21 misses were above the band: the forecast was not just too uncertain, it was too low. Lopsided misses call for fixing the point forecast, not just widening the band.</li>
-<li><strong>Say which window the band remembers.</strong> A band estimated on data that include 2020 will look "safe" for years (too wide), and one estimated on calm years will break in the next shock.</li>
-</ul>
+<Callout type="business" title="Report coverage next to accuracy">
+Forecast teams report MAE and MAPE every month. Few report whether their intervals keep their promises. Add one line to your scorecard: "80% intervals contained the actual value in X% of the last 24 months." If X is far from 80, every safety-stock and staffing decision built on those intervals is miscalibrated in the same direction.
 </Callout>
 
-### Try it: audit the last two years
+#### Score a whole distribution: quantiles and pinball loss
 
-Your manager asks: "Did our 80% one-month-ahead bands for retail sales keep their promise over the last two years?" The code builds the band the analytics team publishes each month (last month's sales ± 1.28 typical monthly changes, using seasonally adjusted data from 2022 on) and lines it up with what happened. Fill in the three blanks to audit it.
+A quantile forecast at level 0.9 says "the truth will be below this value 9 times out of 10." To score a quantile forecast we need a loss that rewards *the right quantile*, not the closest guess. That is the <Term def="Loss for a quantile forecast q at level τ: τ × (y − q) if the truth y is above q, and (1 − τ) × (q − y) if it is below. Minimized on average by the true τ quantile.">pinball loss</Term>.
 
-<div class="breakout">
-<CodeLab client:load id="ch10-ex-coverage" exercise title="Exercise: a two-year coverage audit" r={cvR} solution={cvSolR} check={cvCheckR} py={cvPy} solutionPy={cvSolPy} checkPy={cvCheckPy} pyPackages={['scipy']}
-  goal="Count how many of the last 24 months fell inside the published 80% band, compute coverage, and split the misses into above and below."
-  hints={['A hit needs both conditions: actual >= lo AND actual <= hi. The first blank is the upper limit.', 'The mean of a TRUE/FALSE vector is the share of TRUE, so coverage is 100 * mean(inside).', 'Misses below the band are the months where actual < lo.']} />
-</div>
-
-The audit finds **20 of 24** months inside (83.3%), with 3 misses above and 1 below, identical in R and Python because the band is simple arithmetic. Then try the "Make it yours" step in the success message: start the data in 2015 and the band remembers the 2020 swings, catches all 24 months and looks perfect. It is not: it is too wide to be useful.
-
-<SessionBreak n={2} title="From bands to decisions: quantiles, combinations and conformal intervals" goals={['Score quantile forecasts with **pinball loss** and turn asymmetric costs into an asymmetric target', 'Read **combination weights** and explain why averaging forecasts cancels errors', 'Build **conformal** intervals from past errors, then audit them']} />
-
-## Score a whole distribution: quantiles and pinball loss
-
-A <Term def="The value below which a given share of outcomes falls. The 0.9 quantile of December sales is the level that sales stay below with 90% probability.">quantile forecast</Term> at level 0.9 says "the truth will be below this value 9 times out of 10." The endpoints of an 80% interval are the 0.1 and 0.9 quantiles. To score a quantile forecast we need a loss that rewards *the right quantile*, not the closest guess. That is the <Term def="Loss for a quantile forecast q at level τ: τ × (y − q) if the truth y is above q, and (1 − τ) × (q − y) if it is below. Minimized on average by the true τ quantile.">pinball loss</Term>.
-
-The easiest way to understand pinball loss is as the **cost of a stocking decision**. Treat the 0.9 quantile forecast as the amount of stock you put on the shelf. If demand comes in *above* it, every dollar of missed sales costs you 0.9. If demand comes in *below* it, every dollar of leftover stock costs you 0.1. Running short is 9 times as expensive as overstocking, so the best policy is to aim high: stock enough to cover demand 9 times out of 10. That is exactly the 0.9 quantile. At level 0.5 both kinds of miss cost the same, the loss is half the ordinary absolute error, and the best answer is the median. Pinball loss is the bill for safety stock that was too thin or too thick.
+The easiest way to understand pinball loss is as the **cost of a stocking decision**. Treat the 0.9 quantile forecast as the amount of stock you put on the shelf. If demand comes in *above* it, every dollar of missed sales costs you 0.9. If demand comes in *below* it, every dollar of leftover stock costs you 0.1. Running short is 9 times as expensive as overstocking, so the best policy is to aim high: stock enough to cover demand 9 times out of 10. That is exactly the 0.9 quantile: the newsvendor rule from the main text. At level 0.5 both kinds of miss cost the same, the loss is half the ordinary absolute error, and the best answer is the median. Pinball loss is the bill for safety stock that was too thin or too thick.
 
 <Predict client:load kind="check"
   question="Your 0.9 quantile forecast for next month is 100 units. Score it with pinball loss at level 0.9 in two cases: (a) demand turns out to be 110, (b) demand turns out to be 90."
@@ -317,39 +373,7 @@ $$
 Let $F$ be the distribution of $Y$. The expected pinball loss of a guess $q$ is $\tau\,E[(Y-q)^+] + (1-\tau)\,E[(q-Y)^+]$. Its derivative in $q$ is $-\tau\,(1 - F(q)) + (1-\tau)\,F(q) = F(q) - \tau$. Setting it to zero gives $F(q) = \tau$: the true $\tau$ quantile minimizes expected pinball loss. Scores with this property, where honest reporting is optimal, are called **proper**. This is the same loss that defines quantile regression (Koenker & Bassett, 1978).<sup>[5](#refs)</sup>
 </Callout>
 
-## From uncertainty to a decision: the newsvendor
-
-Back to the buyer. Suppose every dollar of demand you cannot serve loses 60 cents of margin, and every dollar of leftover stock loses 25 cents in markdowns and holding costs. Ordering the forecast exactly is a coin flip: half the time you run out. Because running out costs more than having leftovers, you should order more. The classic <Term def="A model for a one-time stocking decision under uncertain demand: choose the quantity that minimizes the expected cost of overstocking and understocking.">newsvendor model</Term> says exactly how much more.
-
-<KeyIdea>Stock the quantile of the demand forecast at the **critical ratio**: the cost of being one unit short, divided by (cost of one unit short + cost of one unit left over).</KeyIdea>
-
-With a shortage cost of 0.60 and a leftover cost of 0.25, the critical ratio is 0.60 / (0.60 + 0.25) = 0.60 / 0.85 ≈ 0.71. You stock the 71st percentile of December demand, and accept running out in about 29% of Decembers. The critical ratio *is* the <Term def="Here, the probability that stock covers all demand in the period (sometimes called the cycle service level).">service level</Term> that this cost structure justifies. Stock above the point forecast is <Term def="Inventory held above expected demand to protect against forecast errors.">safety stock</Term>.
-
-<div class="breakout">
-<Newsvendor client:load />
-</div>
-
-Drag the understock cost up: the stock line moves right into the tail, and the green share grows. Make leftovers more expensive than shortages and the optimal stock drops *below* the point forecast. Safety stock can be negative. (The explorable uses a simpler smoothing model than the lab's `ets()`, so its dollar figures differ by a few percent; the logic is identical.)
-
-<div class="breakout">
-<CodeLab client:load id="ch10-newsvendor" title="A December stocking recommendation" r={nvR} py={nvPy} packages={['forecast']} pyPackages={['statsmodels']} goal="Turn a simulated demand distribution into a stock level, a service level and an expected saving." />
-</div>
-
-The R lab recommends **\$40,466 million** of December 2026 stock (valued at retail), \$350 million above the point forecast of \$40,116 million. Expected cost falls from \$216.3 million to \$185.7 million. That saving of about \$31 million comes purely from using the *distribution* instead of the point forecast.
-
-<Callout type="tip" title="Make it yours: how history changes the safety stock">
-Change `start = 2022` to `start = 2010` in the lab and rerun. The model now sees the 2020 collapse and rebound in clothing sales, its 90% range for December widens from about \$2.1 billion to about \$10 billion, and the recommended safety stock jumps from \$350 million to \$1,672 million. Which window is right is a judgment call: do you expect another shock of that size? The data cannot answer that for you, but now you can show your manager what each answer costs.
-</Callout>
-
-<Callout type="empirical" title="Asymmetric costs call for an asymmetric target">
-<ul>
-<li><strong>Ask for two numbers, not one.</strong> Before you forecast for a decision, ask what one unit short costs and what one unit left over costs. Their ratio, short ÷ (short + over), tells you which quantile to deliver.</li>
-<li><strong>Short costs more → aim above the point.</strong> Call-center staffing, spare parts, a store's best seller in December. The department store's ratio of 0.71 means stocking the 71st percentile.</li>
-<li><strong>Leftovers cost more → aim below the point.</strong> Fresh food, fashion, anything marked down after the season. The discount chain in the exercise below has a ratio of 0.40 and stocks below the median.</li>
-<li><strong>Equal costs → the median.</strong> That is the only case where "order the forecast" is right, and only if the forecast is the median.</li>
-<li><strong>Report the target with its service level</strong>: "stock \$40.5 billion; this covers December demand about 7 years in 10." A manager can argue with a service level; nobody can argue with a bare number.</li>
-</ul>
-</Callout>
+#### The newsvendor, in formulas and with a longer history
 
 <Callout type="math" title="Deriving the critical ratio">
 Write $c_u$ for the cost of one unit short (understock) and $c_o$ for the cost of one unit left over (overstock). The expected cost of stocking $Q$ is $c_u\,E[(D-Q)^+] + c_o\,E[(Q-D)^+]$. Its derivative is $-c_u\,(1 - F(Q)) + c_o\,F(Q)$. Setting it to zero gives
@@ -361,25 +385,11 @@ $$
 Compare with the pinball-loss derivation above: the newsvendor cost is exactly $(c_u + c_o)$ times the pinball loss at $\tau = c_u/(c_u+c_o)$. A good quantile forecast and a good stocking decision are the same problem. The model goes back at least to Arrow, Harris & Marschak (1951).<sup>[6](#refs)</sup>
 </Callout>
 
-## Don't pick, average: forecast combination
-
-You now have several models on the scorecard: ETS, ARIMA, seasonal naive. Choosing the winner from one test period is risky, because the ranking changes with the period. Bates and Granger (1969) showed that a weighted average of two forecasts can have a smaller error variance than either one.<sup>[2](#refs)</sup> Fifty years of evidence since then says a *simple* average is hard to beat. In the M4 competition, 12 of the 17 most accurate methods were combinations, mostly of statistical models.<sup>[3](#refs)</sup>
-
-<div class="breakout">
-<CombinationWeights client:load />
-</div>
-
-Start with **Furniture**. Exponential smoothing and seasonal naive score almost the same alone (MAE about \$356 and \$354 million), but the 50/50 blend cuts the error to \$211 million. The reason is in the panel: smoothing ran \$339 million too high on average, seasonal naive \$295 million too low, and averaging cancels much of both. Now try **Sporting goods**, where both methods erred in the same direction: blending cannot help. And on **Total retail**, seasonal naive is so much worse that the 50/50 blend is far worse than smoothing alone (MAE \$11,823 against \$7,796 million); only a token weight on seasonal naive helps. Combination is insurance, not magic.
-
-<Callout type="math" title="When does a combination beat both forecasts?">
-Let the two forecast errors have variances $\sigma_1^2, \sigma_2^2$ and correlation $\rho$. The combined error $w e_1 + (1-w) e_2$ has variance $w^2\sigma_1^2 + (1-w)^2\sigma_2^2 + 2w(1-w)\rho\sigma_1\sigma_2$, minimized at
-
-$$
-w^* = \frac{\sigma_2^2 - \rho\sigma_1\sigma_2}{\sigma_1^2 + \sigma_2^2 - 2\rho\sigma_1\sigma_2}.
-$$
-
-The gain is largest when the two forecasts are about equally accurate and their errors are not strongly correlated, or have opposite biases. In practice $w^*$ must be estimated, and estimation error often makes "optimal" weights worse than equal weights: the so-called forecast combination puzzle.
+<Callout type="tip" title="Make it yours: how history changes the safety stock">
+Change `start = 2022` to `start = 2010` in the December stocking lab and rerun. The model now sees the 2020 collapse and rebound in clothing sales, its 90% range for December widens from about \$2.1 billion to about \$10 billion, and the recommended safety stock jumps from \$350 million to \$1,672 million. Which window is right is a judgment call: do you expect another shock of that size? The data cannot answer that for you, but now you can show your manager what each answer costs.
 </Callout>
+
+#### Does combining pay off? Eight retail series, and estimated weights
 
 <Predict client:load
   question="Before you run the lab: across eight retail series, which method do you expect to have the lowest *average* MASE: ETS, ARIMA, seasonal naive, or their simple average?"
@@ -394,11 +404,15 @@ The gain is largest when the two forecasts are about equally accurate and their 
 
 Be honest about the size of the effect. The average edge of the combination in R is small (1.00 against 1.03). In the Python version, statsmodels' ETS happens to do better and edges out the combination on average, but the combination is still never last. One two-year test window is a small sample. The robust lesson is the insurance.
 
-### Why errors cancel, and how to read a weight
+<Callout type="math" title="When does a combination beat both forecasts?">
+Let the two forecast errors have variances $\sigma_1^2, \sigma_2^2$ and correlation $\rho$. The combined error $w e_1 + (1-w) e_2$ has variance $w^2\sigma_1^2 + (1-w)^2\sigma_2^2 + 2w(1-w)\rho\sigma_1\sigma_2$, minimized at
 
-Think of two forecasters guessing the same number. If one tends to guess high when the other guesses low, their average lands closer to the truth than either guess. If both guess high together, averaging only gives you a high guess with a different name. Combination helps exactly as much as the two forecasts' errors **disagree**. In the furniture example the errors had opposite signs on average, so they cancelled; in sporting goods they pointed the same way, so they could not.
+$$
+w^* = \frac{\sigma_2^2 - \rho\sigma_1\sigma_2}{\sigma_1^2 + \sigma_2^2 - 2\rho\sigma_1\sigma_2}.
+$$
 
-A combination weight is easy to misread. A blend of "70% smoothing, 30% seasonal naive" says that, in this test window, the best mix leaned on smoothing. It does **not** say smoothing is 70% right, or that it "explains" 70% of sales. The explorable makes the point: the best weight on smoothing was 52% for furniture, 70% for health and personal care, 0% for sporting goods and 92.5% for total retail, all found *after* seeing the answers.
+The gain is largest when the two forecasts are about equally accurate and their errors are not strongly correlated, or have opposite biases. In practice $w^*$ must be estimated, and estimation error often makes "optimal" weights worse than equal weights: the so-called forecast combination puzzle.
+</Callout>
 
 <Callout type="empirical" title="Read combination weights as a hint, and default to equal weights">
 <ul>
@@ -409,7 +423,7 @@ A combination weight is easy to misread. A blend of "70% smoothing, 30% seasonal
 </ul>
 </Callout>
 
-## Intervals for any model: split conformal prediction
+#### Intervals for any model: split conformal prediction
 
 The coverage audit showed that model-based intervals can be badly calibrated, and many models (machine-learning models, combinations, judgmental forecasts) have no interval formula at all. <Term def="A method that turns any point forecast into a prediction interval using the forecast's own past errors on data it was not fitted to.">Conformal prediction</Term> builds intervals from the model's track record instead of its assumptions.
 
@@ -456,66 +470,62 @@ Over 2013–2026, the frozen formula interval covered 76.4% of months and rollin
   explain="Conformal's guarantee is real but conditional: exchangeable scores and marginal (average) coverage. Retail sales in 2020 violated exchangeability, and coverage dropped below 70% for two years. The audit is how you find out."
 />
 
-## Your turn
-
-This is the payoff of the chapter: a stocking recommendation that uses the whole forecast distribution, not just its middle. A discount chain has thin margins and heavy markdowns: each dollar of unmet demand costs \$0.30, each leftover dollar costs \$0.45. Fill in the two blanks and press **Run & check**.
+**Audit two series yourself.** The explorable below compares the normal formula with rolling conformal intervals. It fits a model once on 2000–2009 and then forecasts every month one step ahead.
 
 <div class="breakout">
-<CodeLab client:load id="ch10-ex1" exercise title="Exercise: stock for a discount chain" r={exR} solution={exSolR} check={exCheckR} py={exPy} solutionPy={exSolPy} checkPy={exCheckPy} packages={['forecast']} pyPackages={['statsmodels']}
-  goal="Compute the critical ratio for the discount chain and the optimal December stock from the simulated demand."
-  hints={['The critical ratio is the cost of running short divided by the sum of both costs: `cu / (cu + co)`.', 'The optimal stock is the demand quantile at that ratio, so the second blank is the object `cr`.']} />
+<CoverageAudit client:load />
 </div>
 
-**Then write the memo.** A good uncertainty memo has four sentences, and you now have every number it needs. Use this template for the discount chain:
+Try three things. With the **normal formula** on retail sales, 2010–2019 coverage sits well above 80% (93%): the errors of 2000–2009, recession included, were larger than those of the calm 2010s, so the intervals were too wide. Look at the lower chart in 2020: rolling coverage collapses. Then switch to **jobless claims**, a series with one gigantic shock, and compare 2020–2021 at 80% and at 95%. At 80%, rolling conformal does *worse* than the formula there (46% against 71%); at 95% it does far better (96% against 75%). No method is reliable through a shock like that, and which one fails less depends on the level you ask for.
 
-1. **The forecast, with its band:** "December 2026 clothing-store sales: about \$\_\_ million (median), 80% band \$\_\_ to \$\_\_ million."
-2. **The track record:** "Our 80% sales bands caught the actual value in \_\_ of the last 24 months, with misses split \_\_ above and \_\_ below."
-3. **The decision:** "Because leftovers cost more than shortages (critical ratio 0.40), stock \$\_\_ million, below the median."
-4. **The risk:** "We expect to run out in about 6 Decembers in 10, and accept that because each leftover dollar costs more than a lost sale."
+<Callout type="intuition" title="How did the best forecasters do?">
+The M4 competition (2018) asked entrants for 95% prediction intervals on 100,000 series. The organizers report that most methods underestimated uncertainty, a long-known weakness of forecasting, and that only the two leading methods came close to the promised 95% coverage.<sup>[3](#refs)</sup> Well-calibrated intervals are hard, even for experts.
+</Callout>
 
-## Chapter checklist
+#### Extra practice: audit the last two years
 
-- **Read a band out loud:** point, range and frequency. "We expect \$645 to \$687 billion; a band like this catches the truth about 8 times in 10." Misses go both ways, about 1 in 10 each side for an 80% band.
-- A 95% band is about **1.5 times as wide** as an 80% band. Bands **widen with the horizon** because shocks pile up. Pick the level for the decision.
-- A prediction interval covers a future **observation** and never shrinks to zero; a confidence interval covers a **parameter**.
-- Intervals come from a formula, a residual bootstrap or simulated paths. All share the model's assumptions, and all can fail together when the world changes.
-- **Back from logs:** `exp()` of the log forecast is the **median**; `exp()` each band endpoint (the band stays 80% but becomes lopsided); the **mean** needs a bias adjustment of about $1 + \sigma^2/2$, which matters only for volatile series. Use the mean when numbers will be added up.
-- **Audit coverage** out of sample, by horizon and by era, and on the **last 12 to 24 months**. Allow for luck (16 to 22 hits of 24 is normal for an 80% band) and count misses **above and below** separately. "80% on average" can hide 58% in a crisis and 88% afterward.
-- **Pinball loss** is the cost of a stocking decision: it scores a quantile forecast, and its average over many levels approximates half the CRPS.
-- **Asymmetric costs, asymmetric target:** stock the demand quantile at short ÷ (short + over). That ratio is your service level, and safety stock can be negative.
-- A **simple average** of forecasts is rarely the single best and rarely the worst. It helps when errors disagree. Combination weights are hindsight, not importance; default to equal weights.
-- **Conformal** intervals use past errors as the ruler, so they work around any model. Their guarantee needs exchangeable errors; for time series, recalibrate on recent errors and keep auditing.
+Your manager asks: "Did our 80% one-month-ahead bands for retail sales keep their promise over the last two years?" The code builds the band the analytics team publishes each month (last month's sales ± 1.28 typical monthly changes, using seasonally adjusted data from 2022 on) and lines it up with what happened. Fill in the three blanks to audit it.
+
+<div class="breakout">
+<CodeLab client:load id="ch10-ex-coverage" exercise title="Exercise: a two-year coverage audit" r={cvR} solution={cvSolR} check={cvCheckR} py={cvPy} solutionPy={cvSolPy} checkPy={cvCheckPy} pyPackages={['scipy']}
+  goal="Count how many of the last 24 months fell inside the published 80% band, compute coverage, and split the misses into above and below."
+  hints={['A hit needs both conditions: actual >= lo AND actual <= hi. The first blank is the upper limit.', 'The mean of a TRUE/FALSE vector is the share of TRUE, so coverage is 100 * mean(inside).', 'Misses below the band are the months where actual < lo.']} />
+</div>
+
+The audit finds **20 of 24** months inside (83.3%), with 3 misses above and 1 below, identical in R and Python because the band is simple arithmetic. Then try the "Make it yours" step in the success message: start the data in 2015 and the band remembers the 2020 swings, catches all 24 months and looks perfect. It is not: it is too wide to be useful.
+
+</BeyondBasics>
 
 <InstructorKit
   minutes={150}
   data={['RSXFSN', 'RSAFS', 'DCOILWTICO', 'MRTSSM448USN', 'ICSA', 'MRTSSM442USN', 'MRTSSM443USN', 'MRTSSM444USN', 'MRTSSM446USN', 'MRTSSM451USN', 'MRTSSM452USN']}
   sessions={[
-    { title: "Reading and auditing a forecast's band", plan: [
+    { title: 'Reading a band and bringing it back to dollars', plan: [
       '5 min · Hook: the buyer’s question, then the **Predict** on the 2020–21 fan (only 8 of 24 months inside the 95% band)',
-      '12 min · Spaghetti-to-fan explorable and the three-ways intervals lab: paths become a fan; all three methods catch only 3 of 24 months',
-      '13 min · Read an interval out loud: the sentence template, the 1.5× **Predict**, and the band reader (±2.5% one month ahead, ±5.4% at 24 months)',
+      '10 min · Spaghetti-to-fan explorable and the three-ways intervals lab: paths become a fan; all three methods catch only 3 of 24 months',
+      '10 min · Read an interval out loud: the sentence template, the 1.5× **Predict**, and the band reader (±2.5% one month ahead, ±5.4% at 24 months)',
       '15 min · Logs in, dollars out: the oil **Predict**, the back-transform explorable (median \$101, mean \$109, band \$62–166) and the three rules',
-      '10 min · Coverage: the rolling-audit lab and era table (80.0% overall, 58.3% in 2020–21), then the luck explorable (20 of 24 is normal); assign the two-series audit explorable as homework',
-      '20 min · Activity 1: the forecast briefing (below)'
+      '20 min · Activity 1: the forecast briefing (below)',
+      '15 min · Buffer: questions, catch-up'
     ] },
-    { title: 'From bands to decisions: quantiles, combinations and conformal intervals', plan: [
-      '5 min · Warm-up: the pinball **Predict** check (a 10-unit miss costs 9 on the short side, 1 on the long side)',
-      '10 min · Pinball lab: ETS quantiles score 3,705 against 5,835 and 8,050; the bias it reveals',
-      '10 min · Newsvendor explorable and lab: critical ratio 0.71, stock \$40,466 million',
-      '25 min · Activity 2: safety-stock negotiation (below)',
-      '10 min · Combination: blend explorable, the MASE **Predict** (simple average 1.00), how to read a weight',
-      '10 min · Conformal: past errors as the ruler, the band explorable and the lab (formula 76.4% against conformal 83.0%)',
-      '5 min · Wrap-up: the four-sentence memo and the checklist'
+    { title: 'Auditing the band and turning it into a decision', plan: [
+      '5 min · Warm-up: the coverage **Predict** (80.0% overall can hide 58% in 2020–21)',
+      '10 min · Rolling coverage lab and era table; counting misses by side and allowing for luck',
+      '10 min · Quantiles and the newsvendor: explorable and lab (critical ratio 0.71, stock \$40,466 million)',
+      '20 min · Activity 2: safety-stock negotiation (below)',
+      '10 min · Combination: the blend explorable (furniture errors cancel, sporting goods do not) and how to read a weight',
+      '5 min · Wrap-up: the discount-chain exercise and the four-sentence memo (finish as homework), then the checklist',
+      '15 min · Buffer: questions, catch-up'
     ] }
   ]}
   objectives={[
     'Read an 80% and a 95% interval out loud in plain words (point, range, how often), and explain why bands widen with the horizon and why a 95% band is about 1.5 times as wide as an 80% band.',
     'Explain the difference between a prediction interval and a confidence interval, and produce intervals by formula, bootstrap and simulation with `forecast()` and `simulate()`.',
     'Back-transform a forecast made in logs: `exp()` the point (a median) and each band endpoint, and compute the bias-adjusted mean when totals must add up.',
-    'Run a **coverage audit**, by horizon and by era and on the last 24 months, allowing for luck and counting misses above and below the band.',
-    'Score quantile forecasts with pinball loss, read it as the cost of a stocking decision, and turn asymmetric costs into a critical ratio, a stock level and a service level.',
-    'Build a simple forecast combination, explain why it helps when errors disagree, and read combination weights without over-interpreting them.',
-    'Construct split-conformal intervals from past errors and state the exchangeability assumption behind their guarantee.'
+    'Run a **coverage audit** by horizon and by era, allowing for luck and counting misses above and below the band.',
+    'Turn asymmetric costs into a critical ratio, a stock level (a quantile of the demand forecast) and a service level.',
+    'Explain why a simple average of two forecasts helps when their errors disagree, and read a combination weight without over-interpreting it.',
+    'Optional extensions (pinball loss, conformal intervals, coverage luck, estimated weights): see Beyond the basics.'
   ]}
   discussion={[
     'Your 80% intervals covered 80% over ten years, but 58% during 2020–2021. Would you call them well calibrated? What would you tell a manager who relies on them for staffing?',
@@ -529,16 +539,15 @@ This is the payoff of the chapter: a stocking recommendation that uses the whole
     '“exp() of the log forecast is the expected value.” It is the median; the mean is higher by about σ²/2, which matters for volatile series and for totals.',
     '“Stock the forecast.” That is optimal only when shortages and leftovers cost the same (critical ratio 0.5), and only if the forecast is the median.',
     '“A 70% combination weight means that model is 70% right.” Weights describe the best mix in one test window, found with hindsight.',
-    '“Conformal intervals are always valid.” Their guarantee needs exchangeable errors and is an average over many uses.',
-    '“Always pick the model with the best test score.” With one test period, ranking noise is large; a simple average often does as well with less risk.'
+    '“Averaging always helps.” It helps only when the errors disagree; when both forecasts miss in the same direction, the blend misses too.'
   ]}
 >
 
 **Activity 1 (session 1): the forecast briefing (20 minutes).** Pairs play one of two analysts. *Retail planners* brief a store-operations manager on retail sales; *fuel buyers* brief a CFO on the oil price.
 
 1. **Predict (3 min).** Planners guess how much wider the 95% band is than the 80% band. Buyers guess whether the mean oil price a year out is above or below exp(log forecast).
-2. **Compute (9 min).** Planners use the band reader at 12 and 24 months ahead. Buyers run the fuel-budget exercise. Both then run the two-year coverage audit.
-3. **Brief (8 min).** Each pair reads a three-sentence briefing aloud: the point and band in words, the coverage record, and one thing the band does not promise. Classmates flag any sentence that breaks a rule from the "Four things a band does not say" box.
+2. **Compute (9 min).** Planners use the band reader at 12 and 24 months ahead. Buyers run the fuel-budget exercise.
+3. **Brief (8 min).** Each pair reads a three-sentence briefing aloud: the point and band in words, which number to plan with (median or mean, and why), and one thing the band does not promise. Classmates flag any sentence that breaks a rule from the "Four things a band does not say" box.
 
 *Expected results:*
 
@@ -546,13 +555,12 @@ This is the payoff of the chapter: a stocking recommendation that uses the whole
 |---|---|
 | Retail planner (band reader, September 2027) | Point about \$666 billion; 80% band \$645–687 billion; 95% band \$635–699 billion (1.5× as wide); half-width ±2.5% at 1 month, ±3.1% at 12, ±5.4% at 24 |
 | Fuel buyer (R exercise, October 2027) | Median \$102.07; 80% band \$60.16–173.17 (\$42 below, \$71 above); mean \$111.13, 8.9% above the median |
-| Both (coverage audit, last 24 months) | 20 of 24 inside (83.3%), 3 misses above and 1 below; within the 16–22 range of luck. With data from 2015: 24 of 24, too wide |
 
-**Activity 2 (session 2): safety-stock negotiation (25 minutes).** Split the class into five teams, each a different retailer with its own costs per \$1 of retail value. Every team uses the same simulated December 2026 demand from the newsvendor lab (R version, `set.seed(2026)`).
+**Activity 2 (session 2): safety-stock negotiation (20 minutes).** Split the class into five teams, each a different retailer with its own costs per \$1 of retail value. Every team uses the same simulated December 2026 demand from the newsvendor lab (R version, `set.seed(2026)`).
 
-1. **Predict (5 min).** Before computing, each team guesses whether its optimal stock is above or below the point forecast of \$40,116 million, and by roughly how much.
-2. **Compute (10 min).** Change `cu` and `co` in the lab and record the critical ratio, stock and safety stock.
-3. **Report (10 min).** Each team states its recommendation in one sentence a store manager could act on, with its service level ("this covers demand about 7 Decembers in 10"), then the class ranks the teams by service level.
+1. **Predict (4 min).** Before computing, each team guesses whether its optimal stock is above or below the point forecast of \$40,116 million, and by roughly how much.
+2. **Compute (8 min).** Change `cu` and `co` in the lab and record the critical ratio, stock and safety stock.
+3. **Report (8 min).** Each team states its recommendation in one sentence a store manager could act on, with its service level ("this covers demand about 7 Decembers in 10"), then the class ranks the teams by service level.
 
 *Expected results* (R lab, \$ millions):
 

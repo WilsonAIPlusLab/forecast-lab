@@ -1,7 +1,7 @@
 # Generates the precomputed data behind the Chapter 12 explorables (not a student lab).
 # Run from the site folder:  "/c/Program Files/R/R-4.4.3/bin/Rscript.exe" src/labs/ch12/make_data.R
 # Writes src/components/ch12/shap_data.json, global_local.json and interpret_data.json.
-# Models and settings are exactly those of Labs 12.3 (SHAP) and 12.4 (global vs local), so the numbers match.
+# Models and settings are exactly those of Lab 12.3 (SHAP) and the global-vs-local lab, so the numbers match.
 # interpret_data.json feeds LevelsVsGrowth (growth vs levels target) and CreditSplit (refits with random
 # column sampling). The LearningBudget explorable needs no file: it boosts in the browser with boost.ts.
 site <- normalizePath("."); setwd(file.path(site, "public"))
@@ -38,7 +38,7 @@ shap_data <- list(
               x = lapply(features, function(f) bees[[f]])))
 jsonlite::write_json(shap_data, file.path(out_dir, "shap_data.json"), auto_unbox = TRUE, digits = 6, null = "null", na = "null")
 
-# ── 2. Global vs local across history lengths (Lab 12.4) ───────────────────
+# ── 2. Global vs local across history lengths (global-vs-local lab) ───────────────────
 cats <- c(`Motor vehicles` = "441", Furniture = "442", Electronics = "443", `Building materials` = "444",
           `Food & beverage stores` = "445", `Health & personal care` = "446", `Gas stations` = "447",
           Clothing = "448", `Sporting goods & hobby` = "451", `General merchandise` = "452",

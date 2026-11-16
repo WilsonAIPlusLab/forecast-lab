@@ -1,16 +1,16 @@
 ---
 layout: ../../layouts/Chapter.astro
 slug: random-forests
-minutes: 120
+minutes: 100
 sessions:
   - title: From a series to a table to a tree
   - title: Forests, honest testing and the bake-off
     starts: random-forests-many-trees-one-average
 build:
   - A feature-engineering function that turns any monthly series into a leak-free supervised-learning table
-  - A random-forest forecast of U.S. retail sales, with out-of-bag error, variable importance and a recursive 45-month path back to dollars
-  - An honest ML vs ETS bake-off on the course scorecard, with seed checks and rolling-origin tuning
-skills: [lag features, leakage, rpart, randomForest, mtry, OOB error, variable importance, recursive vs direct, time-series CV]
+  - A random-forest forecast of U.S. retail sales, with out-of-bag error, variable importance and a 45-month forecast path back to dollars
+  - An honest ML vs ETS bake-off on the course scorecard, with a seed check and a combined forecast
+skills: [lag features, leakage, rpart, randomForest, extrapolation, OOB error, variable importance, time-series CV]
 ---
 import CodeLab from '../../components/CodeLab.svelte';
 import SessionBreak from '../../components/SessionBreak.astro';
@@ -19,6 +19,7 @@ import KeyIdea from '../../components/KeyIdea.astro';
 import Predict from '../../components/Predict.svelte';
 import Term from '../../components/Term.astro';
 import InstructorKit from '../../components/InstructorKit.astro';
+import BeyondBasics from '../../components/BeyondBasics.astro';
 import SeriesToTable from '../../components/ch11/SeriesToTable.svelte';
 import GrowTree from '../../components/ch11/GrowTree.svelte';
 import ExtrapolationTrap from '../../components/ch11/ExtrapolationTrap.svelte';
@@ -63,7 +64,7 @@ Machine learning has a mixed record in forecasting. In a 2018 study, eight popul
 
 <KeyIdea>A machine-learning model doesn't see a time series. It sees a table. Forecasting with ML is mostly the craft of building that table honestly.</KeyIdea>
 
-<SessionBreak n={1} title="From a series to a table to a tree" goals={['Turn a monthly series into a leak-free table of lags, rolling means and calendar features, and say **why** each feature is there', 'Read a tree split, and a tree forecast, in plain words', 'Explain why trees cannot extrapolate a trend, and fix it by modeling growth rates or differences']} />
+<SessionBreak n={1} title="From a series to a table to a tree" goals={['Turn a monthly series into a leak-free table of lags, rolling means and calendar features, and say **why** each feature is there', 'Read a tree split, and a tree forecast, in plain words', 'Explain why trees cannot extrapolate a trend, and fix it by modeling growth rates']} />
 
 ## From a series to a table
 
@@ -84,28 +85,28 @@ The standard features for a monthly series:
 | **Trend index** | 1, 2, 3, … | slow drift (but see the warning in the extrapolation section below) |
 | **Exogenous drivers, lagged** | building permits last month, consumer sentiment last month | outside information |
 
-The last row needs care. A driver is only useful if its value is **known when you make the forecast**. Building permits for March are published in mid-April, together with March housing starts,<sup>[7](#refs)</sup> so to forecast April starts on April 1 you can use February's permits and starts but not March's. Lag every driver by at least the publication delay.
+The last row needs care: a driver is only useful if its value is **known when you make the forecast**. Building permits for March are published in mid-April,<sup>[7](#refs)</sup> so a forecast made on April 1 can use February's permits but not March's.
 
 ### Why these features? Each one answers a question you would ask anyway
 
-Feature engineering is where most of the real work in ML forecasting happens. A forest can only find patterns that some column makes visible. So think of each feature as a question an experienced analyst would ask before guessing next month:
+A forest can only find patterns that some column makes visible. So think of each feature as a question an experienced analyst would ask before guessing next month:
 
-- **"What happened recently?"** Lags $y_{t-1}, y_{t-2}$. If growth was strong last month, is it likely to stay strong? Lags let the model learn momentum (or bounce-back).
-- **"What usually happens in this month?"** The seasonal lag $y_{t-12}$ and the calendar month. A December is not a February. These two features are the forest's way of knowing the calendar, and on NSA retail sales they turn out to matter most.
-- **"What is the recent level, without the noise?"** A rolling mean of the last 3 or 12 months smooths out one-off spikes, so the model can tell a real shift from a single odd month.
-- **"Is anything outside the series pointing up or down?"** Lagged drivers such as permits or sentiment, used only with the values that are already published.
+- **"What happened recently?"** Lags $y_{t-1}, y_{t-2}$ let the model learn momentum (or bounce-back).
+- **"What usually happens in this month?"** The seasonal lag $y_{t-12}$ and the calendar month. A December is not a February. On NSA retail sales these turn out to matter most.
+- **"What is the recent level, without the noise?"** A rolling mean of the last 3 or 12 months smooths out one-off spikes.
+- **"Is anything outside the series pointing up or down?"** Lagged drivers such as permits or sentiment, used only with values already published.
 
-A model cannot invent a question you never asked. If December sales depend on how many shopping weekends fall before Christmas, and no column says so, no amount of tuning will find it.
+A model cannot invent a question you never asked: if no column says how many shopping weekends fall before Christmas, no amount of tuning will find that effect.
 
 <Callout type="empirical" title="Build features in the units you will forecast, and look at them first">
-Retail sales here are in \$ millions, **not seasonally adjusted**, and they trend upward. So the lab forecasts the monthly growth rate in percent, `100 * diff(log(sales))`, and builds every lag from that same growth series (see [Chapter 1](/chapters/time-series-data/#transformations-every-analyst-uses) for why a log difference is close to a percent change). Two habits pay off. First, **plot each feature against the target** before modeling: in the 2011–2022 training rows, this month's growth has a correlation of 0.91 with growth in the same month last year, but −0.33 with last month's growth (a strong month tends to be followed by a weaker one). That tells you seasonality will dominate before you fit anything. Second, **look for odd months**: in 2020, April fell by about 12% and May jumped by about 20% (in log points), swings that no normal April or May shows. A tree will happily give such months a leaf of their own.
+Retail sales here are in \$ millions, **not seasonally adjusted**, and they trend upward. So the lab forecasts the monthly growth rate in percent, `100 * diff(log(sales))`, and builds every lag from that same growth series ([Chapter 1](/chapters/time-series-data/#transformations-every-analyst-uses)). Then **plot each feature against the target** before modeling: in the 2011–2022 training rows, this month's growth has a correlation of 0.91 with growth in the same month last year, but −0.33 with last month's growth (a strong month tends to be followed by a weaker one). Seasonality will dominate before you fit anything. And **look for odd months**: in 2020, April fell by about 12% and May jumped by about 20% (in log points).
 </Callout>
 
 <Callout type="pitfall" title="Three ways to leak the future into your features">
 <ul>
 <li><strong>A rolling window that includes the target.</strong> A "3-month average" computed over months t − 2, t − 1 and t contains the answer. Switch on the leak in the explorer above to see it.</li>
-<li><strong>A driver that isn't published yet.</strong> This month's unemployment rate cannot help forecast this month's retail sales if it comes out a week after you need the forecast.</li>
-<li><strong>A random train/test split.</strong> Machine-learning tutorials shuffle rows before splitting. With time series that lets the model learn from 2024 to "predict" 2023. Always split by date.</li>
+<li><strong>A driver that isn't published yet</strong> when you need the forecast.</li>
+<li><strong>A random train/test split.</strong> Shuffling rows lets the model learn from 2024 to "predict" 2023. Always split by date.</li>
 </ul>
 </Callout>
 
@@ -119,10 +120,10 @@ In code, building the table is one short function. The lab below makes the featu
 Notice that the lab forecasts the **monthly growth rate** (percent change from last month), not the dollar level of sales. That choice turns out to be crucial for trees, and the section after next shows why.
 
 <Callout type="empirical" title="The shift test: every rolling window must end last month">
-The most common real-world leak is not a typo; it is a library default. In R, `stats::filter(x, rep(1/3, 3), sides = 1)` averages months t − 2, t − 1 **and t**. In Python, `g.rolling(3).mean()` does the same. Both are fine for describing the past and wrong as forecasting features. The fix is one shift: `lag_k(..., 1)` in R or `.shift(1)` in Python. Test every rolling feature by asking, for one row: "which months went into this number, and were they all published before the month I am forecasting?" Write the answer next to the code.
+The most common real-world leak is a library default. In R, `stats::filter(x, rep(1/3, 3), sides = 1)` averages months t − 2, t − 1 **and t**. In Python, `g.rolling(3).mean()` does the same. The fix is one shift: `lag_k(..., 1)` in R or `.shift(1)` in Python. Test every rolling feature by asking, for one row: "which months went into this number, and were they all published before the month I am forecasting?"
 </Callout>
 
-**You are the analyst.** A colleague's forest for retail sales growth looks twice as accurate as yours on the 2023+ test months. Their code builds a 3-month rolling mean with a library default. Find the leak, fix it with one shift, and measure how much of their "skill" survives. (This exercise uses only three features, the two lags and the rolling mean, so even the honest model is weaker than the chapter's full model, which also knows the calendar.)
+**You are the analyst.** A colleague's forest for retail sales growth looks twice as accurate as yours on the 2023+ test months. Their code builds a 3-month rolling mean with a library default. Find the leak, fix it with one shift, and measure how much of their "skill" survives. (It uses only the two lags and the rolling mean, so even the honest model is weaker than the chapter's full model.)
 
 <div class="breakout">
 <CodeLab client:load id="ch11-ex-leak" exercise title="Exercise: the suspiciously good colleague" r={leakR} solution={leakSolR} check={leakCheckR} py={leakPy} solutionPy={leakSolPy} checkPy={leakCheckPy}
@@ -131,11 +132,11 @@ The most common real-world leak is not a typo; it is a library default. In R, `s
   hints={['The colleague’s window covers months t − 2, t − 1 and t. Shift it down by one row so it covers t − 3, t − 2 and t − 1.', 'The second blank is the actual growth in the test rows: `test$g` in R, `test["g"]` in Python.', 'Expect the honest MAE to be about twice the leaky one (roughly 3.8 vs 1.9 percentage points).']} />
 </div>
 
-The leak halves the test error: about 1.9 percentage points for the leaky forest against 3.8 for the honest one (R: 1.86 vs 3.79; Python: 1.94 vs 3.84). The test set did not catch it, because the test rows were built with the same leaky formula. **A held-out test set protects you from overfitting, not from leakage in the features.**
+The leak halves the test error (R: 1.86 vs 3.79 percentage points; Python: 1.94 vs 3.84). The test set did not catch it, because the test rows were built with the same leaky formula. **A held-out test set protects you from overfitting, not from leakage in the features.**
 
 ## Regression trees: twenty questions for numbers
 
-A <Term def="A model that predicts a number by asking a sequence of yes/no questions about the features (is month = December? was growth last month above 2%?) and returning the average target of the training rows that gave the same answers.">regression tree</Term> forecasts by asking yes/no questions. Is it January? Was growth last month above 1.5%? Each answer sends the month down a branch, and at the end of the path, in a **leaf**, the forecast is simply the average of the training months that ended up there.
+A <Term def="A model that predicts a number by asking a sequence of yes/no questions about the features (is month = December? was growth last month above 2%?) and returning the average target of the training rows that gave the same answers.">regression tree</Term> forecasts by asking yes/no questions. Each answer sends the month down a branch, and at the end of the path, in a **leaf**, the forecast is simply the average of the training months that ended up there.
 
 How does the tree choose its questions? Greedily. For every feature and every possible cut point, it computes how much the cut would reduce the **sum of squared errors** (SSE) inside the group, and it keeps the best one. Then it repeats inside each half. This algorithm is called CART.<sup>[3](#refs)</sup> Try it yourself on retail sales, with just two features.
 
@@ -143,30 +144,22 @@ How does the tree choose its questions? Greedily. For every feature and every po
 <GrowTree client:load />
 </div>
 
-The first cut you find (or that **Best split** finds) separates January from everything else: January sales fall by about 23 log points from December on average (roughly 20% in plain percent; the log shortcut stretches for moves this big), while the other months grow by about 2.5%. The second cut isolates December. The tree has discovered seasonality with no one telling it about calendars. Notice the dots near the top and bottom edges: those are the COVID months of spring 2020, when sales collapsed and rebounded by over 20% in a single month. A deep tree will happily give them a leaf of their own.
+The first cut you find (or that **Best split** finds) separates January from everything else: January sales fall by about 23 log points from December on average (roughly 20% in plain percent), while the other months grow by about 2.5%. The second cut isolates December. The tree has discovered seasonality with no one telling it about calendars.
 
 Now drag **Leaves** to 40. The training error keeps falling, because each new leaf fits the training months more closely. The test error (2023 onward) stops improving at around 20 leaves and then drifts up. That is <Term def="Fitting the noise in the training data instead of the pattern, so the model looks better in-sample and worse on new data.">overfitting</Term>, and trees are prone to it.
 
-<Callout type="math" title="What a split minimizes">
-A node holds training months $i \in S$ with targets $y_i$ and mean $\bar y_S$. Its error is $\text{SSE}(S) = \sum_{i \in S} (y_i - \bar y_S)^2$. A cut on feature $j$ at value $c$ splits $S$ into $L = \lbrace i : x_{ij} \le c \rbrace$ and $R = \lbrace i : x_{ij} > c \rbrace$. CART picks the $(j, c)$ that maximizes the reduction
-
-$$\Delta = \text{SSE}(S) - \text{SSE}(L) - \text{SSE}(R).$$
-
-Only cut points halfway between neighboring observed values need checking, so the search is fast. A leaf predicts $\bar y$ of its months, which is the constant that minimizes squared error inside it. That is why a tree's predictions are **piecewise constant**: a staircase, never a slope.
-</Callout>
-
-In R, `rpart()` grows the tree and the lab draws it. With all four features (two lags, the seasonal lag and the month), its first question is not "is it January?" but "was growth in the same month last year below about −15%?" Only Januaries are that weak, so the seasonal lag finds January by itself.
+In R, `rpart()` grows the tree on all four features (two lags, the seasonal lag and the month). Its first question is "was growth in the same month last year below about −15%?" Only Januaries are that weak, so the seasonal lag finds January by itself.
 
 <div class="breakout">
 <CodeLab client:load id="ch11-tree" title="Grow, draw and stress-test a regression tree" r={treeR} py={treePy} packages={['rpart']} pyPackages={['scikit-learn']}
   goal="Fit a regression tree to retail sales growth, read its rules, and find the depth where test error stops improving." />
 </div>
 
-The depth experiment in the lab tells the same story as the explorer: training error falls from 6.4 to 1.2 percentage points as the tree deepens, while test error is lowest at depth 5 (2.4 points) and then creeps back up.
+As the tree deepens, training error falls from 6.4 to 1.2 percentage points, while test error is lowest at depth 5 (2.4 points).
 
 ### Reading a tree in plain words
 
-A tree is the easiest model in this course to read aloud, because it *is* a list of if-then rules. Take the lab's depth-3 tree and follow a December down it:
+A tree *is* a list of if-then rules, so it reads aloud easily. Take the lab's depth-3 tree and follow a December down it:
 
 1. "Was growth in the same month last year at least −15.3%?" **Yes.** (Only Januaries fall further, so this question really asks "is it January?")
 2. "Is the month March, May or December?" **Yes.** (These are the months that usually jump.)
@@ -174,10 +167,10 @@ A tree is the easiest model in this course to read aloud, because it *is* a list
 
 The December lands in a leaf of **23 training months**, and the forecast is their average growth: **+13.4%**. In words: *"Across the 23 past March, May and December months that followed a quiet month two months earlier, sales grew 13.4% on average, so the tree expects the same."* To get dollars, apply it to November's level: November sales × $e^{0.134}$, about 14% more.
 
-Three things to notice when you read any tree:
+When you read any tree, remember:
 
-- **A split is a question, not an effect.** "g12 ≥ −15.3" does not say that higher growth last year *causes* anything. The tree found that this cut separates the training months into two groups with very different averages.
-- **The leaf size is your sample size.** A forecast from a leaf of 23 months is an average of 23 numbers; a leaf of 5 months is a noisy average of 5. Look at the `n` next to every leaf.
+- **A split is a question, not an effect.** "g12 ≥ −15.3" does not say that higher growth last year *causes* anything. The cut separates the training months into two groups with very different averages.
+- **The leaf size is your sample size.** A leaf of 23 months is an average of 23 numbers; a leaf of 5 months is a noisy average of 5. Look at the `n` next to every leaf.
 - **The forecast is an average of real past months.** That is why it is easy to explain ("months like this one grew 13% on average") and why it can never go beyond the most extreme past month.
 
 <Predict client:load
@@ -187,21 +180,13 @@ Three things to notice when you read any tree:
   explain="A tree is fixed once it is grown. A new month that answers the questions the same way lands in the same leaf and gets the same forecast: the leaf's average, −21.3%. The thresholds route months; they are not forecasts."
 />
 
-The explorer below shows this "average of past months" view directly. Pick a month to forecast; the purple dots are the training months the forecast is built from.
-
-<div class="breakout">
-<PastMonthsVote client:load />
-</div>
-
-For December 2023 the small tree in the explorer (grown in JavaScript, so its cuts differ slightly from the rpart tree) asks three questions, lands in a leaf of 22 past months, and forecasts +12.9%; actual growth was +7.5%. Switch to the **forest** and the forecast becomes a weighted average of 27 past months, with about 85% of the weight on past Decembers. For every January, about 99% of the weight sits on past Januaries. One surprise in the December list: May 2020, the COVID rebound month, gets almost 9% of the weight. While choosing splits, many trees grouped its +20% jump with the big December jumps, so it shares their leaves and votes on Christmas forecasts. That is how one extreme month can seep into forecasts for quite different months. A forest on these features behaves a lot like a smart seasonal naive: "this month will look like the same month in comparable past years."<sup>[13](#refs)</sup>
-
 <Callout type="empirical" title="Explain a tree forecast with its leaf, in the target's units">
-When your manager asks "why does the model say +13% for December?", do not show the tree's code. Say which past months are in the leaf, how many there are, and what they averaged, in the units of the target: "the 23 most similar months grew 13.4% on average." If the leaf has fewer than about 10 months, say so: the forecast rests on very few observations. And remember the units: the tree forecasts **growth**, so convert to dollars before you put it on a slide.
+When your manager asks "why +13% for December?", do not show code. Say which past months are in the leaf, how many, and what they averaged: "the 23 most similar months grew 13.4% on average." If the leaf has fewer than about 10 months, say so. And convert the **growth** forecast to dollars before it goes on a slide.
 </Callout>
 
 ## The extrapolation trap
 
-Here is the property of trees that matters most for economic data, and that most machine-learning tutorials never mention. Look again at how a leaf forecasts: it returns an **average of training targets**. An average can never be larger than the largest value it averages.
+Here is the property of trees that matters most for economic data. A leaf forecasts an **average of training targets**, and an average can never be larger than the largest value it averages.
 
 <Predict client:load
   question="A random forest is trained on the **level** of U.S. e-commerce sales up to December 2022, when sales reached an all-time high of about \$90.5 billion a month. Sales kept climbing after that. What will the forest's forecasts for 2023–2025 look like?"
@@ -219,51 +204,21 @@ Here is the property of trees that matters most for economic data, and that most
 <ExtrapolationTrap client:load />
 </div>
 
-Move the origin back to 2019 or 2020 and the trap snaps shut every time, just below whatever the training maximum was. Now press **Forecast the growth rate**. Growth rates don't trend: monthly e-commerce growth has wandered in roughly the same band for a decade, so tomorrow's growth *is* inside the range the trees have seen. Compounding those growth forecasts from the last observed level gives a line that keeps climbing.
+Move the origin back to 2019 or 2020 and the trap snaps shut every time, just below whatever the training maximum was. Now press **Forecast the growth rate**. Monthly e-commerce growth has stayed in roughly the same band for a decade, so tomorrow's growth *is* inside the range the trees have seen. Compounding those growth forecasts from the last observed level gives a line that keeps climbing.
 
 <KeyIdea>Trees and forests cannot extrapolate. For trending data, never feed them the level. Model growth rates, differences or a detrended series, then convert the forecast back.</KeyIdea>
 
-The lab reproduces the trap in R. Trained on levels, the forest's 2023-onward forecasts all sit between \$89.5 and \$89.9 billion, below the training maximum of \$90.5 billion, while actual sales reached \$116.7 billion. Its average miss is about \$13.6 billion a month. The same forest trained on growth rates misses by about \$5.6 billion.
-
-<div class="breakout">
-<CodeLab client:load id="ch11-trap" title="Spring the extrapolation trap" r={trapR} py={trapPy} packages={['randomForest']} pyPackages={['scikit-learn']}
-  goal="Show that a forest trained on levels cannot forecast above its training maximum, and fix it by modeling growth rates, differences or the gap from a trend." />
-</div>
+In R, the forest on levels misses 2023-onward sales by about \$13.6 billion a month; the same forest on growth rates, by about \$5.6 billion. For series that grow by percentages (sales, prices, GDP, employment), the growth rate is the safe default; convert back with last level × exp(growth / 100), month after month.
 
 <Callout type="business" title="Where this bites in practice">
-Prices, nominal sales, GDP, employment, house prices: most series you will forecast at work trend upward. A tree-based model on their levels will look fine in a backtest that happens to stay inside the historical range, then quietly flat-line the first time the series makes a new high. If a vendor's "AI forecast" goes flat at a suspiciously round ceiling, ask whether it was trained on levels.
+Most series you will forecast at work trend upward. A tree-based model on their levels will look fine in a backtest that happens to stay inside the historical range, then quietly flat-line the first time the series makes a new high. If a vendor's "AI forecast" goes flat at a suspiciously round ceiling, ask whether it was trained on levels.
 </Callout>
 
-### Three ways out: growth rates, differences, detrending
-
-The fix is always the same idea: **give the tree a target that stays inside the range it has already seen**, then convert its forecast back to the units you need. Three versions work, and you already know all three from earlier chapters.
-
-| Model the... | The tree forecasts | Back to dollars | Stays in range because... |
-|---|---|---|---|
-| **Growth rate** (log difference) | `100 * diff(log(y))`, % per month | last level × exp(cumulative growth / 100) | percentage growth has no trend |
-| **Difference** | `diff(y)`, \$ change per month | last level + cumulative sum of changes | monthly changes trend much less than levels |
-| **Detrended series** | `log(y)` minus a fitted trend line | trend line + forecast gap, then exp() | the gap from trend wanders around zero |
-
-Taking differences to remove a trend is exactly what ARIMA's "I" does ([Chapter 7](/chapters/arima/#the-cure-differencing)), and a log difference is approximately a percent change ([Chapter 1](/chapters/time-series-data/#transformations-every-analyst-uses)). A tree needs the same treatment for a different reason: not because of unit roots, but because it can only repeat averages of what it has seen.
-
-<Predict client:load
-  question="You train the e-commerce forest on monthly **dollar changes**, `diff(y)`, instead of levels. The largest monthly change in the training data is a rise of about \$9.2 billion. Can the forecast of the **level** go above the training maximum of \$90.5 billion?"
-  options={['No: a tree can never forecast above its training data', 'Yes: each forecast change stays in the training range, but the changes add up month after month', 'Only if one forecast change is above \$9.2 billion', 'Only with a direct strategy']}
-  answer={1}
-  explain="The ceiling applies to what the tree predicts: here, the monthly change. Each forecast change is an average of past changes, mostly small rises. Adding them to the last level, month after month, lets the level keep climbing. In the lab setup, this forest's level forecast misses by about \$5.4 billion a month, against \$13.6 billion for the forest on levels."
-/>
-
-The last step of the lab tries all three. In R, the forest on levels misses by \$13.6 billion a month; on growth rates by \$5.6 billion; on dollar differences by \$5.4 billion; and on the gap from a log-linear trend by \$5.8 billion. In the Python tab, growth and differences do just as well (\$5.0 and \$5.6 billion), but detrending misses by \$11.1 billion. Detrending is the most fragile fix: it assumes the trend line itself stays put, and the 2020 jump in online shopping moved it.
-
-<Callout type="empirical" title="Prefer growth rates for series that grow by percentages">
-Differences and growth rates did about equally well here, but they age differently. E-commerce sales rose by \$251 million a month on average in 2011 and by \$475 million in 2022: in dollars, the typical change has doubled, so a forest trained on early changes sees "small" numbers that no longer fit. In percent, the same months grew 1.05% and 0.54% a month: still the same order of magnitude. For anything that grows by percentages (sales, prices, GDP, employment), model the **log difference**, and use plain differences for series that move by similar amounts in their own units, such as an interest rate or an unemployment rate.
-</Callout>
-
-<SessionBreak n={2} title="Forests, honest testing and the bake-off" goals={['Fit a random forest and read its out-of-bag error and **variable importance** correctly (and say what importance is not)', 'Explain recursive vs direct multi-step forecasts in plain words', 'Validate with time-ordered folds and no leakage, then run the bake-off and write the recommendation']} />
+<SessionBreak n={2} title="Forests, honest testing and the bake-off" goals={['Fit a random forest and read its out-of-bag error and **variable importance** correctly (and say what importance is not)', 'Validate with time-ordered folds, not shuffled ones', 'Run the bake-off against ETS and seasonal naive, and write the recommendation']} />
 
 ## Random forests: many trees, one average
 
-A single deep tree is unstable: change a few training months and you can get a quite different tree. Leo Breiman's fix was to grow **many** trees on perturbed versions of the data and average them.<sup>[4](#refs)</sup> <sup>[5](#refs)</sup> The labs use R's `randomForest` package, a port of Breiman and Cutler's original code.<sup>[9](#refs)</sup>
+A single deep tree is unstable: change a few training months and you get a different tree. Leo Breiman's fix was to grow **many** trees on perturbed versions of the data and average them.<sup>[4](#refs)</sup> <sup>[5](#refs)</sup> The labs use R's `randomForest` package.<sup>[9](#refs)</sup>
 
 1. **Bootstrap.** Each tree is trained on a <Term def="A sample of the same size as the training set, drawn with replacement, so some months appear twice or more and about a third are left out.">bootstrap sample</Term> of the training rows. Averaging trees grown this way is called **bagging** (bootstrap aggregating).
 2. **Random feature subsets.** At every split, a random forest only lets the tree choose among `mtry` randomly picked features. This makes the trees less alike, and averaging less-alike trees cancels more noise.
@@ -273,15 +228,7 @@ A single deep tree is unstable: change a few training months and you can get a q
 <ForestOfOpinions client:load />
 </div>
 
-A typical single tree misses the retail forecast by about \$15.8 billion a month on average. Averaging 200 trees cuts that to about \$10.8 billion, and most of the gain arrives within the first 20 or so trees. Switch to **Housing starts** for a sharper lesson: a typical single tree misses by about 112 thousand units, worse than simply repeating last month's value (95), while the forest of 200 trees misses by about 83 and beats it.
-
-<Callout type="math" title="Why averaging helps, and why mtry helps more">
-If each tree's prediction has variance $\sigma^2$ and any two trees' predictions have correlation $\rho$, the average of $B$ trees has variance
-
-$$\rho\,\sigma^2 + \frac{1-\rho}{B}\,\sigma^2 .$$
-
-The second term vanishes as you add trees. The first does not: correlated trees make correlated mistakes. Restricting each split to a random subset of `mtry` features lowers $\rho$, which is why a random forest usually beats plain bagging. This is also why more trees never cause overfitting in a forest; they just stop helping.<sup>[4](#refs)</sup>
-</Callout>
+A typical single tree misses the retail forecast by about \$15.8 billion a month on average. Averaging 200 trees cuts that to about \$10.8 billion, with most of the gain in the first 20 or so trees. On **Housing starts**, a single tree (112 thousand units) loses to repeating last month's value (95), while the forest (83) beats it.
 
 Two extras come free with bootstrapping. Each tree never sees about a third of the rows, its **out-of-bag** (OOB) rows. Scoring every row with only the trees that did not train on it gives the <Term def="Out-of-bag error: the forest's error on each training row, using only the trees whose bootstrap sample left that row out. A built-in estimate of out-of-sample error.">OOB error</Term>, a validation score that needs no hold-out set. And shuffling one feature in the OOB rows and measuring how much the error grows gives **permutation importance**: how much the forest relies on that feature.
 
@@ -290,95 +237,32 @@ Two extras come free with bootstrapping. Each tree never sees about a third of t
   goal="Fit a 300-tree random forest to retail sales growth, read its OOB error and variable importance, and produce a recursive forecast in $ millions for 2023 onward." />
 </div>
 
-The forest explains about 90% of the variance of monthly growth out-of-bag, with an OOB error of about 3.0 percentage points. Permutation importance puts seasonality far ahead: shuffling the month raises the OOB mean squared error by about 840%, and shuffling the seasonal lag by about 630%, against about 130% and 110% for the two recent lags. (R's default `%IncMSE` column is a scaled score, not a percentage, so the lab asks for the raw increase.) Its forecast from January 2023 onward misses actual sales by \$12,980 million a month on average.
+The forest explains about 90% of the variance of monthly growth out-of-bag, with an OOB error of about 3.0 percentage points. Permutation importance puts seasonality far ahead: shuffling the month raises the OOB mean squared error by about 840%, and shuffling the seasonal lag by about 630%, against about 130% and 110% for the two recent lags. For the 2023-onward forecast, the lab feeds each month's forecast back in as next month's lag; that path misses actual sales by \$12,980 million a month on average.
 
-<Callout type="pitfall" title="Is OOB error a fair test for time series?">
-OOB rows are chosen at random, so a tree may train on 2021 and be scored on 2019. For a model whose features are only lags of the series, this is less of a problem than you might fear: Bergmeir, Hyndman and Koo show that ordinary cross-validation is valid for purely autoregressive models when the errors are uncorrelated.<sup>[6](#refs)</sup> That guarantee needs a model that captures the dynamics (leftover autocorrelation in the errors breaks it) and a stable series (structural breaks such as COVID, or trending levels, break it too). And OOB scores one-step fits on scattered months, while your real job is a multi-step forecast from today. So treat OOB error as a quick in-sample check, and make the decisions that matter (tuning, model choice) with a time-ordered evaluation, as below.
-</Callout>
+OOB rows are chosen at random, so a tree may train on 2021 and be scored on 2019. Treat OOB error as a quick check, and make decisions with a time-ordered evaluation, as below.
 
 ## Reading variable importance
 
-The importance chart is the slide everyone wants, and the one most often misread. Start with what it **is**, in plain words. In the forest lab, shuffling the calendar month raises the out-of-bag mean squared error by about 840%. Read that as: *"If the forest could no longer tell which month it is, its squared misses would be about 9 times larger (its typical miss about 3 times larger)."* That is a statement about **how much this fitted model leans on that column**. Nothing more.
+The importance chart is the slide most often misread. Start with what it **is**. In the forest lab, shuffling the calendar month raises the out-of-bag mean squared error by about 840%. Read that as: *"If the forest could no longer tell which month it is, its squared misses would be about 9 times larger (its typical miss about 3 times larger)."* That is a statement about **how much this fitted model leans on that column**. Nothing more.
 
 Now what it is **not**:
 
-- **Not a coefficient.** A regression coefficient has a sign and units: "a 1-point rise in X goes with a 0.4% rise in Y, holding Z fixed" ([Chapter 4](/chapters/regression/#reading-a-regression-like-an-analyst)). Importance has neither. "g12: 630%" does not say whether a strong month last year means a strong or a weak month this year, or by how much. To see direction, look at the leaves (as in the tree section), or use SHAP values, which you will meet in [Chapter 12](/chapters/boosting-shap/): they have a sign and are in the target's units.
-- **Not causal.** The calendar month does not *cause* spending. It stands in for holidays, weather, tax refunds and school calendars. Importance ranks what helps *predict*, which is all a forecaster needs, but it is no evidence for a policy or a marketing decision.
-- **Not stable when features overlap.** The month and last year's growth in the same month (`g12`) both encode seasonality. With both in the model, they share the credit; remove one, and the other takes almost all of it.<sup>[11](#refs)</sup> <sup>[12](#refs)</sup>
+- **Not a coefficient.** A regression coefficient has a sign and units ([Chapter 4](/chapters/regression/#reading-a-regression-like-an-analyst)); importance has neither. "g12: 630%" does not say whether a strong month last year means a strong or a weak month this year. To see direction, look at the leaves, or use SHAP values ([Chapter 12](/chapters/boosting-shap/)), which have a sign and are in the target's units.
+- **Not causal.** The calendar month does not *cause* spending. It stands in for holidays, weather and tax refunds. Importance ranks what helps *predict*; it is no evidence for a policy decision.
+- **Not stable when features overlap.** The month and last year's growth in the same month (`g12`) both encode seasonality, so they share the credit. Drop the month and `g12`'s importance jumps from about 630% to about 1,150%, while the test error barely moves (1.83 to 2.02 percentage points). Drop both and the error nearly doubles, to 3.55.<sup>[11](#refs)</sup> <sup>[12](#refs)</sup>
 - **Not fixed.** Change the random seed and the bars move. Rank order of large gaps is usually stable; small gaps are noise.
-
-<Predict client:load
-  question="In the R forest, shuffling month raises the OOB error by about 840% and shuffling g12 by about 630%. You **drop month** and refit. What happens to g12's importance, and to the forecast error?"
-  options={['g12 stays near 630%, and the error rises sharply', 'g12 roughly doubles, and the error rises only a little', 'g12 falls, because the forest has less to work with', 'Both stay the same: importance is a fixed property of a feature']}
-  answer={1}
-  explain="g12 can do most of month's job, so the forest leans on it much harder: in R its importance jumps from about 630% to about 1,150%, while the test MAE moves only from 1.83 to 2.02 percentage points. Importance was never 'owned' by one feature. Try it in the explorer below, and in the exercise after it."
-/>
-
-<div class="breakout">
-<ImportanceShare client:load />
-</div>
-
-The explorer's forest (grown in JavaScript, with the month as a number rather than a category) ranks `g12` first and the month second, the reverse of the R lab, which is itself a lesson: importance depends on how you encode a feature. But the sharing story is the same. With all four features, `g12` scores about 800% and the month about 380%. Drop the month and `g12` rises to about 1,020%, while the test error moves only from 1.82 to 2.01 points. Drop `g12` instead and the month jumps to about 1,130%. Drop both and the error nearly doubles, to 3.41. The real value of seasonality is that last number, which no single bar showed.
 
 <Callout type="empirical" title="How to report variable importance honestly">
 <ul>
 <li><strong>Report a ranking, not a precise number.</strong> "Seasonal features matter most, recent lags much less" survives a new seed; "month = 837%" does not.</li>
-<li><strong>Group features that carry the same information</strong> (month and the seasonal lag; several lags of the same driver) and report the group, or drop one member and show that accuracy barely changes.</li>
-<li><strong>Measure what a group is worth by removing it and re-scoring on time-ordered test data.</strong> Here, losing both seasonal features nearly doubles the error; that is the number a manager can use.</li>
-<li><strong>Say which importance you used.</strong> R's lab shows permutation importance on out-of-bag rows; scikit-learn's default is impurity importance, which can favor features with many distinct values. Never put the two on one chart.</li>
+<li><strong>Group features that carry the same information</strong> (month and the seasonal lag), and report what removing the group costs on time-ordered test data: here, nearly double the error.</li>
+<li><strong>Say which importance you used.</strong> The R lab shows permutation importance on out-of-bag rows; scikit-learn's default is impurity importance, which can favor features with many distinct values. Never put the two on one chart.</li>
 </ul>
 </Callout>
 
-**You are the analyst.** Your manager looks at the importance chart and says: "Month is the biggest bar, so let's drop the lag features and just use month." Before answering, run the experiment the other way round: drop the month, and see what happens to the importance of `g12` and to the forecast error.
+## Honest validation: folds that go forward in time
 
-<div class="breakout">
-<CodeLab client:load id="ch11-ex-importance" exercise title="Exercise: who gets the credit for seasonality?" r={impR} solution={impSolR} check={impCheckR} py={impPy} solutionPy={impSolPy} checkPy={impCheckPy}
-  packages={['randomForest']} pyPackages={['scikit-learn']}
-  goal="Refit the retail forest without the calendar month and compare permutation importance and test MAE with the full model."
-  hints={['The smaller model keeps the two recent lags and the seasonal lag: growth in the same month last year.', 'Its column is called `g12`. The second blank is the name of the smaller forest you just fitted.', 'In R the full model gives g12 about 630%; without month it should be far higher.']} />
-</div>
-
-The answer for your manager: "Month and last year's growth tell the forest the same thing, so the chart splits the credit between them. With the two lags in the model, either seasonal feature alone does almost as well as both (test MAE 1.83 without `g12`, 2.02 without the month, 1.83 with both, in R). Dropping **both** nearly doubles the error, to 3.55. And the lags earn their place despite their small bars: month alone gives 2.12, month plus the two lags 1.83." The Python tab measures importance on the test months instead of out-of-bag rows (scikit-learn has no OOB permutation importance) and agrees: `g12` rises from 664% to 1,061% when the month goes.
-
-## Forecasting many months ahead: recursive or direct?
-
-A model that predicts *next* month cannot directly give you the month after, because next month's value is one of its features. There are two standard ways around this.<sup>[8](#refs)</sup>
-
-In plain words: **recursive** is one forecaster who predicts next month, then treats that guess as if it were data to predict the month after, and so on. **Direct** is a team of twelve specialists. Specialist *h* answers one question only: "given what we know today, what will month *h* look like?" No specialist ever sees another's guess.
-
-<div class="strat" aria-label="Diagram comparing the recursive and direct multi-step strategies">
-  <div class="st-col">
-    <div class="st-h">Recursive: one model, fed its own forecasts</div>
-    <div class="st-row"><span class="k">known</span><span class="k">known</span><span class="arr">→</span><span class="f">ŷ<sub>t+1</sub></span></div>
-    <div class="st-row"><span class="k">known</span><span class="f">ŷ<sub>t+1</sub></span><span class="arr">→</span><span class="f">ŷ<sub>t+2</sub></span></div>
-    <div class="st-row"><span class="f">ŷ<sub>t+1</sub></span><span class="f">ŷ<sub>t+2</sub></span><span class="arr">→</span><span class="f">ŷ<sub>t+3</sub></span></div>
-    <p>Simple, and it uses the freshest model. But errors can snowball: a bad forecast for month 1 becomes a bad feature for month 2.</p>
-  </div>
-  <div class="st-col">
-    <div class="st-h">Direct: one model per horizon</div>
-    <div class="st-row"><span class="k">known</span><span class="k">known</span><span class="arr">→ model 1 →</span><span class="f">ŷ<sub>t+1</sub></span></div>
-    <div class="st-row"><span class="k">known</span><span class="k">known</span><span class="arr">→ model 2 →</span><span class="f">ŷ<sub>t+2</sub></span></div>
-    <div class="st-row"><span class="k">known</span><span class="k">known</span><span class="arr">→ model 3 →</span><span class="f">ŷ<sub>t+3</sub></span></div>
-    <p>No forecast is ever used as an input. But you train 12 models for a 12-month forecast, and each one learns from older clues.</p>
-  </div>
-</div>
-
-Which works better is an empirical question, so test it. From three year-end origins (December 2022, 2023 and 2024), the lab forecasts the next 12 months both ways. At one month ahead the two are identical (it is the same model). Further out, each strategy wins at some horizons; averaged over all twelve, recursive misses by about \$8,900 million a month and direct by about \$10,900 million on this series. The winning M5 entry used both kinds of LightGBM models.<sup>[2](#refs)</sup>
-
-<div class="breakout">
-<CodeLab client:load id="ch11-multistep" title="Recursive vs direct, horizon by horizon" r={multiR} packages={['randomForest']}
-  goal="Forecast 12 months ahead with a recursive forest and with 12 direct forests, from three origins, and compare their error by horizon." />
-</div>
-
-<Callout type="empirical" title="In a direct model, every feature must be known at the origin">
-The direct model for 6 months ahead is trained on rows like "growth at the origin → growth 6 months later". So its "last month" feature is really *growth six months before the target*, `lag_k(x, 6)`, not `lag_k(x, 1)`. Using the one-month lag in a 6-month model is a leak: when you stand in December, you do not know May's growth yet. The lab's `direct_table(g, h)` shifts every recent lag by `h` for exactly this reason, and keeps `g12` only because the same month last year is still known for horizons up to 12.
-</Callout>
-
-## Tuning without peeking
-
-A forest has a few settings worth tuning: `mtry` (features per split) and `nodesize` (the smallest leaf; larger leaves give smoother trees). The tempting way to tune is to try several values and keep whichever scores best on the 2023 test period. Don't: then the test score is no longer an honest estimate, because you chose the model *by* it.
-
-The other tempting shortcut is the one in every general machine-learning tutorial: **k-fold cross-validation with shuffled rows**. Deal the months into five random piles, train on four, score the fifth, repeat. For a trending series, that quietly answers the wrong question.
+Choosing a model by its 2023 test score spoils the test: it is no longer an honest estimate. The usual machine-learning shortcut, **k-fold cross-validation with shuffled rows**, is worse for a trending series: it quietly answers the wrong question.
 
 <Predict client:load
   question="Two forests forecast e-commerce sales one month ahead: one trained on the **level**, one on the **growth rate**. You compare them with 5-fold cross-validation on shuffled 2010–2022 months. What will the shuffled folds say?"
@@ -391,26 +275,9 @@ The other tempting shortcut is the one in every general machine-learning tutoria
 <HonestValidation client:load />
 </div>
 
-Shuffled folds call it a tie: an average one-month-ahead miss of \$0.84 billion for the level forest and \$0.82 billion for the growth forest. Time-ordered folds (train to each December from 2017 to 2021, score the next 12 months) disagree sharply: \$6.20 billion against \$1.57 billion, a factor of four. Reality sides with the time-ordered folds: from January 2023 the level forest missed by \$13.95 billion a month, the growth forest by \$0.97 billion. Only the evaluation that respects time would have stopped you from shipping the wrong model.<sup>[10](#refs)</sup>
+Shuffled folds call it a tie: an average one-month-ahead miss of \$0.84 billion for the level forest and \$0.82 billion for the growth forest. Time-ordered folds (train to each December from 2017 to 2021, score the next 12 months) disagree sharply: \$6.20 billion against \$1.57 billion, a factor of four. Reality sides with the time-ordered folds: from January 2023 the level forest missed by \$13.95 billion a month, the growth forest by \$0.97 billion.<sup>[10](#refs)</sup>
 
-Instead, run time-series cross-validation inside the training years, exactly as in [Chapter 3](/chapters/benchmarks/): stand at the end of each December from 2017 to 2021, train on everything up to that point, forecast the next 12 months, and average the errors. The lab tunes six settings this way, and runs ETS and seasonal naive through the same five rolling years.
-
-<div class="breakout">
-<CodeLab client:load id="ch11-tune" title="Tune the forest with rolling origins" r={tuneR} packages={['forecast', 'randomForest']}
-  goal="Choose mtry and nodesize by rolling-origin cross-validation on 2010–2022 only, and compare the tuned forest with ETS on the same folds." />
-</div>
-
-The best setting is `mtry = 2`, `nodesize = 5` (cross-validated MAE \$24,185 million), the setting used throughout this chapter. Larger leaves (`nodesize = 20`) are clearly worse. But notice the last table: on the same five rolling years, **ETS(M,A,M) is more accurate than the best-tuned forest** (\$21,720 million vs \$24,185 million). Seasonal naive trails far behind both (\$36,932 million).
-
-<Callout type="empirical" title="A leakage checklist for time-series validation">
-<ul>
-<li><strong>Folds go forward in time.</strong> Train on months up to an origin, score only months after it. Never shuffle.</li>
-<li><strong>Features are rebuilt from the past only, inside every fold.</strong> Rolling means end at t − 1; a trend line, a scaling (mean and standard deviation) or a seasonal adjustment fitted on the full sample already "knows" the test years, so fit them on the training months of each fold.</li>
-<li><strong>Respect publication lags.</strong> A driver enters with the lag at which it is actually published, not the month it describes.</li>
-<li><strong>Tune on the folds, report on the test set once.</strong> If you change the model after seeing the test score, that score is no longer a test.</li>
-<li><strong>Beware of numbers that are too good.</strong> An R² near 1, or a forest that beats ETS by half, is a reason to hunt for a leak before it is a reason to celebrate.</li>
-</ul>
-</Callout>
+So tune and compare with **rolling origins** inside the training years, exactly as in [Chapter 3](/chapters/benchmarks/), and touch the test set once, at the end. Done that way on retail sales (five rolling years, 2018–2022), the best-tuned forest misses by \$24,185 million a month, and **ETS(M,A,M) does better**, at \$21,720 million. Seasonal naive trails far behind both (\$36,932 million).
 
 ## The bake-off
 
@@ -441,17 +308,176 @@ Here is what the R lab reports (MAE, RMSE and ME in \$ millions):
 Read it honestly:
 
 - **The forest on growth rates and ETS are tied.** ETS wins on MAE by \$15 million; the forest wins on RMSE and MAPE by similarly tiny margins. Both beat seasonal naive by a wide margin.
-- **The forest on levels barely beats seasonal naive** (MASE 1.03 vs 1.04). The extrapolation trap nearly doubles its error compared with the forest on growth rates.
-- **The forest's score depends on the seed.** Regrown with seeds 1 to 5, its MAE is 12,980, 15,068, 11,025, 9,034 and 14,826. ETS gives the same answer every time. Over five rolling years of cross-validation, ETS was better (previous section).
-- **The real winner is the combination.** ETS over-forecasts (ME −9,984) and the forest under-forecasts (ME +9,936) by almost the same amount, so their simple average is nearly unbiased and cuts the MAE to \$9,005 million, a MASE of 0.38. This is forecast combination from [Chapter 10](/chapters/uncertainty/), working exactly as advertised. In the Python tab the details differ (scikit-learn's forest scores \$23,048 million and statsmodels' ETS \$15,159 million), but the 50/50 average again beats both (\$9,612 million).
+- **The forest on levels barely beats seasonal naive** (MASE 1.03 vs 1.04). The extrapolation trap nearly doubles its error.
+- **The forest's score depends on the seed.** Regrown with seeds 1 to 5, its MAE is 12,980, 15,068, 11,025, 9,034 and 14,826. ETS gives the same answer every time, and it won the rolling-origin comparison.
+- **The real winner is the combination.** ETS over-forecasts (ME −9,984) and the forest under-forecasts (ME +9,936) by almost the same amount, so their simple average is nearly unbiased and cuts the MAE to \$9,005 million, a MASE of 0.38. This is forecast combination from [Chapter 10](/chapters/uncertainty/). The Python tab's numbers differ, but the 50/50 average again beats both.
 
 <Callout type="business" title="What to tell your manager">
-"On our retail sales, a carefully built random forest is about as accurate as our current ETS model, not better. It is less stable (its accuracy depends on a random seed) and it needs more care to avoid extrapolation and leakage. But it makes *different* mistakes from ETS, so averaging the two cut our 2023–2026 error by about 30%. I recommend we keep ETS and add the forest as a second opinion in a combined forecast." That is a far stronger recommendation than "AI wins" or "AI loses", and it is what the evidence supports.
+"On our retail sales, a carefully built random forest is about as accurate as our current ETS model, not better. It is less stable (its accuracy depends on a random seed) and it needs more care to avoid extrapolation and leakage. But it makes *different* mistakes from ETS, so averaging the two cut our 2023–2026 error by about 30%. I recommend we keep ETS and add the forest as a second opinion in a combined forecast."
 </Callout>
 
 <KeyIdea>Machine learning earns its place the same way every model does: by beating the benchmarks on data it has never seen, in a fair, time-ordered test. Its biggest value is often as a different opinion to combine with, not as a replacement.</KeyIdea>
 
-## Your turn
+## Chapter checklist
+
+- Rebuild the series as a **table** of lags, a seasonal lag, the calendar month, past-only rolling statistics and **lagged** drivers known at forecast time.
+- Hunt for **leakage** (apply the shift test); a test set does not catch leaky features.
+- Read a **tree** forecast as "the *n* past months that answered these questions the same way averaged *x*", in the target's units. Deep trees overfit.
+- Trees and forests **cannot extrapolate**: for a trending series, model the growth rate, then convert back to dollars.
+- A **random forest** averages bootstrap trees with random feature subsets (`mtry`); OOB error and permutation importance come free.
+- **Variable importance** says how much this model leans on a feature: no sign, no units, not causal, shared among correlated features.
+- Validate with **time-ordered folds**, never shuffled ones, and use the test set once. Put ML on the **same scorecard**, check its **seed sensitivity**, and consider **combining** it with a statistical model.
+
+<BeyondBasics topics={['What a split minimizes', 'Three ways out: growth rates, differences, detrending', 'Which past months vote?', 'Why averaging helps', 'Is OOB error a fair test?', 'Who gets the credit for seasonality?', 'Recursive or direct?', 'Tuning without peeking', 'Extra practice']}>
+
+#### What a split minimizes
+
+A node holds training months $i \in S$ with targets $y_i$ and mean $\bar y_S$. Its error is $\text{SSE}(S) = \sum_{i \in S} (y_i - \bar y_S)^2$. A cut on feature $j$ at value $c$ splits $S$ into $L = \lbrace i : x_{ij} \le c \rbrace$ and $R = \lbrace i : x_{ij} > c \rbrace$. CART picks the $(j, c)$ that maximizes the reduction
+
+$$\Delta = \text{SSE}(S) - \text{SSE}(L) - \text{SSE}(R).$$
+
+Only cut points halfway between neighboring observed values need checking, so the search is fast. A leaf predicts $\bar y$ of its months, which is the constant that minimizes squared error inside it. That is why a tree's predictions are **piecewise constant**: a staircase, never a slope.
+
+#### Three ways out: growth rates, differences, detrending
+
+The fix for the extrapolation trap is always the same idea: **give the tree a target that stays inside the range it has already seen**, then convert its forecast back to the units you need. Three versions work, and you already know all three from earlier chapters.
+
+| Model the... | The tree forecasts | Back to dollars | Stays in range because... |
+|---|---|---|---|
+| **Growth rate** (log difference) | `100 * diff(log(y))`, % per month | last level × exp(cumulative growth / 100) | percentage growth has no trend |
+| **Difference** | `diff(y)`, \$ change per month | last level + cumulative sum of changes | monthly changes trend much less than levels |
+| **Detrended series** | `log(y)` minus a fitted trend line | trend line + forecast gap, then exp() | the gap from trend wanders around zero |
+
+Taking differences to remove a trend is exactly what ARIMA's "I" does ([Chapter 7](/chapters/arima/#the-cure-differencing)), and a log difference is approximately a percent change ([Chapter 1](/chapters/time-series-data/#transformations-every-analyst-uses)). A tree needs the same treatment for a different reason: not because of unit roots, but because it can only repeat averages of what it has seen.
+
+<Predict client:load
+  question="You train the e-commerce forest on monthly **dollar changes**, `diff(y)`, instead of levels. The largest monthly change in the training data is a rise of about \$9.2 billion. Can the forecast of the **level** go above the training maximum of \$90.5 billion?"
+  options={['No: a tree can never forecast above its training data', 'Yes: each forecast change stays in the training range, but the changes add up month after month', 'Only if one forecast change is above \$9.2 billion', 'Only with a direct strategy']}
+  answer={1}
+  explain="The ceiling applies to what the tree predicts: here, the monthly change. Each forecast change is an average of past changes, mostly small rises. Adding them to the last level, month after month, lets the level keep climbing. In the lab setup, this forest's level forecast misses by about \$5.4 billion a month, against \$13.6 billion for the forest on levels."
+/>
+
+The lab below springs the trap on e-commerce sales and then tries all three fixes.
+
+<div class="breakout">
+<CodeLab client:load id="ch11-trap" title="Spring the extrapolation trap" r={trapR} py={trapPy} packages={['randomForest']} pyPackages={['scikit-learn']}
+  goal="Show that a forest trained on levels cannot forecast above its training maximum, and fix it by modeling growth rates, differences or the gap from a trend." />
+</div>
+
+In R, the forest on levels misses by \$13.6 billion a month; on growth rates by \$5.6 billion; on dollar differences by \$5.4 billion; and on the gap from a log-linear trend by \$5.8 billion. In the Python tab, growth and differences do just as well (\$5.0 and \$5.6 billion), but detrending misses by \$11.1 billion. Detrending is the most fragile fix: it assumes the trend line itself stays put, and the 2020 jump in online shopping moved it.
+
+<Callout type="empirical" title="Prefer growth rates for series that grow by percentages">
+Differences and growth rates did about equally well here, but they age differently. E-commerce sales rose by \$251 million a month on average in 2011 and by \$475 million in 2022: in dollars, the typical change has doubled, so a forest trained on early changes sees "small" numbers that no longer fit. In percent, the same months grew 1.05% and 0.54% a month: still the same order of magnitude. For anything that grows by percentages (sales, prices, GDP, employment), model the **log difference**, and use plain differences for series that move by similar amounts in their own units, such as an interest rate or an unemployment rate.
+</Callout>
+
+To see this for yourself, move the origin to December 2019 by editing two lines of the lab (`train <- window(ecom, end = c(2019, 12))` and `test <- window(ecom, start = c(2020, 1))`). The ceiling drops to the 2019 maximum of \$55.3 billion, and the MAE is \$38.1 billion for levels, \$12.9 billion for growth rates, \$26.5 billion for differences and \$15.3 billion for the detrended series: the 2010–2019 dollar changes were small, so a forest on differences keeps adding small changes after sales jumped in 2020, while a percentage growth rate scales up with the bigger level.
+
+#### Which past months vote?
+
+A tree forecast is an average of past months, and so is a forest forecast: a weighted one. Pick a month to forecast; the purple dots are the training months the forecast is built from.
+
+<div class="breakout">
+<PastMonthsVote client:load />
+</div>
+
+For December 2023 the small tree in the explorer (grown in JavaScript, so its cuts differ slightly from the rpart tree) asks three questions, lands in a leaf of 22 past months, and forecasts +12.9%; actual growth was +7.5%. Switch to the **forest** and the forecast becomes a weighted average of 27 past months, with about 85% of the weight on past Decembers. For every January, about 99% of the weight sits on past Januaries. One surprise in the December list: May 2020, the COVID rebound month, gets almost 9% of the weight. While choosing splits, many trees grouped its +20% jump with the big December jumps, so it shares their leaves and votes on Christmas forecasts. That is how one extreme month can seep into forecasts for quite different months. A forest on these features behaves a lot like a smart seasonal naive: "this month will look like the same month in comparable past years."<sup>[13](#refs)</sup>
+
+#### Why averaging helps
+
+If each tree's prediction has variance $\sigma^2$ and any two trees' predictions have correlation $\rho$, the average of $B$ trees has variance
+
+$$\rho\,\sigma^2 + \frac{1-\rho}{B}\,\sigma^2 .$$
+
+The second term vanishes as you add trees. The first does not: correlated trees make correlated mistakes. Restricting each split to a random subset of `mtry` features lowers $\rho$, which is why a random forest usually beats plain bagging. This is also why more trees never cause overfitting in a forest; they just stop helping.<sup>[4](#refs)</sup>
+
+#### Is OOB error a fair test for time series?
+
+OOB rows are chosen at random, which is less of a problem than you might fear for a model whose features are only lags: Bergmeir, Hyndman and Koo show that ordinary cross-validation is valid for purely autoregressive models when the errors are uncorrelated.<sup>[6](#refs)</sup> That guarantee needs a model that captures the dynamics (leftover autocorrelation in the errors breaks it) and a stable series (structural breaks, or trending levels, break it too). And OOB scores one-step fits on scattered months, while the real job is a multi-step forecast from today.
+
+#### Who gets the credit for seasonality?
+
+R's default `%IncMSE` importance column is a scaled score, not a percentage, so the forest lab asks for the raw increase in error.
+
+<Predict client:load
+  question="In the R forest, shuffling month raises the OOB error by about 840% and shuffling g12 by about 630%. You **drop month** and refit. What happens to g12's importance, and to the forecast error?"
+  options={['g12 stays near 630%, and the error rises sharply', 'g12 roughly doubles, and the error rises only a little', 'g12 falls, because the forest has less to work with', 'Both stay the same: importance is a fixed property of a feature']}
+  answer={1}
+  explain="g12 can do most of month's job, so the forest leans on it much harder: in R its importance jumps from about 630% to about 1,150%, while the test MAE moves only from 1.83 to 2.02 percentage points. Importance was never 'owned' by one feature. Try it in the explorer below, and in the exercise after it."
+/>
+
+<div class="breakout">
+<ImportanceShare client:load />
+</div>
+
+The explorer's forest (grown in JavaScript, with the month as a number rather than a category) ranks `g12` first and the month second, the reverse of the R lab, which is itself a lesson: importance depends on how you encode a feature. But the sharing story is the same. With all four features, `g12` scores about 800% and the month about 380%. Drop the month and `g12` rises to about 1,020%, while the test error moves only from 1.82 to 2.01 points. Drop `g12` instead and the month jumps to about 1,130%. Drop both and the error nearly doubles, to 3.41. The real value of seasonality is that last number, which no single bar showed.
+
+**You are the analyst.** Your manager looks at the importance chart and says: "Month is the biggest bar, so let's drop the lag features and just use month." Before answering, run the experiment the other way round: drop the month, and see what happens to the importance of `g12` and to the forecast error.
+
+<div class="breakout">
+<CodeLab client:load id="ch11-ex-importance" exercise title="Exercise: who gets the credit for seasonality?" r={impR} solution={impSolR} check={impCheckR} py={impPy} solutionPy={impSolPy} checkPy={impCheckPy}
+  packages={['randomForest']} pyPackages={['scikit-learn']}
+  goal="Refit the retail forest without the calendar month and compare permutation importance and test MAE with the full model."
+  hints={['The smaller model keeps the two recent lags and the seasonal lag: growth in the same month last year.', 'Its column is called `g12`. The second blank is the name of the smaller forest you just fitted.', 'In R the full model gives g12 about 630%; without month it should be far higher.']} />
+</div>
+
+The answer for your manager: "Month and last year's growth tell the forest the same thing, so the chart splits the credit between them. With the two lags in the model, either seasonal feature alone does almost as well as both (test MAE 1.83 without `g12`, 2.02 without the month, 1.83 with both, in R). Dropping **both** nearly doubles the error, to 3.55. And the lags earn their place despite their small bars: month alone gives 2.12, month plus the two lags 1.83." The Python tab measures importance on the test months instead of out-of-bag rows (scikit-learn has no OOB permutation importance) and agrees: `g12` rises from 664% to 1,061% when the month goes.
+
+#### Forecasting many months ahead: recursive or direct?
+
+A model that predicts *next* month cannot directly give you the month after, because next month's value is one of its features. There are two standard ways around this.<sup>[8](#refs)</sup>
+
+In plain words: **recursive** is one forecaster who predicts next month, then treats that guess as if it were data to predict the month after, and so on (this is what the forest lab does). **Direct** is a team of twelve specialists. Specialist *h* answers one question only: "given what we know today, what will month *h* look like?" No specialist ever sees another's guess.
+
+<div class="strat" aria-label="Diagram comparing the recursive and direct multi-step strategies">
+  <div class="st-col">
+    <div class="st-h">Recursive: one model, fed its own forecasts</div>
+    <div class="st-row"><span class="k">known</span><span class="k">known</span><span class="arr">→</span><span class="f">ŷ<sub>t+1</sub></span></div>
+    <div class="st-row"><span class="k">known</span><span class="f">ŷ<sub>t+1</sub></span><span class="arr">→</span><span class="f">ŷ<sub>t+2</sub></span></div>
+    <div class="st-row"><span class="f">ŷ<sub>t+1</sub></span><span class="f">ŷ<sub>t+2</sub></span><span class="arr">→</span><span class="f">ŷ<sub>t+3</sub></span></div>
+    <p>Simple, and it uses the freshest model. But errors can snowball: a bad forecast for month 1 becomes a bad feature for month 2.</p>
+  </div>
+  <div class="st-col">
+    <div class="st-h">Direct: one model per horizon</div>
+    <div class="st-row"><span class="k">known</span><span class="k">known</span><span class="arr">→ model 1 →</span><span class="f">ŷ<sub>t+1</sub></span></div>
+    <div class="st-row"><span class="k">known</span><span class="k">known</span><span class="arr">→ model 2 →</span><span class="f">ŷ<sub>t+2</sub></span></div>
+    <div class="st-row"><span class="k">known</span><span class="k">known</span><span class="arr">→ model 3 →</span><span class="f">ŷ<sub>t+3</sub></span></div>
+    <p>No forecast is ever used as an input. But you train 12 models for a 12-month forecast, and each one learns from older clues.</p>
+  </div>
+</div>
+
+Which works better is an empirical question, so test it. From three year-end origins (December 2022, 2023 and 2024), the lab forecasts the next 12 months both ways. At one month ahead the two are identical (it is the same model). Further out, each strategy wins at some horizons; averaged over all twelve, recursive misses by about \$8,900 million a month and direct by about \$10,900 million on this series. The winning M5 entry used both kinds of LightGBM models.<sup>[2](#refs)</sup>
+
+<div class="breakout">
+<CodeLab client:load id="ch11-multistep" title="Recursive vs direct, horizon by horizon" r={multiR} packages={['randomForest']}
+  goal="Forecast 12 months ahead with a recursive forest and with 12 direct forests, from three origins, and compare their error by horizon." />
+</div>
+
+<Callout type="empirical" title="In a direct model, every feature must be known at the origin">
+The direct model for 6 months ahead is trained on rows like "growth at the origin → growth 6 months later". So its "last month" feature is really *growth six months before the target*, `lag_k(x, 6)`, not `lag_k(x, 1)`. Using the one-month lag in a 6-month model is a leak: when you stand in December, you do not know May's growth yet. The lab's `direct_table(g, h)` shifts every recent lag by `h` for exactly this reason, and keeps `g12` only because the same month last year is still known for horizons up to 12.
+</Callout>
+
+#### Tuning without peeking
+
+A forest has a few settings worth tuning: `mtry` (features per split) and `nodesize` (the smallest leaf; larger leaves give smoother trees). Tune them with time-series cross-validation inside the training years: stand at the end of each December from 2017 to 2021, train on everything up to that point, forecast the next 12 months, and average the errors. The lab tunes six settings this way, and runs ETS and seasonal naive through the same five rolling years.
+
+<div class="breakout">
+<CodeLab client:load id="ch11-tune" title="Tune the forest with rolling origins" r={tuneR} packages={['forecast', 'randomForest']}
+  goal="Choose mtry and nodesize by rolling-origin cross-validation on 2010–2022 only, and compare the tuned forest with ETS on the same folds." />
+</div>
+
+The best setting is `mtry = 2`, `nodesize = 5` (cross-validated MAE \$24,185 million), the setting used throughout this chapter. Larger leaves (`nodesize = 20`) are clearly worse. On the same five rolling years, ETS(M,A,M) is more accurate than the best-tuned forest (\$21,720 million), and seasonal naive trails far behind both (\$36,932 million).
+
+<Callout type="empirical" title="A leakage checklist for time-series validation">
+<ul>
+<li><strong>Folds go forward in time.</strong> Train on months up to an origin, score only months after it. Never shuffle.</li>
+<li><strong>Features are rebuilt from the past only, inside every fold.</strong> Rolling means end at t − 1; a trend line, a scaling (mean and standard deviation) or a seasonal adjustment fitted on the full sample already "knows" the test years, so fit them on the training months of each fold.</li>
+<li><strong>Respect publication lags.</strong> A driver enters with the lag at which it is actually published, not the month it describes.</li>
+<li><strong>Tune on the folds, report on the test set once.</strong> If you change the model after seeing the test score, that score is no longer a test.</li>
+<li><strong>Beware of numbers that are too good.</strong> An R² near 1, or a forest that beats ETS by half, is a reason to hunt for a leak before it is a reason to celebrate.</li>
+</ul>
+</Callout>
+
+#### Extra practice
 
 Machine-learning forecasts get much of their edge from **outside information**. Here you test one: does last month's gap between building permits and housing starts help a forest forecast housing starts one month ahead? Permits are the paperwork that comes before a start, and both are published in the same Census release, so last month's values are known when you forecast.<sup>[7](#refs)</sup> Fill in the two blanks and press **Run & check**.
 
@@ -462,16 +488,7 @@ Machine-learning forecasts get much of their edge from **outside information**. 
   hints={['The gap is log(permits / starts): the first blank is the permits series.', 'The new column in the table is called `gap1`. Add it to the formula (R) or to the list of feature names (Python).']} />
 </div>
 
-## Chapter checklist
-
-- Rebuild the series as a **table**: lags (momentum), a seasonal lag and the calendar month (seasonality), past-only rolling statistics (the recent level) and **lagged** drivers that are known at forecast time. Each feature should answer a question you can say out loud.
-- Hunt for **leakage**: rolling windows that include the target (apply the shift test), drivers not yet published, statistics fitted on the full sample, random splits. A test set does not catch leaky features.
-- A **regression tree** splits to minimize squared error and predicts leaf averages, so its forecasts are a staircase and it overfits when grown deep. Read a forecast as "the *n* past months that answered these questions the same way averaged *x*", in the target's units.
-- Trees and forests **cannot extrapolate**: for a trending series, model the growth rate (log difference), the difference or the gap from a trend, then convert back to dollars. Prefer growth rates for series that grow by percentages.
-- A **random forest** averages bootstrap trees with random feature subsets (`mtry`); OOB error and permutation importance come free.
-- **Variable importance** says how much this model leans on a feature. It has no sign and no units, it is not causal, and correlated features share (and swap) the credit. Report rankings and the error cost of dropping a group of features.
-- For multi-step forecasts choose **recursive** (one model fed its own forecasts) or **direct** (one model per horizon, with features known at the origin) by testing; tune with **time-ordered folds**, never shuffled ones and never on the test set.
-- Put ML on the **same scorecard**, check its **seed sensitivity**, and consider **combining** it with a statistical model.
+</BeyondBasics>
 
 <InstructorKit
   minutes={150}
@@ -480,36 +497,37 @@ Machine-learning forecasts get much of their edge from **outside information**. 
     { title: 'From a series to a table to a tree', plan: [
       '5 min · Hook: the manager who read that "AI beats forecasting"; M3 (ML loses) vs M5 (trees win)',
       '8 min · Series-to-table explorer; for each feature, ask "what question does it answer?"; switch on the leak',
-      '8 min · Features lab: honest R² 0.321 vs leaky 1.000; the shift-test callout',
+      '7 min · Features lab: honest R² 0.321 vs leaky 1.000; the shift-test callout',
       '12 min · Exercise in pairs: the suspiciously good colleague (leaky 1.86 vs honest 3.79 points)',
       '8 min · Grow-a-tree explorer: find the January split, then drag leaves to 40 to see overfitting',
       '8 min · Tree lab; read the December path aloud (23 months, +13.4%); Predict on the −30% January',
-      '6 min · Past-months explorer: tree vs forest weights for December and January',
-      '20 min · Activity 1: the extrapolation auction, ending with the three ways out',
+      '7 min · Extrapolation trap: Predict, then the explorer on levels vs growth rates',
+      '10 min · Activity 1: the extrapolation auction',
+      '10 min · Buffer: questions, catch-up',
     ] },
     { title: 'Forests, honest testing and the bake-off', plan: [
       '5 min · Warm-up: why could the level forest never pass $90.5 billion? One sentence each',
-      '10 min · Forest-of-opinions explorer; forest lab (OOB error, importance, recursive path in dollars)',
-      '15 min · Reading importance: Predict, importance explorer (drop month, drop g12, regrow), exercise "who gets the credit"',
-      '8 min · Recursive vs direct in plain words; multistep lab; the "known at the origin" callout',
-      '10 min · Predict + shuffled vs time-ordered folds explorer; leakage checklist',
-      '7 min · Tune lab: the best setting, and ETS winning on the same folds',
-      '20 min · Activity 2: the manager memo (bake-off, seeds, combination, an honest importance sentence)',
+      '12 min · Forest-of-opinions explorer; forest lab (OOB error, importance, forecast path in dollars)',
+      '10 min · Reading importance: what it is, what it is not, how to report it',
+      '10 min · Predict + shuffled vs time-ordered folds explorer; ETS wins the rolling-origin comparison',
+      '8 min · Bake-off: Predict, then run the lab and read the scorecard and seed check',
+      '15 min · Activity 2: the manager memo',
+      '15 min · Buffer: questions, catch-up',
     ] },
   ]}
   objectives={[
     'Convert a monthly series into a supervised-learning table with lags, a seasonal lag, past-only rolling statistics, calendar features and lagged drivers, and say in words what question each feature answers.',
-    'Identify leakage in feature engineering and evaluation (rolling windows that include the target, unpublished drivers, full-sample statistics, shuffled folds), and fix a leaky rolling mean with a one-month shift.',
+    'Identify leakage in feature engineering and evaluation (rolling windows that include the target, unpublished drivers, shuffled splits), and fix a leaky rolling mean with a one-month shift.',
     'Explain how a regression tree chooses splits (SSE reduction), read a tree path and a leaf forecast in plain words and in the target’s units, and explain why depth leads to overfitting.',
-    'Demonstrate that trees and forests cannot extrapolate beyond the training range, and fix it by modeling growth rates, differences or the gap from a trend, converting the forecast back to dollars.',
+    'Demonstrate that trees and forests cannot extrapolate beyond the training range, and fix it by modeling growth rates, converting the forecast back to dollars.',
     'Fit a random forest in R (`randomForest`) or Python (scikit-learn), interpret OOB error and permutation importance, and state what importance is not: a coefficient, a causal effect, or a stable number when features are correlated.',
-    'Explain recursive and direct multi-step strategies in plain words, and keep direct-model features known at the forecast origin.',
-    'Validate with time-ordered folds rather than shuffled ones, tune without touching the test set, and judge the forest honestly against ETS and seasonal naive on the course scorecard.'
+    'Validate with time-ordered folds rather than shuffled ones, keep the test set for one final score, and judge the forest honestly against ETS and seasonal naive on the course scorecard.',
+    'Optional extensions (differences vs detrending, recursive vs direct, tuning, importance experiments): see Beyond the basics.'
   ]}
   discussion={[
     'The forest and ETS tied on the 2023+ test period, and ETS won the rolling-origin comparison. Which evidence should carry more weight, and why?',
     'The forest\'s MAE ranged from about 9,000 to 15,100 across five seeds. How would you report a model whose accuracy depends on a random number? What would you change to make it more stable?',
-    'Month is the biggest importance bar in the R lab, while the seasonal lag is the biggest in the JavaScript explorer. Which feature is "really" more important? What would you show a manager instead of the bar chart?',
+    'Month is the biggest importance bar in the R lab, yet dropping it barely hurts the forecast. Which feature is "really" more important? What would you show a manager instead of the bar chart?',
     'Shuffled folds called the level forest and the growth forest a tie; time-ordered folds and the 2023+ data did not. Where else in business might a random split flatter a model?',
     'Name a series you might forecast at work where a tree model on levels would be dangerous, and one where it would be harmless.'
   ]}
@@ -519,26 +537,26 @@ Machine-learning forecasts get much of their edge from **outside information**. 
     '“A 3-month rolling mean only uses the past.” Library defaults (`stats::filter(sides = 1)` in R, `.rolling(3).mean()` in pandas) include the current month; shift by one.',
     '“A high importance bar means a big, positive effect.” Importance has no sign and no units, it is not causal, and correlated features split or swap the credit.',
     '“Cross-validation is cross-validation.” Shuffled folds let a forest interpolate between neighboring months; only time-ordered folds test forecasting.',
-    '“High OOB R² means a good forecaster.” OOB rows are random, not future months, and one-step fit says little about a 45-month recursive path.',
+    '“High OOB R² means a good forecaster.” OOB rows are random, not future months, and one-step fit says little about a 45-month forecast path.',
     '“ML either wins or loses.” Its errors are often different from a statistical model\'s, so the combination can beat both.'
   ]}
 >
 
-**Activity 1 (session 1): the extrapolation auction (20 minutes).** Teams of three.
+**Activity 1 (session 1): the extrapolation auction (10 minutes).** Teams of three.
 
-1. **Predict (4 min).** Show the e-commerce series to December 2022. Each team writes down the forest-on-levels forecast for December 2025 and commits to a number.
-2. **Run (8 min).** Teams run the extrapolation-trap lab, then move the forecast origin to December 2019 by editing two lines (`train <- window(ecom, end = c(2019, 12))` and `test <- window(ecom, start = c(2020, 1))`) and rerun, including the last step (differences and detrending).
-3. **Debrief (8 min).** Compare guesses with results and ask: what single number could you have used to predict the forest's ceiling without fitting anything? Then: why do dollar differences do so much worse from the 2019 origin than from 2022?
+1. **Predict (3 min).** Show the e-commerce series to December 2022. Each team writes down the forest-on-levels forecast for December 2025 and commits to a number.
+2. **Explore (4 min).** In the extrapolation-trap explorer, read the level forecast from a December 2022 origin, then drag the origin back to late 2019 and to 2021. Each time, note where the level forecast flattens, then press **Forecast the growth rate**.
+3. **Debrief (3 min).** Compare guesses with results and ask: what single number could you have used to predict the forest's ceiling without fitting anything?
 
-*Expected results (R tab):* with training through December 2022, every level forecast lies between \$89.5 and \$89.9 billion, below the training maximum of \$90.5 billion, while actual sales reached \$116.7 billion; the MAE is about \$13.6 billion for levels, \$5.6 billion for growth rates, \$5.4 billion for differences and \$5.8 billion for the detrended series. With the origin moved to December 2019, the ceiling drops to the 2019 maximum of \$55.3 billion (every level forecast lies between \$54.9 and \$55.0 billion), and the MAE is \$38.1 billion for levels, \$12.9 billion for growth rates, \$26.5 billion for differences and \$15.3 billion for the detrended series. The answer to the first debrief question is the training maximum. The answer to the second: the 2010–2019 dollar changes were small, so a forest on differences keeps adding small changes after sales jumped in 2020, while a percentage growth rate scales up with the bigger level. That is why growth rates are the safer default.
+*Expected results:* from every origin the level forecast flattens just below the dashed line, the training maximum (\$90.5 billion for a December 2022 origin, while actual sales reached \$116.7 billion; in the R version every level forecast lies between \$89.5 and \$89.9 billion). The growth-rate forecast keeps climbing. The answer to the debrief question is the training maximum.
 
-**Activity 2 (session 2): the manager memo (20 minutes).** Pairs.
+**Activity 2 (session 2): the manager memo (15 minutes).** Pairs, using the bake-off scorecard and seed check.
 
-1. **Run (8 min).** Run the bake-off lab (R tab) and read the scorecard and the seed check.
-2. **Write (8 min).** A four-sentence memo to the manager from the opening paragraph: (1) which model is most accurate on 2023+, with numbers; (2) how much the forest's result depends on the seed; (3) what you recommend; (4) one honest sentence about what drives the forest, based on importance, that a manager cannot misread.
-3. **Swap and red-pen (4 min).** Each pair checks the other pair's sentence 4 for causal language, or for a sign or units that importance cannot give.
+1. **Write (8 min).** A four-sentence memo to the manager from the opening paragraph: (1) which model is most accurate on 2023+, with numbers; (2) how much the forest's result depends on the seed; (3) what you recommend; (4) one honest sentence about what drives the forest, based on importance, that a manager cannot misread.
+2. **Swap and red-pen (4 min).** Each pair checks the other pair's sentence 4 for causal language, or for a sign or units that importance cannot give.
+3. **Share (3 min).** Two pairs read their memo aloud.
 
-*Expected results:* ETS and the forest on growth rates tie (MAE \$12,965 vs \$12,980 million); the forest on levels barely beats seasonal naive (MASE 1.03 vs 1.04); across seeds 1–5 the forest's MAE is 12,980, 15,068, 11,025, 9,034 and 14,826; the 50/50 combination wins (\$9,005 million, MASE 0.38); and ETS wins the rolling-origin comparison (\$21,720 vs \$24,185 million). A good sentence 4: "The forest relies mostly on seasonal information (the calendar month and last year's growth in the same month, which carry the same signal); removing both nearly doubles its one-month-ahead error, and recent months add a little on top." A sentence such as "the month drives 837% of sales" should be red-penned. Use the permits exercise as homework: the permits gap cuts the one-month-ahead MAE for housing starts from 82.5 to 74.7 thousand units (naive: 95.4).
+*Expected results:* ETS and the forest on growth rates tie (MAE \$12,965 vs \$12,980 million); the forest on levels barely beats seasonal naive (MASE 1.03 vs 1.04); across seeds 1–5 the forest's MAE is 12,980, 15,068, 11,025, 9,034 and 14,826; the 50/50 combination wins (\$9,005 million, MASE 0.38); and ETS wins the rolling-origin comparison (\$21,720 vs \$24,185 million). A good sentence 4: "The forest relies mostly on seasonal information (the calendar month and last year's growth in the same month, which carry the same signal); removing both nearly doubles its one-month-ahead error, and recent months add a little on top." A sentence such as "the month drives 837% of sales" should be red-penned. Optional homework: the permits exercise in Beyond the basics (the permits gap cuts the one-month-ahead MAE for housing starts from 82.5 to 74.7 thousand units; naive: 95.4).
 
 </InstructorKit>
 

@@ -47,6 +47,7 @@
     if (!annual || !elX) return;
     const xs = annual.filter((r) => r.year === XS).sort((a, b) => b.total - a.total);
     const wX = elX.clientWidth, wT = elT.clientWidth, wP = elP.clientWidth;
+    if (!wX || !wT || !wP) return;   // hidden (e.g. inside a closed <details>): watchLayout redraws once it has a width
     const st = plotStyle();
 
     const cx = Plot.plot({
