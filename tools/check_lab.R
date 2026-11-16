@@ -18,6 +18,8 @@ for (f in args) {
     TRUE
   }, error = function(e) { cat("ERROR:", conditionMessage(e), "\n"); FALSE })
   viz <- jsonlite::fromJSON(.course_viz_pop(), simplifyVector = FALSE)
+  for (v in viz) if (identical(v$type, "check")) cat(sprintf("CHECK %s: %s
+", if (isTRUE(v$pass)) "PASS" else "FAIL", v$message))
   cat(sprintf("\n-> %s in %.1fs; %d chart(s): %s\n", if (ok) "OK" else "FAILED", as.numeric(Sys.time() - t0, units = "secs"),
               length(viz), paste(vapply(viz, function(v) paste0(v$type, if (!is.null(v$title)) paste0(" '", v$title, "'") else ""), ""), collapse = "; ")))
   setwd(root)

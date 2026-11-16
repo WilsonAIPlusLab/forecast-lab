@@ -1,7 +1,11 @@
 ---
 layout: ../../layouts/Chapter.astro
 slug: exponential-smoothing
-minutes: 50
+minutes: 110
+sessions:
+  - title: "Memory, trend and seasons: what the smoothing parameters say"
+  - title: "ETS at work: read the printout, choose the window, run the batch"
+    starts: ets-the-whole-family-with-error-bars
 build:
   - An automated batch forecast for 14 retail categories, with a traffic-light exception report that tells a planner which forecasts need a human look
   - An ETS forecast of U.S. e-commerce sales with 80% and 95% prediction intervals, chosen automatically by AICc
@@ -14,7 +18,11 @@ import KeyIdea from '../../components/KeyIdea.astro';
 import Predict from '../../components/Predict.svelte';
 import Term from '../../components/Term.astro';
 import InstructorKit from '../../components/InstructorKit.astro';
+import SessionBreak from '../../components/SessionBreak.astro';
 import MemoryExplorer from '../../components/ch05/MemoryExplorer.svelte';
+import ShockResponse from '../../components/ch05/ShockResponse.svelte';
+import EtsTranslator from '../../components/ch05/EtsTranslator.svelte';
+import StateReader from '../../components/ch05/StateReader.svelte';
 import TrendDamping from '../../components/ch05/TrendDamping.svelte';
 import SeasonalEngine from '../../components/ch05/SeasonalEngine.svelte';
 import MondayDashboard from '../../components/ch05/MondayDashboard.svelte';
@@ -29,12 +37,26 @@ import cvPy from '../../labs/ch05/tscv.py?raw';
 import exR from '../../labs/ch05/exercise.R?raw';
 import exSolR from '../../labs/ch05/exercise_solution.R?raw';
 import exCheckR from '../../labs/ch05/exercise_check.R?raw';
+import memR from '../../labs/ch05/ex_memory.R?raw';
+import memSolR from '../../labs/ch05/ex_memory_solution.R?raw';
+import memCheckR from '../../labs/ch05/ex_memory_check.R?raw';
+import memPy from '../../labs/ch05/ex_memory.py?raw';
+import memSolPy from '../../labs/ch05/ex_memory_solution.py?raw';
+import memCheckPy from '../../labs/ch05/ex_memory_check.py?raw';
+import winR from '../../labs/ch05/ex_window.R?raw';
+import winSolR from '../../labs/ch05/ex_window_solution.R?raw';
+import winCheckR from '../../labs/ch05/ex_window_check.R?raw';
+import winPy from '../../labs/ch05/ex_window.py?raw';
+import winSolPy from '../../labs/ch05/ex_window_solution.py?raw';
+import winCheckPy from '../../labs/ch05/ex_window_check.py?raw';
 
 <p class="lede">It is 7:30 on a Monday morning. The supply team needs next quarter's demand for every product by noon, and you have 500 of them. You cannot hand-tune 500 models. You need a method that is fast, automatic, hard to break, and accurate enough that you only have to <strong>look closely at the few forecasts that look wrong</strong>.</p>
 
 That method is **exponential smoothing**. It is the default engine in commercial demand-planning software: SAP's Integrated Business Planning, for example, offers single, double and triple exponential smoothing plus an automated variant that picks the model and its parameters for you.<sup>[1](#refs)</sup> In this chapter you will build the same machine yourself, one component at a time, and finish with a batch run over 14 U.S. retail categories that produces the planner's real deliverable: an **exception report**.
 
 <KeyIdea>Exponential smoothing forecasts with a weighted average of the past, where the weights fade the further back you go. Add a smoothed trend and smoothed seasonal indices, and you have the workhorse of business forecasting.</KeyIdea>
+
+<SessionBreak n={1} title="Memory, trend and seasons: what the smoothing parameters say" goals={['Translate a fitted **α** into months of memory, and say what α = 0.9 or α = 0.1 tells you about a series', 'See why no α handles both a one-off outlier and a lasting change, and what to do about outliers instead', 'Read a **damped trend** and **additive vs multiplicative** seasonal indices in plain words and dollars']} />
 
 ## Forecasting with a fading memory
 
@@ -64,6 +86,46 @@ Three things to notice as you play:
 - **α is a memory dial.** At α = 0.9, 90% of the weight sits on the last month alone. At α = 0.1, it takes seven months to accumulate half the weight. Watch the cyan bars stretch back as you lower α.
 - **The best α depends on the data.** The grid search finds α ≈ 1.00 for gasoline prices, 0.46 for housing starts and 0.23 for monthly inflation. Noisier series need longer memories.
 - **Long memory has a price.** Set inflation's best α and look at 2021–2022 (the explorer fills the missing October 2025 CPI, which was never published because of the government shutdown, by interpolation<sup>[11](#refs)</sup>). When inflation surged, SES with α = 0.23 lagged behind for months, because it kept averaging in the calm months that came before. A low α filters noise, but it is slow to notice a genuine change.
+
+### Reading a fitted α: how many months really matter?
+
+A printout that says "alpha = 0.2" means little to a manager. Translate it into **months**. Two translations are useful. The first is the number of recent months that together hold half of the weight (the explorer's "half the weight" read-out). The second is the **average age** of the information in the level: if you count last month as 1 month old, the weights $\alpha(1-\alpha)^j$ give an average age of exactly 1/α months. Robert Nau's Duke forecasting notes use this second idea, and add a practical corollary: an SES forecast tends to lag behind a turning point by roughly 1/α periods.<sup>[12](#refs)</sup>
+
+| Fitted α | Weight on the latest month | Months holding half the weight | Average age, 1/α | What it says about the series |
+|---|---|---|---|---|
+| 0.9 | 90% | 1 | 1.1 months | Almost the naive forecast. The series wanders, so last month is nearly all you need (gasoline prices), or the model is being forced to chase an outlier. |
+| 0.5 | 50% | 1 | 2 months | Short memory. The fitted ETS model for e-commerce sales has α = 0.50. |
+| 0.2 | 20% | 4 | 5 months | Medium memory, common for noisy monthly sales. |
+| 0.1 | 10% | 7 | 10 months | Long memory. Most month-to-month moves are noise around a slowly moving level. |
+| 0.02 | 2% | 35 | 50 months | Almost a fixed average. The model sees nothing but noise around a stable path. |
+
+<KeyIdea>A fitted α describes the **series**, not the quality of the model. A high α says "recent months carry real news"; a low α says "most of the wiggles are noise". Neither is good or bad.</KeyIdea>
+
+<Predict client:load kind="check"
+  question="An ETS model gives **α = 0.92** for product A and **α = 0.08** for product B. Which statement is right?"
+  options={[
+    'Product A’s forecast is more accurate, because its α is higher',
+    'Product A’s level is essentially last month’s sales; product B’s sales are noisy around a slowly moving level',
+    'Product B is not seasonal',
+    'Product B’s forecast will react faster to a new trend'
+  ]}
+  answer={1}
+  explain="α measures how much each new month moves the level. At 0.92 the level is about 1.1 months old on average: almost the naive forecast. At 0.08 it is about 12.5 months old, so B's forecast reacts *slowly*. α says nothing about accuracy (check MASE for that) or about seasonality (that is γ's job)."
+/>
+
+### One surprise, two stories
+
+A fitted α is a compromise between two jobs that pull in opposite directions. When a month is unusual, the model cannot know whether it is a **one-off** (a bulk order, a strike, a data error) or the start of a **lasting change** (a new competitor, a price cut). Drag α below and watch both stories at once.
+
+<div class="breakout">
+<ShockResponse client:load />
+</div>
+
+At α = 0.3, a one-off spike of 60 thousand units adds 18 thousand units to next month's forecast and about 59 thousand phantom units over the following year: almost the whole spike gets ordered again, spread over 12 months. Push α down to 0.1 and the spike barely registers, but a real shift of 30 thousand units then takes 22 months to absorb 90%, and you under-forecast by about 215 thousand units in the first year. **No single α wins both games.** The fix is not to tune α by hand; it is to deal with the unusual months directly.
+
+<Callout type="empirical" title="Outliers: fix the data, not the α">
+When you **know** a month is unusual (a data error, a one-time order, a strike, the April 2020 lockdowns), handle that month instead of hoping α will cope. The fitted α shows how much damage one shock can do. For U.S. clothing-store sales trained from 2015, `ets()` picks ETS(A,N,A) with **α = 1.00**: to fit the 2020 collapse, the level has to jump to every new month, which turns it into little more than last month's level plus a fixed seasonal pattern. Replace March to June 2020 with values interpolated from the months around them and the fitted α falls to **0.71**. Train from January 2021 instead and it falls to **0.33**. (These are native R runs on the chapter's data, through August 2025.) Your options: keep the months and accept a jumpier model, start the training window after the event, or replace the unusual months with sensible values. Write down which one you chose; it is part of the forecast.
+</Callout>
 
 <Callout type="math" title="Why the weights are α(1 − α)^j">
 Write the level after month $t$ as $\ell_t = \alpha y_t + (1-\alpha)\ell_{t-1}$. Substitute the same formula for $\ell_{t-1}$, then for $\ell_{t-2}$, and so on:
@@ -98,6 +160,23 @@ The three origins tell the whole story of trend forecasting. From **December 202
 Gardner and McKenzie tested the damped trend on the 1,001 series of the first M-competition and found it more accurate than smoothing methods that extend a linear trend.<sup>[3](#refs)</sup> Gardner's 2006 review of two decades of later studies concluded that it is "still difficult to beat the application of a damped trend to every time series."<sup>[4](#refs)</sup> In the M4 competition (100,000 series), the damped trend on its own was more accurate than either SES or Holt's linear trend, and the official benchmark, called *Comb*, was simply the average of those three methods. Only 17 of the 49 submitted methods were more accurate than *Comb*.<sup>[5](#refs)</sup> For a planner, the lesson is practical: **a damped trend is a safe default** when you cannot inspect every series.
 </Callout>
 
+### Reading a slope and a damping factor in plain words
+
+The **slope** $b$ is measured in the data's own units **per month**. When the ETS model you will fit in Session 2 reports a final slope of 522 for e-commerce sales (in \$ millions), it means: "underlying online sales were growing by about \$522 million a month in August 2025", or about \$6.3 billion a year before seasonal swings. Always say the unit and the period out loud.
+
+The damping factor φ says how fast that growth fades. Think of it as a percentage that is applied every month:
+
+- **φ = 0.98**: next month gets 98% of today's slope, the month after 96%, and so on. Half of the slope is gone after about 34 months, and in total the forecast adds about φ/(1 − φ) = 49 months' worth of today's slope before it flattens.
+- **φ = 0.90**: the slope halves in under 7 months, and the forecast adds only about **9 months' worth** of today's growth in total. That is a strong opinion that the trend will not last.
+- **φ = 1**: no fading at all. Holt's straight line, forever.
+
+<Predict client:load
+  question="A damped-trend model reports a slope of **+\$100 million per month** and **φ = 0.80**. Far into the future, how much higher than today's level will the forecast end up (ignoring seasonality)?"
+  options={['About \$80 million', 'About \$400 million', 'About \$500 million', 'It keeps rising forever']}
+  answer={1}
+  explain="The extra growth adds up to slope × (0.8 + 0.8² + 0.8³ + …) = slope × 0.8/(1 − 0.8) = \$100 million × 4 = **\$400 million**. With φ = 0.8 the forecast flattens within about a year: after 12 months it has already added \$100 million × (0.8 + … + 0.8¹²) ≈ \$372 million of the \$400 million."
+/>
+
 <Callout type="math" title="Holt's linear and damped trend equations">
 $$
 \begin{aligned}
@@ -130,6 +209,18 @@ At γ = 0.20, the **additive** model's December index has to climb from about +\
 - **Set γ to 0.** The indices freeze at their 2000 values. Neither model can follow the changing calendar, and errors jump to about 6%.
 - **Drag the year slider** with multiplicative indices. The holiday peak, measured in percent, has *shrunk* since the mid-2010s. December has become a smaller share of the online year, and a model with γ > 0 notices.
 
+**How to read a seasonal index.** A multiplicative index of **1.24** for December (e-commerce, in the ETS model of Session 2) says "December runs 24% above an average month, at whatever the level happens to be". An additive index of **+\$60.6 billion** (total retail sales) says "December adds \$60.6 billion to the level, whatever the level". An index below 1 (or below zero) marks a slow month: e-commerce's index of 0.88 for February means February sells 12% less than an average month. Both kinds of index describe the calendar *after* the level and trend are taken out, so they never contain growth.
+
+**How to read γ.** γ sets how much of each surprise is booked into that month's seasonal index. Each index is updated only once a year, when its month comes round, so the seasonal pattern changes in yearly steps. γ near 0 means the pattern is frozen; a large γ lets each index be rebuilt mostly from the same month last year.
+
+<Callout type="empirical" title="Multiplicative seasonality, or take logs?">
+There are two ways to handle a seasonal swing that grows with the business. One is the **multiplicative** model you just used. The other is to take the **log** of sales first: as [Chapter 2](/chapters/decomposition/#additive-or-multiplicative) showed, logs turn a percentage swing into a constant-height swing, so an **additive** model fitted to log sales behaves much like a multiplicative model fitted to dollars. Either is fine; three practical rules decide:
+
+- **Zeros or negative values** (returns, a new product's first months) rule out multiplicative seasonality *and* logs. Use an additive model on the raw data.
+- **If you model logs, come back to dollars at the end** with `exp()`. The result is a median forecast, not a mean; [Chapter 10](/chapters/uncertainty/#forecasting-in-logs-and-coming-back-to-dollars) shows how to read it. The general primer on logs is in [Chapter 1](/chapters/time-series-data/#logs-why-and-when).
+- **Keep the scale fixed when you compare models.** AICc values on logs and on dollars cannot be compared; compare test-set errors in dollars instead.
+</Callout>
+
 Now build all four methods in code and score them on the 12 months from September 2025 to August 2026.
 
 <div class="breakout">
@@ -137,6 +228,8 @@ Now build all four methods in code and score them on the 12 months from Septembe
 </div>
 
 The scorecard is unambiguous. Without a seasonal component, SES, Holt and damped Holt all score MASE above 1.2, worse than seasonal naive (1.04). Holt-Winters with multiplicative seasonality scores **0.35**, with a MAPE of 2.25% against 8.40% for SES. Every component you add fixes one failure of the method before it.
+
+<SessionBreak n={2} title="ETS at work: read the printout, choose the window, run the batch" goals={['Decode an **ETS(E,T,S)** label and turn α, β, γ, φ and σ into plain sentences with units', 'Read an **AICc table**: ties, clear losers, and what AICc cannot tell you', 'Decide what to do with **COVID months, outliers and short histories** when you choose the training window', 'Run a batch forecast and read its **exception report** as a manager would']} />
 
 ## ETS: the whole family, with error bars
 
@@ -162,7 +255,7 @@ Having a statistical model buys you two things that the old recipes, surveyed by
 `ets()` picks **ETS(M,A,M)**: multiplicative errors, a straight-line trend, and multiplicative seasonality. That is the structure you would have chosen by hand from the explorers above. Its closest rival in the lab, the damped version ETS(M,Ad,M), is 12 AICc points behind; the no-trend ETS(M,N,M) is 37 behind. The estimated σ of 0.042 says a typical one-step miss is about 4%. On the test year, all 12 actual months fall inside the 95% interval, and the point forecast scores a MAPE of 2.27% and a MASE of 0.35.
 
 <Callout type="tip" title="Make it yours">
-Change `"MRTSSM4541USN"` to `"RSXFSN"` (total retail sales, NSA) and rerun. `ets()` now chooses **ETS(A,A,A)**, with β and γ estimated at essentially zero (0.0001). In words: total retail's trend and seasonal pattern have been so stable since 2015 that the model barely updates them, and only the level moves.
+Change `"MRTSSM4541USN"` to `"RSXFSN"` (total retail sales excluding food services, NSA) and rerun. `ets()` now chooses **ETS(A,A,A)**, with β and γ estimated at essentially zero (0.0001). In words: total retail's trend and seasonal pattern have been so stable since 2015 that the model barely updates them, and only the level moves.
 </Callout>
 
 <Predict client:load kind="check"
@@ -197,6 +290,111 @@ $$
 
 These are Chapter 4's formulas. There, $-2\log L$ reduced to $T\log(\text{SSE}/T)$ plus a constant, and $k + 2$ counted the slopes, the intercept and the error variance. Here $k$ counts every estimated quantity: the smoothing parameters, the initial states and the error variance. Prediction intervals come from the same equations, either by formula or by simulating many future sample paths.<sup>[7, 8, 10](#refs)</sup>
 </Callout>
+
+### Reading an ETS printout, line by line
+
+An `ets()` printout is short, but every line has a plain-English meaning. Here is the e-commerce model from the lab, read out loud.
+
+| Printout | Value | Say it like this |
+|---|---|---|
+| `ETS(M,A,M)` | | "Misses are a percentage of sales, there is a straight-line slope, and each month is a percentage above or below the level." |
+| `alpha` | 0.50 | "The level is rebuilt mostly from the last couple of months: its information is about 2 months old on average." |
+| `beta` | 0.018 | "The slope learns slowly. Only about 4% of each surprise in the level (β/α = 0.018/0.50) is passed on to the slope, so the slope reflects roughly the last two years of growth." |
+| `gamma` | 0.47 | "The seasonal pattern adapts quickly. γ is close to its ceiling of 1 − α = 0.50, so each month's index is rebuilt mostly from the same month last year." |
+| `sigma` | 0.042 | "A typical one-step miss is about 4% of sales." (With additive errors, σ is in dollars instead.) |
+| `AICc` | 2,659 | "On its own, nothing. Only the *difference* from other models fitted to the same data matters." |
+
+R reports β on a scale where it can never exceed α, and γ on a scale where it can never exceed 1 − α. That is why the translations above divide by α or compare with 1 − α.
+
+Now practice on four data sets. The explorer lists every model `ets()` considers, sorted by AICc, and translates whichever one you pick.
+
+<div class="breakout">
+<EtsTranslator client:load />
+</div>
+
+Four things to notice:
+
+- **E-commerce.** ETS(M,A,M) wins; its damped twin is 12.3 points behind, and every additive-season model is more than 40 points behind. The data clearly prefer percentage seasonality.
+- **Total retail.** ETS(A,A,A) wins, but the damped ETS(A,Ad,A) is only 4.8 points behind: weaker, not ruled out. With β and γ at 0.0001, the slope (about \$1.16 billion a month) and the seasonal pattern are essentially fixed.
+- **Clothing, from 2015.** The winner has **α = 0.9999**. The 2020 collapse forced the level to jump to every new month.
+- **Clothing, from 2021.** Without 2020 in the window, α drops to 0.33. ETS(A,N,A) and ETS(A,A,A) are **0.9 points apart: a tie**. The data cannot tell them apart, yet their test-year errors differ a lot (MAE \$814 million vs \$456 million a month). A tie means "both are plausible", not "both forecast the same".
+
+<Callout type="empirical" title="Read an AICc table like a referee">
+- **Look at differences, not levels.** Subtract the best AICc from each model's. A common rule of thumb: under 2 is a tie, 4 to 7 is considerably less support, and more than 10 means essentially none.<sup>[13](#refs)</sup>
+- **Compare only like with like:** the same series, the same training window, the same transformation. AICc on logs vs dollars, or on 2015–2025 vs 2021–2025, are different contests.
+- **When two models tie, prefer the more cautious one** (usually the damped trend), or report both forecasts side by side.
+- **AICc is an in-sample referee.** It never sees the test set. In e-commerce, ETS(M,A,A) is 52 points behind, yet its test-year MAE was slightly *smaller* (\$2.48 billion vs \$2.58 billion). One test year is a noisy referee too; that is why the chapter also cross-validates.
+</Callout>
+
+### Reading the states: a receipt for every forecast
+
+Behind every ETS forecast sit three kinds of **states**: the level, the slope and the seasonal indices. Reading them turns the model from a black box into a sentence a manager can check.
+
+<Predict client:load
+  question="Going into December 2024, the e-commerce model's level was about **\$102.95 billion**, its slope **+\$0.59 billion** a month, and its December factor **1.22**. Roughly what did it forecast for December?"
+  options={['About \$103.5 billion', 'About \$104.8 billion', 'About \$126 billion', 'About \$165 billion']}
+  answer={2}
+  explain="Underlying sales for December = level + slope = \$102.95 + \$0.59 ≈ \$103.55 billion. December runs 22% above an average month, so the forecast is \$103.55 × 1.22 ≈ **\$126.4 billion**. Actual sales were \$131.6 billion, a surprise of about +4%: roughly one σ (4.2%). Check it in the receipt below."
+/>
+
+<div class="breakout">
+<StateReader client:load />
+</div>
+
+Three habits for reading states:
+
+- **The level is seasonally adjusted underlying sales**, in the data's units (here \$ millions a month). It is the number to quote when someone asks "what is our run rate?"
+- **The slope is growth in units per month.** Total retail's slope sits at about \$1.16 billion a month in every year, because β is essentially zero: the model applies the same growth throughout. E-commerce's slope moves, from about \$650 million a month in mid-2023 to about \$520 million by August 2025.
+- **h months ahead, the receipt uses the slope h times** and the seasonal index for that calendar month. Slide past August 2025: the "underlying" line rises by the same slope each month, and only the seasonal factor changes the shape.
+
+### You are the analyst: explain the model to your manager
+
+Your manager has seen the e-commerce forecast and asks three questions: *How much does last month matter? How quickly does it forget? And how fast is the business really growing?* Answer with numbers from the fitted model.
+
+<div class="breakout">
+<CodeLab client:load id="ch05-ex-memory" exercise title="Exercise: translate the fitted model into a manager's language" r={memR} solution={memSolR} check={memCheckR} py={memPy} solutionPy={memSolPy} checkPy={memCheckPy} packages={['forecast']} pyPackages={['statsmodels']}
+  goal="Extract α and the final slope from the fitted e-commerce model, and compute the half-life of a month's weight."
+  hints={['The fitted parameters are stored by name in `fit$par` (R); in Python their names all start with `smoothing_`, followed by the state they smooth.', 'The half-life uses the α you just stored: `log(0.5) / log(1 - alpha)`.', 'The slope state is the column `"b"` of `fit$states` in R and `"trend"` of `fit.states` in Python.']} />
+</div>
+
+## Does ETS beat the benchmark?
+
+Every new method in this course must earn its place on the Chapter 3 scorecard. On total retail sales, seasonal naive was the benchmark to beat. Let's make the comparison with time-series cross-validation, re-fitting ETS at every forecast origin, on the pre-COVID years 2012–2019.
+
+<div class="breakout">
+<CodeLab client:load id="ch05-tscv" title="ETS vs seasonal naive, cross-validated by horizon" r={cvR} py={cvPy} packages={['forecast']} pyPackages={['statsmodels']} goal="Use tsCV() to compare ETS(M,A,M) with seasonal naive at horizons 1 to 12, then test whether the one-step difference is statistically significant." />
+</div>
+
+ETS wins at every horizon, cutting the seasonal naive error by about 30% to 50%. One month ahead, its MAE is about \$8.0 billion against \$15.6 billion for seasonal naive. Twelve months ahead it is about \$6.4 billion against \$13.1 billion. The Diebold–Mariano test gives p = 0.001 for the one-step errors, so the gap is very unlikely to be luck. ETS earns a permanent row on the scorecard. In Chapter 7 it will face its main rival, ARIMA.
+
+## Choosing the training window: COVID months, outliers and short histories
+
+`ets()` will fit whatever data you hand it. Choosing **which months** to hand it is your job, and it often matters as much as the model. The COVID months of 2020 are the clearest case: retail categories that collapsed and rebounded within weeks leave a scar on every model trained through them. Hyndman and Rostami-Tabar (2025) list the main options for such interrupted series: use a model that adapts fast, treat the disrupted months as missing, replace them with what would plausibly have happened, give them less weight, or combine several approaches.<sup>[14](#refs)</sup> With exponential smoothing, the two simplest are **starting the window after the disruption** and **replacing the disrupted months**.
+
+<Callout type="empirical" title="COVID months make a model jumpy and its intervals too wide">
+Clothing stores again (\$ millions, NSA, trained through August 2025). From 2015, `ets()` picks ETS(A,N,A) with α = 1.00 and **σ = \$1,740 million**. From 2021, it picks the same structure with α = 0.33 and **σ = \$876 million**. Because prediction intervals are built from σ, the 2015 model's intervals are about **twice as wide**, all because of a few months in 2020. If your intervals look absurdly wide, look for an outlier in the training window before blaming the model.
+</Callout>
+
+<Callout type="empirical" title="A shorter window is not free">
+Dropping years also drops information about the seasonal pattern. For total retail sales (excluding food services), training from 2015 gives a test-year MAE of about \$14.1 billion a month; training only from January 2022 raises it to about \$21.5 billion. Rules of thumb: keep as many full years as still describe today's business (each December the model sees helps it pin down December), start **after** a disruption rather than in the middle of one, and always compare the choices on the **same test months, in dollars**.
+</Callout>
+
+<Callout type="empirical" title="New products and short histories">
+A new product has no history to smooth. With only 20 months of e-commerce data (January 2023 to August 2024), `ets()` picks **ETS(M,N,N)**: there are too few observations to estimate 12 seasonal indices, so it quietly drops the season. With 32 months it can fit ETS(M,N,M). In practice, until a product has about two full years of sales, planners use a simple non-seasonal model, apply the seasonal pattern of a similar established product by judgment, and refit every month as data arrive. Say clearly in the report that the forecast rests on a short history.
+</Callout>
+
+<Predict client:load
+  question="Restaurant and bar sales (food services & drinking places) collapsed in spring 2020. If you train `ets()` from January 2021 instead of January 2015, what happens to the test-year MAE (the 12 months to August 2026)?"
+  options={['It gets much worse: you threw away five years of data', 'About the same: ETS adapts anyway', 'It gets much better: the 2020 collapse was distorting the model']}
+  answer={2}
+  explain="Run the exercise below to see the numbers. With 2020 inside the window the fitted α is 1.00: the level jumps to every new month. From 2021 the model is calmer, and its test-year MAE falls by more than half. For total retail, by contrast, a window starting in 2022 made things worse: the right window depends on the series."
+/>
+
+<div class="breakout">
+<CodeLab client:load id="ch05-ex-window" exercise title="Exercise: should the COVID years stay in the training data?" r={winR} solution={winSolR} check={winCheckR} py={winPy} solutionPy={winSolPy} checkPy={winCheckPy} packages={['forecast']} pyPackages={['statsmodels']}
+  goal="Your manager asks whether the restaurant-sales forecast should still be trained on 2015–2020. Fit ETS on two windows and compare their test-year MAE in dollars."
+  hints={['The short window starts in January 2021: `start = c(2021, 1)` in R, `"2021"` in Python.', 'The horizon must cover all 12 test months: `12` or `length(test)` (`len(test)` in Python).', 'Compare in dollars with the mean absolute error: the column `"MAE"` in R; `.mean()` of the absolute errors in Python.']} />
+</div>
 
 ## Monday morning: forecasting every category at once
 
@@ -236,19 +434,22 @@ Forecasting software in practice works like this report. The system forecasts ev
 The badges come from one backtest year. A category can be green because its last 12 months happened to be calm. Before you trust a status, re-run the backtest from a second origin (try ending the training data in August 2024 instead) and see whether the ranking holds. In production, teams track MASE over many weeks, not one snapshot.
 </Callout>
 
-## Does ETS beat the benchmark?
+### Reading the exception report like a manager
 
-Every new method in this course must earn its place on the Chapter 3 scorecard. On total retail sales, seasonal naive was the benchmark to beat. Let's make the comparison with time-series cross-validation, re-fitting ETS at every forecast origin, on the pre-COVID years 2012–2019.
+A planner who receives the report reads each flagged row with four questions. Here they are, answered with the R numbers.
 
-<div class="breakout">
-<CodeLab client:load id="ch05-tscv" title="ETS vs seasonal naive, cross-validated by horizon" r={cvR} py={cvPy} packages={['forecast']} pyPackages={['statsmodels']} goal="Use tsCV() to compare ETS(M,A,M) with seasonal naive at horizons 1 to 12, then test whether the one-step difference is statistically significant." />
-</div>
+1. **How bad, in plain words?** Misc. store retailers have MASE 1.98: the forecast missed by about **twice** what a seasonal naive forecast typically misses in the training years. Their MAPE of 9.0% says the same thing in percent: a typical month was off by about 9%.
+2. **Bias or noise?** Look at the *direction* of the misses, not just their size. Misc. store sales came in **above** the forecast in all 12 test months (by \$1.39 billion a month on average). That is bias: the level and slope are behind a real change, and the fix is to raise them, not to wait. Health & personal care missed the other way, below the forecast in 9 of 12 months.
+3. **How much money?** MASE is scale-free, which is what you want for *ranking*, but decisions are made in dollars. Gasoline stations sit at the line (MASE 1.00), yet their MAE of **\$5.6 billion a month** is the largest dollar miss in the table, with every month under-forecast. Food services is green (MASE 0.33), but its MAE of \$2.1 billion is still larger than misc. stores' \$1.4 billion, simply because the category is six times bigger.
+4. **What changed, and does the model know?** A model can only extrapolate what it has seen. A new competitor, a price change or a reclassification is information the planner has and the model does not.
 
-ETS wins at every horizon, cutting the seasonal naive error by about 30% to 50%. One month ahead, its MAE is about \$8.0 billion against \$15.6 billion for seasonal naive. Twelve months ahead it is about \$6.4 billion against \$13.1 billion. The Diebold–Mariano test gives p = 0.001 for the one-step errors, so the gap is very unlikely to be luck. ETS earns a permanent row on the scorecard. In Chapter 7 it will face its main rival, ARIMA.
+<Callout type="empirical" title="Rank by MASE, then act on dollars and direction">
+Use MASE to decide **which rows to read**, because it puts an \$8 billion category and a \$90 billion category on one scale. Then decide **what to do** from two more numbers per category: the average error in dollars (how much is at stake) and the count of months above vs below the forecast (bias or noise). A row with all 12 misses on one side calls for an override or a shorter training window; a row with misses on both sides calls for patience and wider safety stock.
+</Callout>
 
 ## Your turn
 
-Fill in the three blanks (`______`) and press **Run & check**.
+Fill in the three blanks (`______`) and press **Run & check**. This one makes a good homework after Session 2: it repeats the full ETS workflow on a new category in a few lines.
 
 <div class="breakout">
 <CodeLab client:load id="ch05-ex1" exercise title="Exercise: automatic ETS for clothing stores" r={exR} solution={exSolR} check={exCheckR} packages={['forecast']}
@@ -256,47 +457,89 @@ Fill in the three blanks (`______`) and press **Run & check**.
   hints={['The function that fits and selects an exponential smoothing model automatically is `ets()`.', 'The horizon should cover every month of the test set: `length(test)`. The column of `accuracy()` you need is named MASE, in capitals (the quotes are already in the code).']} />
 </div>
 
+Then look back at the [AICc explorer](#reading-an-ets-printout-line-by-line): the model you just fitted is the "Clothing, from 2015" winner, with α = 0.9999. What would you tell a manager about that α, and what would you try next?
+
 ## Chapter checklist
 
-- Exponential smoothing is a **weighted average with fading weights**. α sets the memory: high α reacts fast, low α filters noise.
-- **Holt** adds a smoothed trend (β). A **damped trend** (φ < 1) lets the trend fade, and is a hard-to-beat default.
-- **Holt-Winters** adds seasonal indices (γ). Use **multiplicative** seasonality when the seasonal swing grows with the level.
-- **ETS(Error, Trend, Season)** names every combination as a state-space model. That gives **prediction intervals** and **automatic selection by AICc** with `ets()`.
-- **Batch forecasting** means writing one recipe and applying it to every series, then ranking by a scale-free metric (MASE) so people only review the **exceptions**.
+- Exponential smoothing is a **weighted average with fading weights**. Translate α into months: the level's information is on average **1/α months old**, so α = 0.5 means about 2 months and α = 0.1 about 10.
+- A fitted α describes the **series** (how much of each wiggle is news), not the model's accuracy. No α handles both one-off outliers and lasting shifts, so **deal with known outliers in the data** instead of tuning α.
+- **Holt** adds a slope, measured in **units per month**. A **damped trend** fades it: with φ = 0.9 the forecast adds only about 9 months' worth of today's slope in total. It is a hard-to-beat default.
+- **Holt-Winters** adds seasonal indices: multiplicative ("December is 24% above an average month") when the swing grows with the level, additive ("+\$60.6 billion") when it does not. An additive model on **logs** is the alternative to multiplicative; come back to dollars with `exp()`.
+- **ETS(Error, Trend, Season)** names every combination as a state-space model, with **prediction intervals** and **automatic selection by AICc**. Read AICc as **differences**: under 2 is a tie, over 10 is ruled out, and only models fitted to the same data can be compared.
+- **Read the states** as a receipt: level (underlying sales) plus slope, times or plus the seasonal index, equals the forecast.
+- **Choose the training window on purpose.** COVID months can push α to 1 and double σ. A shorter window can help or hurt, so compare windows in **dollars on the same test months**, never by MASE. Seasonal models need a few full years; new products need judgment.
+- **Batch forecasting** ranks by a scale-free metric (MASE) so people only review the **exceptions**; then the manager acts on **dollars and direction** (bias vs noise).
 - ETS must still beat the benchmark: on retail sales it cuts the **seasonal naive error by about 30% to 50%** at every horizon under cross-validation.
 
 <InstructorKit
-  minutes={60}
+  minutes={150}
   data={['MRTSSM4541USN', 'MRTSSM4541USS', 'RSXFSN', 'CPIAUCSL', 'HOUST', 'GASREGW', 'MRTSSM441USN', 'MRTSSM442USN', 'MRTSSM443USN', 'MRTSSM444USN', 'MRTSSM445USN', 'MRTSSM446USN', 'MRTSSM447USN', 'MRTSSM448USN', 'MRTSSM451USN', 'MRTSSM452USN', 'MRTSSM453USN', 'MRTSSM454USN', 'MRTSSM722USN']}
+  sessions={[
+    { title: 'Session 1. Memory, trend and seasons: what the smoothing parameters say', plan: [
+      '5 min · Hook: the 7:30 Monday-morning problem (500 products, no time to hand-tune); what exponential smoothing promises',
+      '10 min · Gasoline Predict, then the memory explorer: find the best α for gasoline (1.00), housing starts (0.46) and inflation (0.23)',
+      '8 min · Reading a fitted α: the months table, average age 1/α, and the α = 0.92 vs 0.08 check',
+      '10 min · "One surprise, two stories" explorer, then the outlier tip (clothing α = 1.00 → 0.71 after cleaning → 0.33 from 2021)',
+      '12 min · Holt and the damped trend: Dec 2020 Predict, trend explorer, slope and φ in plain words, φ = 0.8 Predict',
+      '8 min · Holt-Winters: seasonal engine (additive vs multiplicative), reading an index, the "multiplicative or logs?" tip',
+      '10 min · Smoothing lab: SES, Holt, damped Holt and Holt-Winters on e-commerce; read the scorecard',
+      '12 min · Activity: the memory-dial briefing (below)'
+    ] },
+    { title: 'Session 2. ETS at work: read the printout, choose the window, run the batch', plan: [
+      '8 min · ETS labels table, ETS(A,Ad,N) check, run the ETS lab',
+      '10 min · Read the printout line by line, then the AICc explorer: e-commerce, total retail, clothing from 2015 vs 2021 (a tie that mattered)',
+      '10 min · December 2024 Predict, then the state receipt: level + slope, × seasonal factor',
+      '7 min · Exercise: translate the fitted model for your manager (α, half-life, slope)',
+      '7 min · Does ETS beat seasonal naive? Run tsCV and read the horizon chart',
+      '10 min · Training window: COVID, short windows, new products; restaurant Predict and the window exercise',
+      '23 min · Activity: the Monday-morning meeting with the batch run and the exception report (below)'
+    ] }
+  ]}
   objectives={[
-    'Explain simple exponential smoothing as a weighted average with weights α(1 − α)^j, and relate α to the "memory" of the forecast.',
-    'Describe how Holt’s method adds a trend (β), why a damped trend (φ < 1) is a robust default, and when damping can lose.',
-    'Choose between additive and multiplicative seasonality in Holt-Winters by looking at whether the seasonal swing grows with the level.',
-    'Decode an ETS(E,T,S) label, fit an automatic model with `ets()`, interpret α, β, γ, σ and AICc, and produce prediction intervals.',
-    'Build a batch forecast over many series with `lapply()` and turn it into an exception report sorted by MASE.',
+    'Explain simple exponential smoothing as a weighted average with weights α(1 − α)^j, and translate a fitted α into months (half-weight months, average age 1/α).',
+    'Explain why no single α handles both a one-off outlier and a lasting change, and choose between keeping, replacing or excluding unusual months.',
+    'Read a slope in units per month and a damping factor φ in plain words (total extra growth of φ/(1 − φ) months of today’s slope).',
+    'Choose between additive and multiplicative seasonality, read a seasonal index in percent or dollars, and explain when logs are an alternative.',
+    'Decode an ETS(E,T,S) label, interpret α, β, γ, φ, σ and the states of an `ets()` fit, and read an AICc table by differences.',
+    'Compare training windows on the same test months in dollars, and explain why MASE cannot be compared across windows.',
+    'Build a batch forecast with `lapply()`, turn it into an exception report sorted by MASE, and read it for size in dollars and bias in direction.',
     'Compare ETS with the seasonal naive benchmark using `tsCV()` and a Diebold–Mariano test.'
   ]}
   discussion={[
-    'Your exception report flags **health & personal care** for review. List three things you would check before overriding the forecast, and who in the company you would ask.',
-    'A vendor’s planning tool uses a fixed α = 0.2 for every product. Using the memory explorer, describe a product for which that would work well and one for which it would fail.',
-    'Why might a company prefer a damped-trend forecast for a product that has grown 20% a year for three years, even if the growth looks steady?'
+    'Your exception report flags **health & personal care** for review: sales came in below the forecast in 9 of 12 months. List three things you would check before overriding the forecast, and who in the company you would ask.',
+    'A vendor’s planning tool uses a fixed α = 0.2 for every product. Using the two memory explorers, describe a product for which that would work well and one for which it would fail.',
+    'Two ETS models for clothing are 0.9 AICc points apart, but one had about half the test-year error of the other. Was AICc wrong? What would you report to your manager?',
+    'Should a 2026 forecast for restaurant sales still be trained on 2020? Argue both sides, using the fitted α and σ as evidence.'
   ]}
   misconceptions={[
     '“A higher α is always better because it uses the latest data.” High α also chases noise; the best α depends on the noise-to-signal ratio.',
+    '“A low α means the model is more accurate.” α describes the series; accuracy comes from MASE or MAE on held-out data.',
+    '“A small-looking γ means the seasonal pattern is nearly fixed.” Each month’s index updates only once a year, and in R γ can never exceed 1 − α, so judge γ against that ceiling.',
     '“Exponential smoothing is too simple to be accurate.” Damped-trend and automatic ETS methods were hard to beat in the M-competitions, including M4.',
     '“ETS(M,…) and ETS(A,…) give different point forecasts.” The error type changes the intervals and the likelihood, not the point forecast recursion.',
+    '“The model with the lower AICc will forecast better.” Differences under 2 are ties, and AICc is in-sample; confirm with a backtest.',
+    '“The training window with the lower MASE is better.” MASE is scaled by each window’s own in-sample error; compare windows by MAE in dollars on the same test months.',
     '“A low backtest MASE means next year’s forecast is safe.” One backtest year can be calm by luck; turning points are what break ETS.'
   ]}
 >
 
-**The Monday-morning meeting (25 minutes).** Students work in pairs; each pair "owns" two retail categories.
+**Session 1 activity: the memory-dial briefing (12 minutes).** Groups of three. Each group gets one series from the memory explorer (gasoline price, housing starts or monthly inflation).
 
-1. **Predict (5 min).** Before running anything, each pair writes down whether their categories will be flagged (MASE > 1) and why.
-2. **Run (5 min).** Run the batch lab and find their categories in the exception report and the small multiples.
-3. **Investigate (10 min).** Pairs with a flagged category plot it with `viz_ts(fred("MRTSSM453USN", start = 2022))` (their own code) and compute year-over-year growth with `y / stats::lag(y, -12) - 1` to find what changed.
+1. **Predict (2 min).** Before touching the explorer, guess the best α and say why in one sentence.
+2. **Measure (4 min).** Press *Find the best α*. Record α, the months that hold half the weight, and the average age 1/α.
+3. **Stress-test (3 min).** In "One surprise, two stories", set the vendor's fixed α = 0.2 and record how many months it takes to absorb 90% of a lasting shift and how many phantom units a one-off spike of 60 creates.
+4. **Brief (3 min).** One sentence per group to a planner: "For our series, α = … means …; a fixed α = 0.2 would …".
+
+*Expected results:* gasoline α = 1.00 (all the weight on the last month; average age 1 month: the naive forecast); housing starts α = 0.46 (2 months hold half the weight; average age about 2.2 months); inflation α = 0.23 (3 months; about 4.3 months). With α = 0.2, half the weight sits on the last 4 months, a lasting shift takes 11 months to absorb 90%, and a one-off spike of 60 adds about 56 phantom units over the next year. So a fixed α = 0.2 is far too slow for gasoline prices, close to right for inflation, and somewhat slow for housing starts.
+
+**Session 2 activity: the Monday-morning meeting (23 minutes).** Students work in pairs; each pair "owns" two retail categories.
+
+1. **Predict (4 min).** Before running anything, each pair writes down whether their categories will be flagged (MASE > 1) and why.
+2. **Run (4 min).** Run the batch lab and find their categories in the exception report and the small multiples.
+3. **Investigate (10 min).** Pairs with a flagged category plot it with `viz_ts(fred("MRTSSM453USN", start = 2022))` (their own code) and compute year-over-year growth with `y / stats::lag(y, -12) - 1` to find what changed. Every pair also answers the manager's two extra questions: how big is the miss in dollars, and is it bias (all misses on one side) or noise?
 4. **Brief (5 min).** Each flagged pair gives a 60-second recommendation: keep the forecast, override it, or escalate.
 
-*Expected results (R, backtest Sep 2025–Aug 2026):* four categories are flagged: misc. store retailers (MASE 1.98, year-over-year growth jumped to 8–17% in 2026), health & personal care (1.43, growth turned slightly negative in 2026), sporting goods & hobby (1.21, growth accelerated to 10–14% in April–June 2026) and building materials (1.08). Gasoline stations are borderline at 1.00 (Watch). The other nine are OK, led by food services & drinking places (0.33) and e-commerce (0.35). The Python tab flags gasoline stations instead of building materials: a good moment to discuss how sensitive a threshold rule is near its cut-off.
+*Expected results (R, backtest Sep 2025–Aug 2026):* four categories are flagged: misc. store retailers (MASE 1.98, MAE \$1.39 billion a month, under-forecast in all 12 months; year-over-year growth jumped to 8–17% in 2026), health & personal care (1.43, MAE \$2.24 billion, over-forecast in 9 of 12 months; growth turned slightly negative in 2026), sporting goods & hobby (1.21, under-forecast in 11 of 12 months; growth accelerated to 10–14% in April–June 2026) and building materials (1.08, under-forecast in all 12). Gasoline stations are borderline at 1.00 (Watch) but carry the largest dollar miss, \$5.6 billion a month, all under-forecast. The other nine are OK, led by food services & drinking places (0.33) and e-commerce (0.35). The Python tab flags gasoline stations instead of building materials: a good moment to discuss how sensitive a threshold rule is near its cut-off.
 
 </InstructorKit>
 
@@ -315,6 +558,9 @@ Fill in the three blanks (`______`) and press **Run & check**.
 9. Gardner, E. S., Jr. (1985). Exponential smoothing: The state of the art. *Journal of Forecasting*, 4(1), 1–28.
 10. Hyndman, R. J., & Athanasopoulos, G. (2021). *Forecasting: Principles and Practice* (3rd ed.), ch. 8. [otexts.com/fpp3](https://otexts.com/fpp3/)
 11. U.S. Bureau of Labor Statistics. *2025 lapse in appropriations: impact on the Consumer Price Index* (FAQ): no October 2025 CPI was published. [bls.gov](https://www.bls.gov/cpi/additional-resources/2025-federal-government-shutdown-impact-cpi-faq.htm)
+12. Nau, R. *Averaging and exponential smoothing models* (Statistical forecasting notes, Fuqua School of Business, Duke University): the average age of the data in an SES forecast is 1/α, and forecasts lag turning points by about that much. [people.duke.edu/~rnau](https://people.duke.edu/~rnau/411avg.htm)
+13. Burnham, K. P., & Anderson, D. R. (2002). *Model Selection and Multimodel Inference: A Practical Information-Theoretic Approach* (2nd ed.). Springer, sec. 2.6 (rules of thumb for AIC differences).
+14. Hyndman, R. J., & Rostami-Tabar, B. (2025). Forecasting interrupted time series. *Journal of the Operational Research Society*, 76(4), 790–803.
 
 </div>
 

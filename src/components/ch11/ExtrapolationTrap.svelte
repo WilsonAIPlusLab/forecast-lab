@@ -48,6 +48,7 @@
   function draw() {
     if (!el || !res || !data.length) return;
     const W = el.clientWidth;
+    if (W < 200) return;   // not laid out yet: watchLayout redraws once it has a real width
     const from = Math.max(0, origin - 84);
     const hist = data.slice(from, origin + 1).map((p) => ({ date: p.date, v: bn(p.value) }));
     const act = data.slice(origin + 1, origin + 1 + H).map((p) => ({ date: p.date, v: bn(p.value) }));

@@ -61,6 +61,7 @@
   function draw() {
     if (!el || !cur) return;
     const W = el.clientWidth, sc = SER[sid].scale;
+    if (W < 200) return;   // not laid out yet: watchLayout redraws once it has a real width
     const te = cur.te;
     const thin = cur.preds.slice(0, k).flatMap((p, b) => p.map((v, i) => ({ date: te[i].date, v: v * sc, b })));
     const avg = te.map((r, i) => ({ date: r.date, v: (cur!.preds.slice(0, k).reduce((s, p) => s + p[i], 0) / k) * sc }));

@@ -51,7 +51,7 @@
       .style('cursor', 'ns-resize').attr('tabindex', 0).attr('aria-label', (_, i) => `Forecast for period ${i + 1}; use arrow keys to move`)
       .call(d3.drag<SVGCircleElement, number>().on('drag', function (ev, _d) {
         const i = dots.nodes().indexOf(this); fc[i] = Math.round(Math.max(72, Math.min(143, y.invert(ev.y)))); active = ''; render();
-      }))
+      }) as any)
       .on('keydown', function (ev: KeyboardEvent) {
         const i = dots.nodes().indexOf(this as any); if (ev.key === 'ArrowUp') fc[i] = Math.min(143, fc[i] + 2); else if (ev.key === 'ArrowDown') fc[i] = Math.max(72, fc[i] - 2); else return; ev.preventDefault(); active = ''; render();
       });

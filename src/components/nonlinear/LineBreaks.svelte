@@ -73,6 +73,7 @@
     const t = top;
     if (!elTop || !t || !cur) return;
     const W = elTop.clientWidth, H = Math.max(250, Math.min(320, W * 0.42));
+    if (W < 200) return; // skip transient zero-width layouts (no negative-size marks)
     const xs = Array.from({ length: 161 }, (_, i) => t.lo + (i * (t.hi - t.lo)) / 160);
     const curve = xs.map((x) => ({ x, p: plogis(x) }));
     const line = xs.map((x) => ({ x, p: t.la + t.lb * x }));
@@ -105,6 +106,7 @@
   function drawBot() {
     if (!elBot || !cur) return;
     const W = elBot.clientWidth, H = 190;
+    if (W < 200) return; // skip transient zero-width layouts
     const d = cur.lpm.flatMap((v, i) => [
       { m: 1, p: v, y: 1 + (jitter[i] - 0.5) * 0.62, neg: v < -1e-9 || v > 1 },
       { m: 0, p: cur!.lg[i], y: (jitter[i] - 0.5) * 0.62, neg: false },

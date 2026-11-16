@@ -1,26 +1,51 @@
 ---
 layout: ../../layouts/Chapter.astro
 slug: first-forecast
-minutes: 10
+minutes: 90
+sessions:
+  - title: Run your first forecast
+  - title: Read a forecast like an analyst
+    starts: plot-before-you-model
 build:
   - A 24-month forecast of U.S. retail sales with 80% and 95% prediction intervals
   - Your first R (or Python) program that runs entirely in the browser
-skills: [R, webR, forecast, auto.arima, fan chart]
+  - A one-paragraph forecast brief a manager can read in 30 seconds, with units, a range and the data's vintage
+skills: [R, webR, forecast, auto.arima, fan chart, prediction interval, seasonality, trend, year-over-year change]
 ---
 import CodeLab from '../../components/CodeLab.svelte';
 import Callout from '../../components/Callout.astro';
 import KeyIdea from '../../components/KeyIdea.astro';
 import Predict from '../../components/Predict.svelte';
 import Term from '../../components/Term.astro';
+import SessionBreak from '../../components/SessionBreak.astro';
 import firstR from '../../labs/ch00/first.R?raw';
 import firstPy from '../../labs/ch00/first.py?raw';
 import exR from '../../labs/ch00/exercise.R?raw';
 import exSolR from '../../labs/ch00/exercise_solution.R?raw';
 import exCheckR from '../../labs/ch00/exercise_check.R?raw';
+import exYoyR from '../../labs/ch00/ex_yoy.R?raw';
+import exYoySolR from '../../labs/ch00/ex_yoy_solution.R?raw';
+import exYoyCheckR from '../../labs/ch00/ex_yoy_check.R?raw';
+import exYoyPy from '../../labs/ch00/ex_yoy.py?raw';
+import exYoySolPy from '../../labs/ch00/ex_yoy_solution.py?raw';
+import exYoyCheckPy from '../../labs/ch00/ex_yoy_check.py?raw';
+import exBandR from '../../labs/ch00/ex_band.R?raw';
+import exBandSolR from '../../labs/ch00/ex_band_solution.R?raw';
+import exBandCheckR from '../../labs/ch00/ex_band_check.R?raw';
+import exBandPy from '../../labs/ch00/ex_band.py?raw';
+import exBandSolPy from '../../labs/ch00/ex_band_solution.py?raw';
+import exBandCheckPy from '../../labs/ch00/ex_band_check.py?raw';
 import YouDrawIt from '../../components/ch00/YouDrawIt.svelte';
+import SeeThePattern from '../../components/ch00/SeeThePattern.svelte';
+import ForecastReader from '../../components/ch00/ForecastReader.svelte';
+import TimeMachine from '../../components/ch00/TimeMachine.svelte';
 import InstructorKit from '../../components/InstructorKit.astro';
 
 <p class="lede">Most forecasting courses spend weeks on theory before you forecast anything. We start the other way around: in the next minute you will produce a real, professional-looking forecast of the U.S. economy. Then the rest of the course explains, one step at a time, what just happened and how to do it better.</p>
+
+This chapter has two parts. In the first you **make** a forecast: sketch one by hand, run one in R, and learn the words. In the second you learn to **read** one the way a working analyst does: look at the data first, check the units, say the forecast in plain words, and know which part of the chart to trust.
+
+<SessionBreak n={1} title="Run your first forecast" goals={['Run, edit and step through R (or Python) code in the browser', 'Name the three parts of a forecast chart: history, point forecast, prediction intervals', 'Explain why the fan gets wider the further ahead you look']} />
 
 ## First, your gut
 
@@ -68,13 +93,17 @@ The chart has three ingredients that will appear in every chapter:
   explain="Each step ahead stacks a new source of uncertainty on top of the old ones, so the spread of plausible paths grows with the <em>horizon</em>. Short-run forecasts are almost always more accurate than long-run ones."
 />
 
+Think of driving directions. "You will arrive in 20 minutes" is a good guess for a short trip. For a 6-hour trip the guess is still useful, but traffic, a stop for gas and road work can each add or remove time, and those surprises pile up. The longer the trip, the wider the honest range around your arrival time. Forecasts work the same way.
+
 ## The vocabulary of forecasting
 
 <dl class="vocab">
   <dt>Time series</dt><dd>Observations of one variable in time order: monthly sales, quarterly GDP, daily prices. The order matters.</dd>
   <dt>Horizon (h)</dt><dd>How far ahead we forecast. `h = 24` with monthly data means two years.</dd>
   <dt>Model</dt><dd>A rule that turns the past into a forecast. `auto.arima()` picked one for us; Chapter 7 opens the box.</dd>
+  <dt>Point forecast</dt><dd>The single best guess for each future period: the bold line.</dd>
   <dt>Prediction interval</dt><dd>A range that should contain the future value with a stated probability (80%, 95%).</dd>
+  <dt>Trend</dt><dd>The long-run direction of a series: up, down or flat, once you look past the month-to-month wiggles.</dd>
   <dt>Seasonality</dt><dd>A pattern that repeats every year, like the December shopping spike. Chapter 2 is all about it.</dd>
 </dl>
 
@@ -92,6 +121,172 @@ Fill in the two blanks (`______`) and press **Run & check**.
   hints={['The series ID is text, so it needs quotes: `"HOUSTNSA"`.', 'The horizon `h` is a number of months: 18.']} />
 </div>
 
+When it runs, look at three things: the spring peak and winter dip repeat every year, the fan follows that rhythm, and the fan still widens month after month. You have now made two forecasts. Session 2 teaches you to read them properly.
+
+<SessionBreak n={2} title="Read a forecast like an analyst" goals={['Plot before you model: spot **trend**, **seasonality** and surprises', 'Check **units**, frequency and seasonal adjustment before reading any number', 'Say a forecast in plain words: the point, the **80%/95% band**, the horizon', 'Know which part to trust: the band is the message, and the latest data point is a first draft']} />
+
+## Plot before you model
+
+A working analyst never fits a model to data they have not looked at. A plot takes ten seconds and answers three questions a model cannot answer for you: Is there a **trend**? Is there **seasonality**? Is there anything **strange** (a crash, a jump, a gap) that the model should not treat as normal?
+
+<Predict client:visible
+  question="In a typical year, which month has the **highest** U.S. retail sales (not seasonally adjusted)?"
+  options={['July: summer spending', 'November: Black Friday', 'December: the holiday season', 'March: tax refunds']}
+  answer={2}
+  explain="December, every single year since 2012. In 2025 December sales were about \$694 billion, 11.8% more than November's \$621 billion and about 14% above the average month of 2025. Black Friday falls in late November, but most holiday shopping happens in December. The <b>Year by year</b> view below shows the same shape in every year."
+/>
+
+<div class="breakout">
+<SeeThePattern client:load />
+</div>
+
+The three views show the same numbers. Each makes a different feature easy to see:
+
+- **Over time** shows the **trend** (the line drifts up) and the one big **surprise** (April 2020, when COVID shutdowns cut sales 11% in a single month).
+- **Year by year** puts every year on a January-to-December axis, a picture Hyndman and Athanasopoulos call a *seasonal plot*.<sup>[2](#refs)</sup> The **shape** that repeats is the seasonality. The **stacking**, with later years higher, is the trend.
+- **Change vs a year ago** compares each month with the same month one year earlier. The seasonal zigzag disappears, because December is compared with December. What is left is growth.
+
+<KeyIdea>Seasonality is a shape that repeats every year. Trend is the slow drift underneath it. Look for both, and for surprises, before you fit any model.</KeyIdea>
+
+<Callout type="empirical" title="Check the units before you read a single number">
+The September 2026 value of `RSXFSN` is **635,056**. Before you say anything, answer three questions.
+
+- **What unit?** Millions of dollars. So that is **\$635 billion**, not \$635 thousand.
+- **Per what period?** Per **month**. U.S. retail stores sell roughly \$7.3 trillion a *year* (the 12 months of 2025 add up to \$7.32 trillion).
+- **Adjusted or not?** **Not** seasonally adjusted (the `N` at the end of the ID). So a December jump is normal, not news.
+
+The trap is real. In September 2026, `HOUSTNSA` (housing starts, not seasonally adjusted) reads **103.8** and `HOUST` (housing starts, seasonally adjusted) reads **1,221**. Same month, same houses. `HOUSTNSA` counts thousands of homes started *that month*. `HOUST` is a *seasonally adjusted annual rate*: roughly "this month's pace, with the season removed, times 12". Compare one with the other and you are off by a factor of twelve. FRED's series page lists the units, frequency and adjustment right under the title; read that line first. [Chapter 1](/chapters/time-series-data/#transformations-every-analyst-uses) covers units and adjustments in depth.
+</Callout>
+
+### Is it growth, or is it just December?
+
+Raw month-to-month changes in unadjusted data mostly measure the calendar. Try it with real numbers.
+
+<Predict client:visible
+  question="Retail sales rose **11.8%** from November to December 2025. Your manager says: *retail is booming!* What is the best reply?"
+  options={[
+    'Agree: 11.8% in one month is an exceptional boom',
+    'Compare December 2025 with December 2024 instead: that removes the holiday effect',
+    'Ignore it: monthly data are too noisy to say anything',
+    'Divide 11.8% by 12 to get the true monthly growth'
+  ]}
+  answer={1}
+  explain="December is always far above November: the jump was between 7% and 17% in every year from 2012 to 2025. Comparing December with the previous December cancels the holiday effect. That comparison gives only <b>+3.4%</b>: solid, not a boom. You will compute both numbers in the exercise below."
+/>
+
+<div class="breakout">
+<CodeLab client:load id="ch00-ex-yoy" exercise title="Exercise: is it growth, or is it December?" r={exYoyR} solution={exYoySolR} check={exYoyCheckR} py={exYoyPy} solutionPy={exYoySolPy} checkPy={exYoyCheckPy}
+  goal="Your manager saw December 2025's jump. Compute the month-over-month and year-over-year percent changes and show them side by side."
+  hints={['Percent change is 100 × (new / old − 1). Here the "new" value is always `dec25`.', 'Month over month: the "old" value is the month before, `nov25`. Year over year: the same month a year earlier, `dec24`.', 'Fill `nov25` in the first blank and `dec24` in the second.']} />
+</div>
+
+<Callout type="empirical" title="Seasonal data? Compare with the same month last year">
+With unadjusted monthly data, quote the **year-over-year** change: this month against the same month a year earlier. That is why news stories on unadjusted figures say "up 3.4% from a year earlier." The latest month in our data is a good test. September 2026 sales were **3.2% below** August, which sounds bad, but they were **6.7% above** September 2025. Late summer is always stronger than September. Seasonally adjusted data (Chapter 2) solve the same problem a different way.
+</Callout>
+
+### A first look at logs and growth rates
+
+The first lab had one mysterious argument: `lambda = 0`, which tells R to model the **logarithm** of sales. Here is the idea in one picture, using numbers you can check in the **Year by year** view. In 2012 the December jump over November was about \$47 billion. By 2025 it was about \$74 billion, more than half as big again. In *percent* it barely moved: 13.0% in 2012, 11.8% in 2025. The seasonal swing grows with the level of sales, but it stays roughly constant as a share of sales.
+
+A log turns "the same *percentage* every year" into "the same *size* every year", which is easier for a model to learn. The model works in logs and R turns the forecast back into dollars for you. Robert Nau's Duke forecasting notes make the same point: logs turn growth and seasonal swings that scale with the level into steady ones.<sup>[3](#refs)</sup>
+
+<Callout type="intuition" title="Dollars grow for two reasons">
+Average monthly sales rose from \$352 billion in 2012 to \$610 billion in 2025, up 73%. But consumer prices (the CPI) rose about 40% over the same years. Much of the dollar growth is higher prices, not more stuff sold. Analysts separate the two by *deflating*. You will learn how, along with logs, growth rates and differences, in [Chapter 1](/chapters/time-series-data/#real-vs-nominal-more-stuff-or-higher-prices). [Chapter 2](/chapters/decomposition/#additive-or-multiplicative) shows how a log turns a growing seasonal swing into a steady one.
+</Callout>
+
+## Read the fan in plain words
+
+Now go back to the forecast from the first lab. A fan chart answers three questions, and a good analyst says all three out loud: **what is the best guess**, **how wrong could it be**, and **for which month**. Pick a month and a band below and read the sentence.
+
+<div class="breakout">
+<ForecastReader client:load />
+</div>
+
+For December 2026, three months after the last data point, the model's best guess is **about \$738 billion**. The 80% band runs from **\$706 billion to \$771 billion**; the 95% band from **\$690 billion to \$789 billion**. In words: "We expect December sales of about \$738 billion. Anything from \$706 to \$771 billion would not surprise us. Below \$690 billion or above \$789 billion would be a real surprise."
+
+Three details are worth noticing.
+
+- **The bands are not symmetric.** For December 2026 the 80% band reaches \$32 billion below the guess but \$33 billion above it. The model works in logs, so it thinks in percentages, and a 5% rise is more dollars than a 5% fall. Strictly, the bold line is the *middle* of the range: half the plausible outcomes lie above it and half below. [Chapter 10](/chapters/uncertainty/) explains this fine print.
+- **The bands widen.** One month ahead the 80% band is about \$47 billion wide (7% of the forecast). Twenty-four months ahead it is about \$95 billion wide (14%). Each extra month adds new surprises on top of the old ones.
+- **The 95% band is wider than the 80% band.** To be more confident that you have caught the truth, you must cast a wider net. Neither band is "more right"; they answer different questions.
+
+<Predict client:visible
+  question="Your 80% band for December 2026 is \$706–771 billion. The actual figure comes in at **\$780 billion**. What is the best reading?"
+  options={[
+    'The model is wrong; throw it away',
+    'An 80% band should miss about 1 time in 5. Note it, and worry only if misses keep happening, or keep landing on the same side',
+    'The data must be wrong, because the model is fitted to them',
+    'Next time, report the 95% band so you are never wrong'
+  ]}
+  answer={1}
+  explain="An 80% band <em>promises</em> to miss about one month in five. One miss tells you almost nothing. Ten misses in a row, or every miss on the high side, would tell you the model is off. And reporting only very wide bands is not a fix: a band so wide it can never miss is also useless for planning."
+/>
+
+<Callout type="empirical" title="The band is the real message, so report it">
+When you send a forecast to a manager, write the **range first-class**, not as a footnote.
+
+- **Round** to what you can defend. "\$738 billion" beats "\$737,835 million". The last digits are noise.
+- Give the **unit**, the **month** and the **horizon**: "December 2026, three months ahead."
+- Give the **band and its level**: "80% range \$706–771 billion."
+- Avoid "sales **will** be \$738 billion." Say "we expect about", and give the range.
+- Do not read a wide band as a bad model. An honest wide band is more useful than a confident narrow one that turns out wrong.
+
+FPP3 makes the same point: a point forecast with no interval tells the reader nothing about how accurate it is likely to be.<sup>[1](#refs)</sup>
+</Callout>
+
+## Go back in time: did the band catch what happened?
+
+The best way to trust a band is to check old ones. Below, the same recipe as the first lab is run as if you stood at the end of an earlier year, with only the data known then. Then reality is revealed.
+
+<Predict client:visible
+  question="Across six forecasts made at the end of 2016, 2017, 2018, 2021, 2022 and 2023 (144 forecast months in total), what share of actual months landed inside the **80%** bands?"
+  options={['All of them (100%)', 'About 80–85%', 'About half', 'Fewer than 1 in 5']}
+  answer={1}
+  explain="123 of 144 months (85%) landed inside the 80% bands, and 138 of 144 (96%) inside the 95% bands: close to what the bands promised. Now try December 2019 in the explorable. COVID broke the pattern: only 3 of 24 months landed inside the 80% band."
+/>
+
+<div class="breakout">
+<TimeMachine client:load />
+</div>
+
+Two lessons. First, the bold line is almost never exactly right; even in calm years it missed by 2–5% a month on average. The band did most of the useful work. Second, bands are built from the past. When the world changes suddenly, as in 2020, no band fitted to 2012–2019 can be trusted. A good analyst says so out loud. [Chapter 3](/chapters/benchmarks/) turns this "go back in time" check into a proper method, and [Chapter 10](/chapters/uncertainty/) audits bands across many forecasts.
+
+## The latest number is a first draft
+
+Every forecast starts from the last data point. That point is usually the least reliable one.
+
+<Callout type="empirical" title="Treat the latest month as preliminary, and say so">
+The Census Bureau publishes retail sales about two weeks after a month ends. That first number, the **advance estimate**, comes from a sample of about 4,800 firms. It is revised as the full monthly survey comes in.<sup>[4](#refs)</sup> Normal monthly revisions are small (the Census Bureau puts the average at about two-tenths of one percent), but once a year the whole history is re-benchmarked to larger annual surveys.<sup>[5](#refs)</sup>
+
+Real example from this chapter's own data. In September 2026, FRED first reported August 2026 retail sales of **\$676.2 billion**. After the October 2026 annual revision, the same month reads **\$655.9 billion**, 3.0% lower.<sup>[6](#refs)</sup> Our data end in September 2026, and that last value is still an advance estimate.
+
+What to do:
+
+- Write the **data vintage** next to every forecast: "based on data through September 2026 (advance estimate), downloaded November 2026."
+- Do not over-react to one surprising latest month. It may be revised.
+- When the next release comes out, re-run the forecast. It will move, and that is normal.
+
+[Chapter 1](/chapters/time-series-data/#data-get-revised-vintages-and-alfred) shows how to download old vintages from ALFRED and see revisions for yourself.
+</Callout>
+
+## Your turn: brief your manager
+
+Here is the payoff for this chapter. Your manager asks: *"What is the forecast for this December, and how sure are we? Billions, please, not millions."* Fill in the blanks to pull the numbers out of the forecast object.
+
+<div class="breakout">
+<CodeLab client:load id="ch00-ex-band" exercise title="Exercise: read December's forecast and its 80% band" r={exBandR} solution={exBandSolR} check={exBandCheckR} py={exBandPy} solutionPy={exBandSolPy} checkPy={exBandCheckPy} packages={['forecast']} pyPackages={['statsmodels']}
+  goal="Report next December's point forecast and 80% band in $ billions, in one sentence."
+  hints={['The data are in $ millions. One billion is a thousand millions, so divide by 1000.', 'R keeps the bottom of the band in `fc$lower` and the top in `fc$upper`. In Python, the band table has column 0 (lower) and column 1 (upper).', 'R: `fc$mean[k] / 1000` and `fc$upper[k, "80%"]`. Python: `mean.iloc[k] / 1000` and `ci80.iloc[k, 1]`.']} />
+</div>
+
+The R model gives about \$738 billion, with an 80% band of \$706–771 billion. The Python tab fits a slightly different model, so it gives about \$737 billion and \$704–771 billion. Two reasonable models, nearly the same answer: that is reassuring.
+
+Now turn the numbers into a short brief. A good one fits in three sentences:
+
+> **December 2026 retail sales forecast.** We expect U.S. retail sales of about \$738 billion in December 2026, not seasonally adjusted, about 6% above December 2025. We are 80% confident the figure will land between \$706 and \$771 billion. Based on Census data through September 2026; the latest month is an advance estimate and may be revised.
+
+Every phrase does a job: the **month**, the **unit**, a **comparison** a reader can feel (vs last December), the **range and its level**, and the **data vintage**.
+
 ## How this course works
 
 Every chapter follows the same rhythm:
@@ -105,30 +300,70 @@ From here we go back to the start. Chapter 1 asks what a time series actually is
 
 <Callout type="math" title="What did auto.arima actually choose?">
 With the bundled data, the printed output reads `ARIMA(2,0,2)(0,1,1)[12] with drift` (the exact label can change when the data are updated). Roughly, it means: compare each month with the same month last year (the seasonal `(0,1,1)[12]` part), use the last two months and the model's last two surprises to predict the next move (the `(2,0,2)` part), and add a steady upward drift. Chapter 7 decodes this notation completely. For now, the point is that a well-chosen model learns both the trend and the seasonal pattern from the data.
+
+The bands come from the model's estimate of how big its one-month surprises are. On the log scale the 80% band is the point forecast plus or minus $1.28$ forecast standard deviations, and the 95% band plus or minus $1.96$. The standard deviation grows with the horizon, which is why the fan widens. Undoing the log ($e^x$) turns the bands back into dollars and makes them lopsided.<sup>[1](#refs)</sup>
 </Callout>
 
+## Chapter checklist
+
+- A forecast is a **range plus a best guess**. Report the point forecast *and* the 80%/95% band, with the month and horizon.
+- Read a band in words: "80% band \$706–771 billion" means a miss outside it should happen about **1 time in 5**. One miss is not a broken model.
+- Bands **widen with the horizon** because surprises pile up. They also assume the future behaves like the past (remember 2020).
+- **Plot before you model.** Look for trend (the drift), seasonality (the repeating shape) and surprises.
+- **Check units first:** \$ millions per month, not seasonally adjusted. Watch for annual rates (SAAR) and thousands vs millions.
+- With unadjusted data, compare a month with the **same month a year earlier**, not with last month.
+- The **latest data point is a first draft**. Write the data vintage on every forecast.
+
 <InstructorKit
-  minutes={30}
-  data={['RSXFSN', 'HOUSTNSA', 'UNRATE']}
+  minutes={150}
+  data={['RSXFSN', 'HOUSTNSA', 'HOUST', 'UNRATE']}
+  sessions={[
+    { title: 'Run your first forecast', plan: [
+      '5 min · Welcome and the course promise: a real forecast in the first class',
+      '15 min · Draw-off: everyone sketches 2023 in "Draw your forecast", reveals, and posts their average miss (activity below)',
+      '10 min · Run the first lab together, then **Step through** it line by line',
+      '10 min · Read the chart: history, point forecast, bands; Predict: why does the fan widen? Driving-directions analogy',
+      '10 min · Live edits: `h = 60`, then `UNRATE` and `HOUST`. What changes in the fan, and why?',
+      '15 min · Exercise in pairs: housing starts (`HOUSTNSA`, 18 months); compare charts',
+      '10 min · Vocabulary check (trend, seasonality, horizon, interval) and where forecasting shows up at work'
+    ] },
+    { title: 'Read a forecast like an analyst', plan: [
+      '5 min · Warm-up Predict: which month has the highest retail sales?',
+      '15 min · Plot before you model: the three views; units callout (`HOUST` 1,221 vs `HOUSTNSA` 103.8)',
+      '10 min · Predict + exercise: month over month (+11.8%) vs year over year (+3.4%); a first look at logs',
+      '15 min · Read the fan: students write the plain-English sentence for one month; what not to say',
+      '10 min · Time machine: predict coverage, then reveal Dec 2018 and Dec 2019',
+      '5 min · The latest number is a first draft: August 2026, \$676.2B first print vs \$655.9B now',
+      '15 min · Payoff: "brief your manager" exercise and a three-sentence forecast brief (activity below)'
+    ] }
+  ]}
   objectives={[
     'Run, edit and step through R (or Python) code in the browser.',
     'Identify the three parts of a forecast chart: history, point forecast and prediction intervals.',
-    'Explain why prediction intervals widen with the forecast horizon.',
-    'Use the vocabulary of forecasting: time series, horizon, model, interval, seasonality.'
+    'Explain why prediction intervals widen with the forecast horizon, and what an 80% or 95% band promises.',
+    'Spot trend, seasonality and unusual months in a plot before modelling.',
+    'Check units, frequency and seasonal adjustment before quoting a number, and use year-over-year changes for unadjusted data.',
+    'Write a forecast in plain words with the unit, the month, the band and the data vintage.'
   ]}
   discussion={[
     'Look at the class’s hand-drawn forecasts. What patterns did most people miss, and why do you think the model did not miss them?',
     'Where in your own life do you forecast informally (commute time, grades, prices)? How do you express your uncertainty?',
-    'A manager asks for "the number" for next year’s sales. How would you explain why you are also giving a range?'
+    'A manager asks for "the number" for next year’s sales. How would you explain why you are also giving a range?',
+    'The December 2019 forecast missed badly. Was that the model’s fault? What should an analyst have said in March 2020?',
+    'Why might a company care that the latest month will be revised? Who could be hurt by acting on a first draft?'
   ]}
   misconceptions={[
     '“The forecast line is what will happen.” It is the center of a range of plausible outcomes.',
     '“A wider interval means a worse model.” Honest intervals are often wide; a narrow but wrong interval is worse.',
+    '“An 80% band that misses once means the model failed.” It should miss about 1 time in 5.',
+    '“Sales jumped 12% in December, so business is booming.” In unadjusted data, compare with last December.',
+    '“635,056 means \$635 thousand.” Check the units: it is \$ millions, so \$635 billion, and per month.',
+    '“The last data point is a fact.” It is an advance estimate and will be revised.',
     '“More complex code means a better forecast.” Chapter 3 shows that simple benchmarks are hard to beat.'
   ]}
 >
 
-**Draw-off (15 minutes).** Project the "Draw your forecast" figure. Ask every student to draw their 2023 forecast on their own device and write down their average miss after revealing.
+**Session 1 activity: the draw-off (15 minutes).** Project the "Draw your forecast" figure. Ask every student to draw their 2023 forecast on their own device and write down their average miss after revealing.
 
 1. Collect the numbers in a quick poll and show the distribution next to the model's error.
 2. Ask the students who beat the model what they did. Usually they copied last year's seasonal pattern, which is the seasonal naive method of Chapter 3. Here that strategy genuinely wins: copying 2022 month by month misses 2023 by about \$8 billion a month on average, while the explorable's Holt-Winters model misses by about \$14 billion.
@@ -136,7 +371,27 @@ With the bundled data, the printed output reads `ARIMA(2,0,2)(0,1,1)[12] with dr
 
 *Expected result:* most hand-drawn forecasts miss the December peak and January drop. A flat line at the 2022 average misses by about \$25 billion a month, about twice the model's error, so smooth drawings lose. Students who copied last year's shape can beat the model. That sets up the course: models are useful because they are disciplined about patterns people overlook, and Chapter 3 shows that a simple benchmark is sometimes hard to beat.
 
+**Session 2 activity: the 30-second forecast brief (15 minutes).** Students run the "brief your manager" exercise, then write a three-sentence brief for December 2026 with the month, unit, a comparison, the 80% band and the data vintage. Two volunteers read theirs aloud; the class checks each against the five ingredients.
+
+1. Give pairs 8 minutes to write, 5 minutes to swap and mark each other's brief (one point per ingredient).
+2. Ask: "Which ingredient did most people forget?" (Usually the vintage or the unit.)
+
+*Expected result (R tab):* point forecast about \$738 billion; 80% band \$706–771 billion; 95% band \$690–789 billion; about 6% above December 2025 (\$694 billion). The Python tab gives about \$737 billion and \$704–771 billion. Data end September 2026 (advance estimate). In the time machine, the December 2018 forecast catches 17 of 24 months in its 80% band and 19 in its 95% band; December 2019 catches only 3 and 5.
+
 </InstructorKit>
+
+<div class="refs" id="refs">
+
+**References**
+
+1. Hyndman, R. J., & Athanasopoulos, G. (2021). *Forecasting: Principles and Practice* (3rd ed.), section 5.5, "Distributional forecasts and prediction intervals." [otexts.com/fpp3/prediction-intervals.html](https://otexts.com/fpp3/prediction-intervals.html)
+2. Hyndman, R. J., & Athanasopoulos, G. (2021). *Forecasting: Principles and Practice* (3rd ed.), section 2.4, "Seasonal plots." [otexts.com/fpp3/seasonal-plots.html](https://otexts.com/fpp3/seasonal-plots.html)
+3. Nau, R. "The logarithm transformation." Statistical forecasting notes, Fuqua School of Business, Duke University. [people.duke.edu/~rnau/411log.htm](https://people.duke.edu/~rnau/411log.htm)
+4. U.S. Census Bureau. "About the Advance Monthly Retail Trade Survey." [census.gov/retail/marts/about_the_surveys.html](https://www.census.gov/retail/marts/about_the_surveys.html)
+5. U.S. Census Bureau (2026). Monthly Retail Trade Survey annual revision: "Explanation of revisions" (benchmarking to the 2024 Annual Integrated Economic Survey). [census.gov/retail/mrts/www/benchmark/2026/pdf/Introduction.pdf](https://www.census.gov/retail/mrts/www/benchmark/2026/pdf/Introduction.pdf)
+6. Federal Reserve Bank of St. Louis, ALFRED: vintages of `RSXFSN` (Advance Retail Sales: Retail Trade), vintages of September 20 and October 20, 2026. [alfred.stlouisfed.org/series?seid=RSXFSN](https://alfred.stlouisfed.org/series?seid=RSXFSN)
+
+</div>
 
 <style>{`
   .vocab { display: grid; grid-template-columns: max-content 1fr; gap: .55rem 1.4rem; margin: 1.5rem 0 2rem; }

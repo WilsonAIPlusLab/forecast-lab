@@ -1,23 +1,46 @@
 ---
 layout: ../../layouts/Chapter.astro
 slug: regression
-minutes: 55
+minutes: 130
+sessions:
+  - title: Reading a regression, one coefficient at a time
+  - title: From fit to forecast with dummies, scenarios and honest model choice
+    starts: dummy-variables-teaching-a-regression-the-calendar
 build:
   - A driver model of U.S. car sales, with honest (Newey–West) standard errors, read the way an analyst reads it
   - Side-by-side scenario forecasts ("gas hits $5", "squeeze") with prediction intervals
   - A model-selection table (CV, AIC, BIC, adjusted R², test error) that shows why in-sample fit is not forecast accuracy
-skills: [lm, tslm, coeftest, NeweyWest, season, fourier, "predict(newdata)", CV, VIF, ex-ante vs ex-post]
+  - A one-page "how to read a coefficient" cheat sheet (levels, logs, elasticities, dummies, units), filled with your own estimates
+skills: [lm, tslm, elasticity, semi-elasticity, "exp(b) − 1", coeftest, NeweyWest, season, fourier, "predict(newdata)", CV, VIF, ex-ante vs ex-post]
 ---
 import CodeLab from '../../components/CodeLab.svelte';
 import Callout from '../../components/Callout.astro';
 import KeyIdea from '../../components/KeyIdea.astro';
 import Predict from '../../components/Predict.svelte';
 import Term from '../../components/Term.astro';
+import SessionBreak from '../../components/SessionBreak.astro';
 import InstructorKit from '../../components/InstructorKit.astro';
 import LeastSquares from '../../components/ch04/LeastSquares.svelte';
 import DummyExplorer from '../../components/ch04/DummyExplorer.svelte';
 import ScenarioDashboard from '../../components/ch04/ScenarioDashboard.svelte';
 import OverfitMachine from '../../components/ch04/OverfitMachine.svelte';
+import HoldingFixed from '../../components/ch04/HoldingFixed.svelte';
+import FormSwitcher from '../../components/ch04/FormSwitcher.svelte';
+import LogPercent from '../../components/ch04/LogPercent.svelte';
+import interpR from '../../labs/ch04/interpret.R?raw';
+import interpPy from '../../labs/ch04/interpret.py?raw';
+import exElR from '../../labs/ch04/ex_elasticity.R?raw';
+import exElSolR from '../../labs/ch04/ex_elasticity_solution.R?raw';
+import exElCheckR from '../../labs/ch04/ex_elasticity_check.R?raw';
+import exElPy from '../../labs/ch04/ex_elasticity.py?raw';
+import exElSolPy from '../../labs/ch04/ex_elasticity_solution.py?raw';
+import exElCheckPy from '../../labs/ch04/ex_elasticity_check.py?raw';
+import exDuR from '../../labs/ch04/ex_dummy.R?raw';
+import exDuSolR from '../../labs/ch04/ex_dummy_solution.R?raw';
+import exDuCheckR from '../../labs/ch04/ex_dummy_check.R?raw';
+import exDuPy from '../../labs/ch04/ex_dummy.py?raw';
+import exDuSolPy from '../../labs/ch04/ex_dummy_solution.py?raw';
+import exDuCheckPy from '../../labs/ch04/ex_dummy_check.py?raw';
 import driversR from '../../labs/ch04/drivers.R?raw';
 import driversPy from '../../labs/ch04/drivers.py?raw';
 import seasonalR from '../../labs/ch04/seasonal.R?raw';
@@ -40,6 +63,10 @@ import exCheckPy from '../../labs/ch04/exercise_check.py?raw';
 The gas prices above are monthly averages of the weekly U.S. regular-gasoline price (FRED series GASREGW). In this chapter you will fit a driver model of U.S. car sales, read every number in its output, run scenarios with honest uncertainty, and learn the three traps that make regression forecasts look better on paper than they are in practice.
 
 <KeyIdea>A regression tells you how demand has <em>moved with</em> its drivers. It becomes a forecast only when you supply the drivers' future values, and those are uncertain too.</KeyIdea>
+
+This chapter is taught in two sessions. The first is about **reading**: what each number in a regression output means, in units a manager understands, and how not to misread it. The second is about **using** the model: calendar dummies, honest forecast tests, scenarios and model choice. If you only keep one page from this chapter, keep the [cheat sheet](#how-to-read-a-coefficient).
+
+<SessionBreak n={1} title="Reading a regression, one coefficient at a time" goals={['Fit a line by least squares and read its slope **in units**, after checking what the units are', 'Explain what "holding the other drivers fixed" does, and why a coefficient changes when you add a driver', 'Read level, log, elasticity and dummy coefficients in plain words, using the exact percent `exp(b) − 1` when b is large', 'Report a coefficient with its confidence interval, and explain why R² is not forecast accuracy']} />
 
 ## A line of best fit, by hand
 
@@ -94,20 +121,130 @@ Here is what the output says, in words you could put in a memo (full sample, Jan
 | Chip shortage (2021–22) | −2.43 | Sales ran 2.4 million below what the drivers predict |
 | R² | 0.58 | The model explains 58% of the variation in monthly sales around their average (51% without the dummy) |
 
-<Callout type="pitfall" title="&quot;Holding fixed&quot; is not &quot;causes&quot;">
-Each slope is a <em>partial association</em>: the gap in sales between two months that differ in one driver but match on the others. That is useful for forecasting and scenarios. It is not proof that gas prices <em>cause</em> the gap: 2008 had expensive gas <strong>and</strong> a financial crisis, and some of the crisis may be loading onto the gas coefficient. The gas price here is also nominal (not adjusted for inflation), so \$4 meant more in 2008 than in 2026.
+<Callout type="empirical" title="Check the units before you read a single coefficient">
+Before you interpret anything, write down the units of every variable. Here:
+
+- **Sales (TOTALSA)** are in **millions of units at a seasonally adjusted annual rate** (SAAR). A value of 16.0 means "if every month were like this one, the year would sell 16.0 million vehicles". So −0.48 means 480,000 fewer vehicles *per year at an annual rate*, about 40,000 fewer in a single month. Misreading SAAR as a monthly count makes every effect look 12 times too big.
+- **Gas** is in **dollars per gallon**, nominal (not adjusted for inflation). The **unemployment** and **mortgage** rates are in **percent**, so "one unit" is one percentage point.
+- **Sanity-check the size.** 480,000 cars is 3% of a 16-million market for a \$1 swing in gas. That is plausible. A coefficient implying a 30% swing would mean a units mistake or a broken model.
 </Callout>
 
-### Logs: from units to percentages
+### Rescaling units: what changes and what doesn't
 
-Managers think in percentages. Logs translate coefficients into them. The last step of the lab refits the model with `log(veh)`:
+Analysts rescale variables all the time: sales in thousands instead of millions, prices in cents instead of dollars, a rate as 0.041 instead of 4.1. Rescaling changes the coefficient by a known factor and changes nothing else.
+
+| You rescale | The coefficient | Its t-statistic, p-value and R² |
+|---|---|---|
+| y × 1,000 (millions → thousands) | × 1,000 | unchanged |
+| x × 100 (dollars → cents) | ÷ 100 | unchanged |
+| x ÷ 100 (4.1% → 0.041) | × 100 | unchanged |
+| y in logs, then y × 1,000 | unchanged (only the intercept moves) | unchanged |
+
+The last row is why elasticities are popular: they are **unit-free**. Measure sales in cars or in millions, in dollars or in euros, and a log–log coefficient stays the same.
+
+<Predict client:load kind="check"
+  question="You re-measure sales in **thousands** of cars (instead of millions) and gas in **cents** per gallon (instead of dollars). The gas coefficient was −0.48 with a t-statistic of −6.1. What do you get now?"
+  options={['−0.48 and t = −6.1', '−4.8 and t = −6.1', '−480 and t = −6,100', '−4.8 and t = −0.61']}
+  answer={1}
+  explain="Sales × 1,000 multiplies the coefficient by 1,000; gas × 100 divides it by 100. Net: × 10, so **−4.8 thousand cars per cent**, which is the same 480,000 cars per dollar. The standard error is rescaled by exactly the same factor, so the **t-statistic stays at −6.1** and R² does not move. The lab below confirms it. Rescaling is cosmetic: pick the units your audience thinks in."
+/>
+
+<Callout type="empirical" title="Percent or percentage points? Say which">
+The unemployment coefficient, −0.90, is per **percentage point**. If unemployment goes from 4.1% to 5.1%, that is **+1 percentage point**, and the model expects about 900,000 fewer cars a year. It is *also* a 24% increase in the unemployment rate (1 ÷ 4.1), which is a completely different number. In a memo, write "a one-point rise in the unemployment rate", never "a 1% rise", when you mean points. The same goes for mortgage rates: 7.3% to 8.3% is one point. ([Chapter 1](/chapters/time-series-data/#differences-change-in-the-original-units) has the general rule.)
+</Callout>
+
+### Holding the other drivers fixed
+
+The table above says "holding jobs and rates fixed". That phrase is the most important and most misunderstood idea in regression. A multiple-regression slope compares months that **match on the other drivers** and differ only in this one. Change the list of other drivers, and you change the comparison, so the slope changes too.
+
+<Predict client:load
+  question="Regress car sales on the 30-year mortgage rate **alone**, 1993 to 2026. Which way does the line slope?"
+  options={['Clearly down: dearer loans, fewer cars', 'Slightly **up**', 'Exactly flat']}
+  answer={1}
+  explain="Slightly up: **+0.07**, the 'wrong' sign. Mortgage rates were high in the 1990s, when jobs were plentiful and sales strong, and low after 2008, when unemployment was high and sales weak. Alone, the mortgage rate picks up the job market's effect. Tick **Unemployment** in the chart below to compare months with the same unemployment rate, and the slope turns negative."
+/>
+
+<div class="breakout">
+<HoldingFixed client:load />
+</div>
+
+Add the drivers one at a time and the mortgage-rate slope keeps moving (all numbers in millions of cars per percentage point, from the lab below):
+
+| Drivers in the model | Mortgage-rate slope | Read it as |
+|---|---|---|
+| Mortgage rate alone | +0.067 | Months with higher rates had slightly *more* sales |
+| + unemployment | −0.203 | Among months with the same unemployment, 1 point higher rates: 203,000 fewer cars |
+| + unemployment + gas | −0.398 | … and the same gas price: 398,000 fewer |
+| + chip dummy (the full model) | −0.480 | … and outside or inside the chip shortage alike: 480,000 fewer |
+
+Why does it move? The mortgage rate is **correlated** with the other drivers (−0.31 with unemployment, −0.51 with gas). When a correlated driver is left out, its effect loads onto the drivers that are in. This is <Term def="The bias in a coefficient that arises when a left-out variable both affects y and is correlated with an included driver. The included driver gets credit (or blame) for the omitted one.">omitted-variable bias</Term>, the same trap as the housing-starts Predict above. Two practical rules:
+
+1. Always say *what* you held fixed: "holding unemployment and gas prices fixed", not just "holding other things fixed".
+2. A coefficient that swings a lot as you add sensible drivers is fragile. Report that, rather than the one specification that tells the best story.
+
+### Standard errors you can defend
+
+`summary()` reports a <Term def="An estimate of how much a coefficient would vary across repeated samples. Small relative to the coefficient means it is precisely estimated.">standard error</Term> for each slope, and the <Term def="The coefficient divided by its standard error. Roughly, |t| above 2 means the coefficient is statistically different from zero at the 5% level.">t-statistic</Term> = estimate ÷ standard error. Those formulas assume each month's error is unrelated to the next. The residual chart in the lab shows they are not: when the model under-predicts one month, it keeps under-predicting for months. With autocorrelated errors the usual standard errors are too small, and you will "find" significance that isn't there.
+
+The fix used across economics is **Newey–West** (heteroskedasticity- and autocorrelation-consistent, HAC) standard errors:<sup>[4](#refs)</sup> `coeftest(m1, vcov. = NeweyWest(m1))`. In our model they are two to five times larger than the textbook ones. Gas, unemployment and mortgage rates remain clearly significant. The chip dummy's p-value rises to about 0.08: 24 consecutive months are really one episode, not 24 independent pieces of evidence. (That uses R's automatic lag choice. The Python tab uses a fixed 12-month window and finds the dummy significant, which tells you the evidence for it is fragile.)
+
+**Read a confidence interval in words.** A 95% confidence interval is roughly the estimate ± 2 standard errors: the range of effects the data are consistent with. With Newey–West standard errors:
+
+| Driver | Estimate | 95% interval (Newey–West) | In words |
+|---|---|---|---|
+| Gas price | −0.48 | −0.81 to −0.16 | Each \$1 a gallon goes with between about 160,000 and 810,000 fewer cars a year |
+| Unemployment | −0.90 | −1.11 to −0.70 | Each extra point goes with 700,000 to 1.1 million fewer cars a year |
+| Mortgage rate | −0.48 | −0.68 to −0.28 | Each extra point goes with 280,000 to 680,000 fewer cars a year |
+| Chip shortage | −2.43 | −5.12 to +0.26 | Anything from a 5-million drop to a small rise: zero is inside the interval |
+
+Three habits: (1) quote the **range**, not just the point estimate, when the decision depends on the size; (2) "significant" means "distinguishable from zero", not "large" or "important"; (3) "not significant" is not "no effect": the chip interval also includes very large losses. It means *we cannot tell*.
+
+<Predict client:load kind="check"
+  question="A colleague reads the chip-dummy row (estimate −2.43, Newey–West 95% interval −5.12 to +0.26) and writes: *'The chip shortage did not affect car sales.'* What is the best correction?"
+  options={['Correct: the p-value is above 0.05', 'The data are consistent with anything from a 5-million drop to a small rise; we cannot pin the effect down, which is not the same as no effect', 'The effect was exactly −2.43 million']}
+  answer={1}
+  explain="An interval that contains zero says the data cannot rule out zero. It also cannot rule out a 5-million drop. With 24 back-to-back months of one episode, there is just not much independent evidence. Write: *'Sales ran about 2.4 million below what the drivers predict during the shortage, but the estimate is imprecise (95% interval −5.1 to +0.3).'*"
+/>
+
+### R² in words, and what it is not
+
+The model's R² is 0.58. In words: *58% of the month-to-month variation in sales around their 1993–2026 average lines up with the four drivers.* Two numbers next to it are often more useful:
+
+- The **residual standard error**, 1.28 million cars, is the model's typical in-sample miss **in the units of sales**. A manager understands "typically off by about 1.3 million cars a year (annual rate)" far better than "R² = 0.58".
+- **R² is not forecast accuracy.** It is computed on the data used to fit the model. Later in this chapter the same model loses to the naive benchmark out of sample.
+
+<Callout type="empirical" title="Never compare R² across a level model and a log model">
+The level model has R² = 0.583 and the log–level model 0.577. That does **not** make the level model better: one explains variation in sales, the other variation in *log* sales, and those are different totals. Compare models with different left-hand sides by their errors in the original units (millions of cars), out of sample.
+</Callout>
+
+<Callout type="intuition" title="Why a great fit is not a great forecast">
+R² measures how well the line fits the data it was <em>estimated on</em>. A forecast is judged on data the model has never seen. You will see below that adding variables never lowers R², often while making forecasts worse. Treat R² as a description of the past, never as a forecast score.
+</Callout>
+
+## Logs: reading coefficients as percentages
+
+Managers think in percentages. Logs translate coefficients into them. Taking the log of a variable (natural log, `log()` in R, `np.log()` in Python) turns *proportional* changes into *equal* steps: a rise from 10 to 11 and from 20 to 22 are both +10%, and both add about 0.095 to the log. [Chapter 1](/chapters/time-series-data/#transformations-every-analyst-uses) covers the transformation itself; here we read what it does to a coefficient.
+
+<Callout type="empirical" title="Why analysts so often model log sales">
+Three practical reasons, all visible in this chapter's data. (1) **Effects scale with the market.** A \$1 rise in gas is unlikely to cost the same 480,000 cars in a 9-million market as in a 17-million market; a percent effect scales with the market automatically. (2) **Seasonal swings grow with the level.** Retail sales in December 2012 ran \$47 billion above November; in December 2025 they ran \$74 billion above. In dollars the spike grew by more than half; in percent it barely moved (+13% and +12%). So seasonal dummies in a log model stay stable (see [additive vs multiplicative](/chapters/decomposition/#additive-or-multiplicative) in Chapter 2). (3) **Coefficients become unit-free** percentages and elasticities you can compare across products and countries. You need strictly positive data to take logs.<sup>[9](#refs)</sup>
+</Callout>
+
+There are four combinations of logs and levels. Each gives the slope $b$ a different reading:<sup>[8, 10](#refs)</sup>
 
 | Model | Form | Read the slope $b$ as | Our estimate |
 |---|---|---|---|
-| level–level | $y = a + b\,x$ | $y$ changes by $b$ units when $x$ rises by 1 unit | gas: −0.48 mn cars per \$1 |
-| log–log | $\log y = a + b \log x$ | **elasticity**: $y$ changes by $b$% when $x$ rises by 1% | gas: −0.067, so 10% pricier gas goes with 0.67% fewer sales |
+| level–level | $y = a + b\,x$ | $y$ changes by $b$ units when $x$ rises by 1 unit | gas: −0.48, so −480,000 cars per \$1 |
 | log–level | $\log y = a + b\,x$ | **semi-elasticity**: $y$ changes by about $100b$% when $x$ rises by 1 unit | unemployment: −0.063, so about 6% fewer sales per point |
-| level–log | $y = a + b \log x$ | $y$ changes by $b/100$ units when $x$ rises by 1% | (not used here) |
+| level–log | $y = a + b \log x$ | $y$ changes by $b/100$ units when $x$ rises by 1% | gas: −1.05, so −10,500 cars per 1% rise in gas |
+| log–log | $\log y = a + b \log x$ | **elasticity**: $y$ changes by $b$% when $x$ rises by 1% | gas: −0.067, so 10% pricier gas goes with 0.67% fewer sales |
+
+The explorable fits all four on the same data. Switch the forms and watch the coefficient's units and meaning change. Then drag the gas price and compare the four answers to the *same* question (the explorable starts from today's \$4.31 a gallon).
+
+<div class="breakout">
+<FormSwitcher client:load />
+</div>
+
+The forms disagree more than you might expect. For gas going from \$4 to \$5, the two forms with gas in dollars say about −0.48 million cars; the two with gas in logs say about −0.23 million. A log of gas assumes each extra dollar matters *less* when gas is already expensive (\$2 → \$3 is +50%, \$4 → \$5 only +25%). The data from 1993–2026 cannot clearly tell these stories apart, so an honest memo reports the range.
 
 <Predict client:load kind="check"
   question="In the log–log model the gas coefficient is −0.067. Gas rises from \$4.00 to \$5.00. By roughly how much does the model expect sales to change?"
@@ -116,19 +253,88 @@ Managers think in percentages. Logs translate coefficients into them. The last s
   explain="\$4 to \$5 is a 25% increase. An elasticity of −0.067 means −0.067% per 1%, so about 25 × −0.067 ≈ **−1.7%**. (Computed exactly, 1.25 raised to the power −0.067 is about 0.985: a fall of about 1.5%.) On 16 million cars that is roughly 240,000 to 270,000 cars a year, noticeably less than the level model's 480,000 per dollar. Two reasonable functional forms give different answers: a reason to report a range, not a single number."
 />
 
-### Standard errors you can defend
+### Exact versus approximate percent
 
-`summary()` reports a <Term def="An estimate of how much a coefficient would vary across repeated samples. Small relative to the coefficient means it is precisely estimated.">standard error</Term> for each slope, and the <Term def="The coefficient divided by its standard error. Roughly, |t| above 2 means the coefficient is statistically different from zero at the 5% level.">t-statistic</Term> = estimate ÷ standard error. Those formulas assume each month's error is unrelated to the next. The residual chart in the lab shows they are not: when the model under-predicts one month, it keeps under-predicting for months. With autocorrelated errors the usual standard errors are too small, and you will "find" significance that isn't there.
+"Multiply a log coefficient by 100 to get a percent" is a shortcut. In a log model, a coefficient $b$ multiplies sales by $e^b$, so the exact change is $100 \times (e^b - 1)$ percent.<sup>[8](#refs)</sup> For small $b$ the two agree. For large ones they do not: the April 2020 pulse dummy in the retail model is −0.269, which the shortcut reads as −26.9% but is really **−23.6%**; December's +0.221 reads as +22.1% but is really **+24.7%**.
 
-The fix used across economics is **Newey–West** (heteroskedasticity- and autocorrelation-consistent, HAC) standard errors:<sup>[4](#refs)</sup> `coeftest(m1, vcov. = NeweyWest(m1))`. In our model they are two to five times larger than the textbook ones. Gas, unemployment and mortgage rates remain clearly significant. The chip dummy's p-value rises to about 0.08: 24 consecutive months are really one episode, not 24 independent pieces of evidence. (That uses R's automatic lag choice. The Python tab uses a fixed 12-month window and finds the dummy significant, which tells you the evidence for it is fragile.)
+<div class="breakout">
+<LogPercent client:load />
+</div>
 
-<Callout type="intuition" title="Why a great fit is not a great forecast">
-R² measures how well the line fits the data it was <em>estimated on</em>. A forecast is judged on data the model has never seen. You will see below that adding variables never lowers R², often while making forecasts worse. Treat R² as a description of the past, never as a forecast score.
+<Callout type="math" title="Where e^b − 1 comes from">
+In $\log y = a + b\,x$, raising $x$ by $\Delta x$ raises $\log y$ by $b\,\Delta x$, so $y$ is multiplied by $e^{b\Delta x}$: the exact percent change is $100(e^{b\Delta x} - 1)$. Because $e^{z} \approx 1 + z$ for small $z$, this is about $100\,b\,\Delta x$. In a log–log model, raising $x$ by a factor $r$ (say $r = 1.25$ for +25%) multiplies $y$ by $r^{b}$, so the exact change is $100(r^{b} - 1)$, about $b \times$ (percent change in $x$) when the change is small. For a level–log model, a 1% rise in $x$ adds $b \log(1.01) \approx b/100$ to $y$.
+
+These percent readings describe the typical (median) level of $y$. Turning a whole forecast of log sales back into dollars has one more wrinkle, the difference between the median and the mean, which [Chapter 10](/chapters/uncertainty/) covers.
 </Callout>
+
+The lab below puts every reading from this session in one place, with real numbers: the four forms side by side, exact versus approximate percent, rescaling, the mortgage-rate slope as drivers are added, and Newey–West confidence intervals.
+
+<div class="breakout">
+<CodeLab client:load id="ch04-interpret" title="Read every coefficient: forms, percents, units, intervals" r={interpR} py={interpPy}
+  packages={['lmtest', 'sandwich']} pyPackages={['statsmodels']}
+  goal="Translate the gas coefficient from four functional forms into one comparable answer, and check how rescaling, added drivers and honest standard errors change what you can say." />
+</div>
+
+## Prediction is not causation
+
+A forecasting model needs a **stable association**: if gas prices and sales have moved together in a reliable way, knowing gas helps forecast sales, whatever the reason. A decision about a lever you control ("should we cut our price?", "should the Fed raise rates?") needs a **causal effect**: what happens to sales *because* you change the lever. Regression on historical data delivers the first. It delivers the second only under strong assumptions.
+
+<Callout type="pitfall" title="&quot;Holding fixed&quot; is not &quot;causes&quot;">
+Each slope is a <em>partial association</em>: the gap in sales between two months that differ in one driver but match on the others. That is useful for forecasting and scenarios. It is not proof that gas prices <em>cause</em> the gap: 2008 had expensive gas <strong>and</strong> a financial crisis, and some of the crisis may be loading onto the gas coefficient. The gas price here is also nominal (not adjusted for inflation), so \$4 meant more in 2008 than in 2026.
+</Callout>
+
+Three ways an association misleads, all from this chapter:
+
+- **A left-out driver.** Leave unemployment out and the mortgage rate appears to *raise* car sales (the explorable above).
+- **Reverse causation.** Housing starts and mortgage rates moved *together* in 2007–2012 because the housing bust pushed rates down, not because low rates killed construction.
+- **One episode, many months.** The chip dummy rests on a single two-year event; its estimate mixes the shortage with everything else that happened in 2021–22.
+
+For forecasting, that is fine *as long as the relationships keep holding*. For scenarios, treat each coefficient as "what usually came with" a change in a driver, and say so.
+
+## How to read a coefficient
+
+A one-page reference for the whole course, laid out like the standard textbook summary of functional forms.<sup>[8](#refs)</sup> Every example comes from this chapter's models; other chapters link here.
+
+| Situation | Read the coefficient $b$ as | Example from this chapter | Don't say |
+|---|---|---|---|
+| **Level–level**: $y = a + bx$ | A 1-unit rise in $x$ goes with $b$ units of $y$, holding the other drivers fixed | Gas −0.48: each \$1 a gallon goes with 480,000 fewer cars a year (SAAR) | "Gas prices cause…" |
+| **Log–level**: $\log y = a + bx$ | A 1-unit rise in $x$ goes with about $100b$% change in $y$; exactly $100(e^b - 1)$% | Unemployment −0.063: each extra point, about 6.1% fewer cars | "−0.063 million cars" |
+| **Level–log**: $y = a + b\log x$ | A 1% rise in $x$ goes with $b/100$ units of $y$ | Gas −1.05: each 1% rise in gas, about 10,500 fewer cars | "−1.05 per 1%" |
+| **Log–log**: $\log y = a + b\log x$ | **Elasticity**: a 1% rise in $x$ goes with $b$% change in $y$ | Gas −0.067: 10% pricier gas, 0.67% fewer cars | "−0.067 cars per dollar" |
+| **Dummy**, level $y$ | When the dummy is 1, $y$ is $b$ units higher than in the **base** group | Chip −2.43: 2.4 million fewer cars a year than the drivers predict | "The shortage cut sales by exactly 2.43 million" |
+| **Dummy**, log $y$ | $100(e^b - 1)$% above the base category | December +0.221: 24.7% above **January** | "22% above November" |
+| **Two non-base categories** | Subtract their coefficients first, then convert | December vs November: $e^{0.221 - 0.113} - 1$ = 11.4% | Comparing either one to the other's base |
+| **Trend** in a log model | About $100b$% growth per period | Retail trend 0.0039: about 0.4% a month, 5% a year | "0.0039 dollars a month" |
+| **Rescaled units** | $y \times c$: $b \times c$. $x \times c$: $b \div c$. t, p, R² unchanged | Sales in thousands, gas in cents: −4.8 | "The effect got 10 times bigger" |
+| **Rates in percent** | Per **percentage point** | Unemployment 4.1% → 5.1% is +1 point (a 24% rise) | "A 1% rise in unemployment" |
+| **Confidence interval** | The range of effects the data are consistent with | Gas, Newey–West: −0.81 to −0.16 | "Not significant, so no effect" |
+| **R²** | Share of *in-sample* variation explained | 0.58 | "Forecasts 58% accurately" |
+
+Two rules sit under every row: **name what you held fixed**, and **say association, not cause**, unless you have a design that justifies more.
+
+### Practice: estimate an elasticity
+
+Your manager asks: *"If gas prices rise 20%, by what percent will our sales change, holding jobs and interest rates fixed?"* Fill in the three blanks (`______`) and press **Run & check**.
+
+<div class="breakout">
+<CodeLab client:load id="ch04-ex-elasticity" exercise title="Exercise: estimate and read a gas-price elasticity" r={exElR} solution={exElSolR} check={exElCheckR}
+  py={exElPy} solutionPy={exElSolPy} checkPy={exElCheckPy} pyPackages={['statsmodels']}
+  goal="Fit a log–log model for gas, read the elasticity, and convert a 20% rise in gas into a percent change in sales, approximately and exactly."
+  hints={['For an elasticity, both sides must be in logs: the first blank is the gas price wrapped in the log function, written exactly as in the formula on the left.', 'The rule of thumb multiplies the elasticity by the percent change in gas, written as a plain number of percent (not 0.20).', 'For the exact version, a 20% rise means the new price is 1.20 times the old one.']} />
+</div>
+
+<SessionBreak n={2} title="From fit to forecast with dummies, scenarios and honest model choice" goals={['Read seasonal and event dummies as shifts from a **base category**, in exact percent', 'Tell an **ex-ante** forecast from an **ex-post** one, and test a driver model against a benchmark', 'Turn coefficients into named **scenarios** with honest bands', 'Choose among models with AIC, BIC, CV and a time-ordered test, not R²']} />
 
 ## Dummy variables: teaching a regression the calendar
 
 Many business series are reported **not seasonally adjusted** (NSA): every December, retail sales jump. A regression can learn the calendar with **seasonal dummies**: one 0/1 variable per month except a baseline month. Each dummy's coefficient shifts the intercept for its month. Add a **trend** (1, 2, 3, … counting months) and a one-month **pulse dummy** for April 2020, when stores closed, and you have a surprisingly strong forecasting model.
+
+<Predict client:load
+  question="Retail sales are modeled in **logs** with a trend and 11 monthly dummies, January as the base month (fitted on 2012–2023). December's coefficient is **0.221**. How much higher are December sales than January's, holding the trend fixed?"
+  options={['0.221%', '22.1%', '24.7%', '221%']}
+  answer={2}
+  explain="In a log model a dummy multiplies sales by $e^b$: $e^{0.221} = 1.247$, so December runs **24.7%** above January. The shortcut 100 × 0.221 = 22.1% understates it by 2.6 points, because 0.221 is a big log coefficient. And it is 24.7% above **January**, the base month, not above November."
+/>
 
 <div class="breakout">
 <DummyExplorer client:load />
@@ -149,6 +355,18 @@ With an intercept in the model, use <strong>11</strong> monthly dummies, not 12.
 </div>
 
 The result is worth a pause. December runs about **25%** above January, and February is about 2% *below* it (fewer shopping days). April 2020 came in about 24% below what trend and season predict. On the 2024-onward test period the regression's MAE is about \$13.0 billion against \$27.0 billion for seasonal naive (MASE 0.56 against 1.17): calendar terms alone cut the benchmark's error by more than half. The R tab also compares **Fourier terms**: pairs of sine and cosine waves (`fourier(train, K)`) that describe the seasonal shape with fewer coefficients. Retail's December spike is so sharp that it needs the full set (K = 6), which is identical to the 11 dummies. For smooth seasonal patterns, or weekly data with 52 "seasons", a small K saves many coefficients.
+
+### Reading a dummy: always relative to the base
+
+A dummy's coefficient is never "the effect of December". It is **the gap between December and the base category**, holding the other terms fixed. In the retail model (log sales, January as base):
+
+- **December vs January:** $b_{Dec}$ = 0.221, so $100(e^{0.221} - 1)$ = **+24.7%**.
+- **December vs November:** both are measured from January, so subtract first: $e^{0.221 - 0.113} - 1$ = **+11.4%**. Comparing either coefficient directly with the other's month is the most common dummy mistake.
+- **An event dummy** works the same way, with "all other months" as the base. A **pulse** (1 for one month, like April 2020: $e^{-0.269} - 1$ = −23.6%) absorbs a one-off shock. A **level shift** (1 for a whole stretch, like the 24-month chip dummy) moves the intercept for the whole episode.
+
+<Callout type="empirical" title="Pick the base category on purpose">
+Changing the base month changes every seasonal coefficient, but **not** the fitted values, the forecasts or R²: the model just reports the same pattern from a different reference point. So choose the base your audience thinks in. A retailer may want "% above an ordinary month" (pick a typical month such as September as base); a planner may want "% above January". In R, `relevel()` on a factor picks the base; in Python, `C(month, Treatment(9))` makes September the base. Then say the base in every sentence: "December runs 25% above January", never "December is +0.22".
+</Callout>
 
 <Callout type="tip" title="Make it yours">
 In the seasonal lab, change `"RSXFSN"` to `"HOUSTNSA"` (housing starts, NSA). Then look at the Breusch–Godfrey test at the end: its tiny p-value says the residuals come in long runs. A straight trend cannot follow a housing cycle. [Chapter 8](/chapters/dynamic-regression/) handles this properly with regression with ARIMA errors.
@@ -277,7 +495,9 @@ Leave-one-out CV for OLS needs no refitting: $\text{CV} = \frac{1}{T}\sum_t \lef
 
 ## Your turn
 
-Your boss asks: *"What if mortgage rates fall to 5%?"* Fill in the two blanks (`______`) and press **Run & check**.
+Two short memos for your boss, one per skill from this session: a scenario from the car-sales model, and a seasonal dummy read in exact percent.
+
+**1. A scenario.** Your boss asks: *"What if mortgage rates fall to 5%?"* Fill in the two blanks (`______`) and press **Run & check**.
 
 <div class="breakout">
 <CodeLab client:load id="ch04-ex1" exercise title="Exercise: a mortgage-rate scenario" r={exR} solution={exSolR} check={exCheckR}
@@ -286,49 +506,97 @@ Your boss asks: *"What if mortgage rates fall to 5%?"* Fill in the two blanks (`
   hints={['The first blank is the new mortgage rate: a number.', 'The second blank is the name of the data frame that holds the low-rate scenario. The gap is low-rate minus today.']} />
 </div>
 
+**2. A seasonal dummy.** The store-planning team asks: *"How much bigger is December than January, in percent? And than November?"* The model is the retail regression from this session (log sales, trend, monthly dummies, April 2020 pulse, fitted on 2012–2023). Fill in the two blanks.
+
+<div class="breakout">
+<CodeLab client:load id="ch04-ex-dummy" exercise title="Exercise: read a seasonal dummy in exact percent" r={exDuR} solution={exDuSolR} check={exDuCheckR}
+  py={exDuPy} solutionPy={exDuSolPy} checkPy={exDuCheckPy} packages={['forecast']} pyPackages={['statsmodels']}
+  goal="Convert December's log-dummy coefficient into an exact percent gap from the base month (January), then compare December with November."
+  hints={['Look at the printed coefficients: months are numbered from the base, so December is the 12th month. In R the name is season12; in Python it is C(month)[T.12]. Put it in quotes.', 'Both months are measured from January, so the December-vs-November gap in logs is December minus November. The second blank is November\'s coefficient, picked out of b the same way.']} />
+</div>
+
 ## Chapter checklist
 
-- OLS draws the line that minimizes the **sum of squared residuals**. Read each slope as a change in $y$ per unit of $x$, **holding the other drivers fixed**: an association, not proof of cause.
-- Use **logs** to get elasticities (log–log) and semi-elasticities (log–level).
-- In time series, residuals are usually autocorrelated: report **Newey–West** standard errors with `coeftest()`.
-- **Dummies** capture seasons (k − 1 of them) and one-off events (pulse or level-shift dummies); `tslm()` builds `trend` and `season` for you; **Fourier** terms are a compact alternative.
+- OLS draws the line that minimizes the **sum of squared residuals**. Read each slope as a change in $y$ per unit of $x$, **holding the other drivers fixed**, and name which drivers those are: an association, not proof of cause.
+- **Check units first** (SAAR, millions, dollars, percent). Rescaling $y$ or $x$ rescales $b$ but leaves t, p and R² unchanged; rates in percent move in **percentage points**.
+- A coefficient changes when you add a **correlated driver** (the mortgage rate goes from +0.07 alone to −0.48 in the full model): that is omitted-variable bias at work.
+- **Logs** give percentages: log–level, about $100b$% per unit; level–log, $b/100$ units per 1%; log–log, an **elasticity**. For |b| above about 0.1, use the exact $100(e^b - 1)$%. Never compare R² across log and level models.
+- **Dummies** are shifts from a **base category**: compare two other categories by subtracting their coefficients. Use k − 1 of them; `tslm()` builds `trend` and `season`; **Fourier** terms are a compact alternative.
+- Read a **confidence interval** as the range of effects the data allow; use **Newey–West** standard errors when residuals are autocorrelated. "Not significant" is not "no effect".
 - A driver model needs **future drivers**. Judge it by **ex-ante** accuracy against a benchmark; use it for **scenarios** with intervals, and remember those intervals leave out driver uncertainty.
 - Choose models with **AIC, BIC, CV or a time-ordered test**, not R². **Multicollinearity** (VIF above about 10) muddles coefficients but barely changes predictions.
 
 Every outcome in this chapter was a quantity on a smooth scale: millions of cars, billions of dollars. Many business forecasts are not. *Will this customer buy?* and *will there be a recession next year?* are yes-or-no questions, and the useful answer is a probability between 0 and 1. [Chapter 5](/chapters/nonlinear-regression/) keeps the regression line you built here but puts it inside an S-shaped curve: logistic regression, applied first to bank clients and then to the whole economy.
 
 <InstructorKit
-  minutes={80}
+  minutes={150}
   data={['TOTALSA', 'GASREGW', 'UNRATE', 'MORTGAGE30US', 'GS10', 'HOUST', 'HOUSTNSA', 'RSXFSN']}
+  sessions={[
+    { title: 'Reading a regression, one coefficient at a time', plan: [
+      '5 min · Hook: gas went from $2.81 to $4.48 in five months. Ask the room how many fewer cars that will cost, and write the guesses on the board.',
+      '10 min · Least squares by hand (LeastSquares explorable) and the 1993–2026 sign-flip Predict.',
+      '15 min · Run the drivers lab together. Read the coefficient table aloud in words; do the units check (SAAR, percentage points) and the rescaling Predict.',
+      '10 min · Mortgage-rate Predict, then HoldingFixed: tick Unemployment and watch the slope go from +0.07 to −0.20. Discuss omitted-variable bias.',
+      '10 min · Newey–West and confidence intervals in words; the chip-dummy Predict; R² against the 1.28-million typical miss.',
+      '15 min · Logs: the four-form table, FormSwitcher ($4 → $5 under each form), LogPercent (December and April 2020), and the cheat sheet.',
+      '10 min · Activity 1: coefficient translator (below). Assign the elasticity exercise as homework.'
+    ] },
+    { title: 'From fit to forecast with dummies, scenarios and honest model choice', plan: [
+      '5 min · Warm-up Predict: a December coefficient of 0.221 means +24.7% above January (not 22.1%, and not above November).',
+      '15 min · DummyExplorer and the seasonal lab; reading dummies relative to the base; the dummy trap.',
+      '10 min · Ex-ante vs ex-post: Predict first, then run the lab and read the error table.',
+      '10 min · ScenarioDashboard: gas hits $5, the squeeze; why the light band is twice as wide.',
+      '10 min · OverfitMachine and the model-selection table: in-sample criteria against the 2024–26 test.',
+      '25 min · Activity 2: scenario war-room (below). Both "Your turn" exercises as homework.'
+    ] }
+  ]}
   objectives={[
-    'Explain OLS as minimizing the sum of squared residuals, and interpret level, log–log and log–level coefficients in business language.',
-    'Report and interpret R², standard errors and t-statistics, and replace them with Newey–West standard errors when residuals are autocorrelated (`coeftest`, `NeweyWest`).',
-    'Build seasonal, trend, pulse and event dummies (and Fourier terms) with `tslm()`, avoiding the dummy variable trap.',
-    'Distinguish **ex-ante** from **ex-post** forecasts and evaluate a driver model against a benchmark.',
-    'Produce scenario forecasts with `forecast(fit, newdata = …)` and explain why their intervals understate total uncertainty.',
+    'Explain OLS as minimizing the sum of squared residuals, and read any slope in words, with units and with the drivers held fixed named.',
+    'Interpret level–level, log–level, level–log and log–log coefficients (semi-elasticity, elasticity), converting large log coefficients with `exp(b) − 1`.',
+    'Predict what rescaling units does to a coefficient, its t-statistic and R², and distinguish percent from percentage points.',
+    'Explain why a coefficient changes when a correlated driver is added (omitted-variable bias), and why association is not causation.',
+    'Report coefficients with Newey–West standard errors and confidence intervals read in words (`coeftest`, `coefci`, `NeweyWest`), and explain why R² is not forecast accuracy.',
+    'Build and read seasonal, trend, pulse and event dummies (and Fourier terms) with `tslm()`, relative to a base category, avoiding the dummy variable trap.',
+    'Distinguish **ex-ante** from **ex-post** forecasts, evaluate a driver model against a benchmark, and produce scenario forecasts with `forecast(fit, newdata = …)`.',
     'Select models with adjusted R², AIC/AICc, BIC, `CV()` and a time-ordered test set; diagnose multicollinearity with VIF.'
   ]}
   discussion={[
-    'Over 1993–2026, housing starts and mortgage rates are **positively** related. Does that mean higher rates boost construction? What omitted variable could explain it?',
+    'Alone, the mortgage rate has a slightly **positive** slope on car sales; with unemployment held fixed it is negative. Which number would you put in a memo, and how would you explain the difference to a manager?',
+    'Over 1993–2026, housing starts and mortgage rates are **positively** related. Does that mean higher rates boost construction? What omitted variable, or reverse causation, could explain it?',
+    'The level model says $4 → $5 gas costs about 480,000 cars a year; the log–log model says about 240,000. Both fit about equally well. What would you report?',
     'The ex-post forecast lost to the ex-ante one in 2024–26. Is the regression useless? What is it good for, if not point forecasts?',
     'Your CFO wants "the" forecast for next year. How would you present a baseline and two scenarios on one slide, and what would you say about the bands?'
   ]}
   misconceptions={[
-    '“A high R² means a good forecasting model.” In-sample fit never falls when you add terms; only out-of-sample error measures forecasting skill.',
+    '“A log coefficient of 0.22 means +22%.” It means 100 × (e^0.22 − 1) = +24.7%; the shortcut is only safe for |b| below about 0.1.',
+    '“The biggest coefficient is the most important driver.” Coefficients carry units: rescale gas to cents and its coefficient shrinks 100-fold without anything real changing.',
+    '“A 1% rise in unemployment.” Rates move in **percentage points**; 4.1% → 5.1% is one point, a 24% rise.',
+    '“December’s dummy is December’s effect.” It is December’s gap from the base month; compare two other months by subtracting their coefficients.',
+    '“Not significant means no effect.” An interval that contains zero can also contain large effects; it means we cannot tell.',
+    '“A high R² means a good forecasting model.” In-sample fit never falls when you add terms; only out-of-sample error measures forecasting skill. And R² cannot be compared across log and level models.',
     '“A significant coefficient proves causation.” Regression measures partial association; omitted drivers (like the 2008 crisis) can load onto included ones.',
     '“Multicollinearity ruins a forecasting model.” It destabilizes individual coefficients, but fitted values and forecasts barely change if the drivers keep moving together.',
     '“Prediction intervals from predict() cover all the uncertainty.” They assume the driver path is known and the errors are independent.'
   ]}
 >
 
-**Scenario war-room (30 minutes).** Teams of three play the planning team of a carmaker.
+**Activity 1 (Session 1): coefficient translator (10 minutes).** Pairs get four "coefficient cards" and write one memo sentence for each, with units, the drivers held fixed, and the exact percent where needed. Then they swap and critique.
 
-1. **Predict (5 min).** Each team writes down how many fewer cars a year it expects if gas goes to \$5 and how sure it is.
+1. Level model: gas −0.48 (sales in millions, SAAR; gas in \$ per gallon).
+2. Log–level model: unemployment −0.0627.
+3. Log–log model: gas −0.0674. Question: what does a 20% rise in gas do?
+4. Retail log model: December +0.221, November +0.113 (January is the base). Question: December vs November?
+
+*Expected results:* (1) "Each \$1 a gallon goes with about 480,000 fewer vehicles a year (annual rate), holding unemployment and mortgage rates fixed." (2) "Each extra percentage point of unemployment goes with about 6.1% fewer sales" ($e^{-0.0627} - 1$ = −6.08%). (3) "A 20% rise in gas goes with about 1.2% fewer sales" (rule of thumb −1.35%; exact $1.2^{-0.0674} - 1$ = −1.22%, about 196,000 cars on today's 16.0 million). (4) $e^{0.221 - 0.113} - 1$ = +11.4%; December vs January is +24.7%. Watch for "a 1% rise in unemployment", "22%" for December, and "causes".
+
+**Activity 2 (Session 2): scenario war-room (25 minutes).** Teams of three play the planning team of a carmaker.
+
+1. **Predict (3 min).** Each team writes down how many fewer cars a year it expects if gas goes to \$5 and how sure it is.
 2. **Model (10 min).** Run the drivers lab and the scenario lab. Each team designs one *named, internally consistent* scenario of its own in the scenario dashboard and in code (change the `squeeze` data frame).
-3. **Brief (10 min).** Each team presents a 60-second brief: baseline, their scenario, the gap from baseline by driver, and the band.
-4. **Debrief (5 min).** Reveal the ex-ante vs ex-post result and ask whether the scenarios should change any decisions.
+3. **Brief (8 min).** Each team presents a 60-second brief: baseline, their scenario, the gap from baseline by driver, and the band.
+4. **Debrief (4 min).** Reveal the ex-ante vs ex-post result and ask whether the scenarios should change any decisions.
 
-*Expected results:* the fitted model is sales = 24.98 − 0.48 gas − 0.90 unemployment − 0.48 mortgage rate − 2.43 chip (R² 0.58). With every driver at its October 2026 value, the baseline is 15.68 million; gas at \$5 gives 15.35 million (−0.33 once the rise is complete); the lab's "squeeze" scenario averages 14.45 million over the year and ends at 13.76 million. The 95% interval is about ±2.6 million. Compare the teams' guesses with −0.33 million; if they guessed larger, discuss why, and stress that the estimate is an association, not a controlled experiment. In the ex-ante test, naive (MAE 0.42) beats ex-ante (0.48) and ex-post (0.54).
+*Expected results:* the fitted model is sales = 24.98 − 0.48 gas − 0.90 unemployment − 0.48 mortgage rate − 2.43 chip (R² 0.58). With every driver at its October 2026 value, the baseline is 15.68 million; gas at \$5 gives 15.35 million (−0.33 once the rise is complete); the lab's "squeeze" scenario averages 14.45 million over the year and ends at 13.76 million. The 95% interval is about ±2.6 million. Compare the teams' guesses with −0.33 million (or about −0.16 million under the log–log model, as FormSwitcher shows); if they guessed larger, discuss why, and stress that the estimate is an association, not a controlled experiment. In the ex-ante test, naive (MAE 0.42) beats ex-ante (0.48) and ex-post (0.54).
 
 **Variations.** (a) Restrict the drivers lab to 1993–2019 and compare coefficients (structural stability). (b) Re-run with `log(veh)` and report elasticities. (c) Instructors who use `jtools` can show `summ(m1, robust = "HAC")` as an alternative summary; `car::vif()` reproduces the VIFs in the selection lab (21.9 and 23.8).
 
@@ -345,6 +613,9 @@ Every outcome in this chapter was a quantity on a smooth scale: millions of cars
 5. Hamins-Puertolas, A., & Tito, M. D. (2026). When the chips went down: Motor vehicle production and the 2021–2022 semiconductor shortages. *FEDS Notes*, Board of Governors of the Federal Reserve System, September 28, 2026. [federalreserve.gov](https://www.federalreserve.gov/econres/notes/feds-notes/when-the-chips-went-down-motor-vehicle-production-and-the-2021-2022-semiconductor-shortages-20260928.html)
 6. Missing October 2025 unemployment rate: the household survey for October 2025 could not be conducted during the federal government shutdown, and BLS cancelled that part of the release. NBC News, "October jobs report canceled and November release delayed, BLS says" (November 2025). [nbcnews.com](https://www.nbcnews.com/news/amp/rcna244828)
 7. Data: FRED, Federal Reserve Bank of St. Louis: TOTALSA, GASREGW, UNRATE, MORTGAGE30US (Freddie Mac), GS10, HOUST, HOUSTNSA, RSXFSN.
+8. Wooldridge, J. M. (2020). *Introductory Econometrics: A Modern Approach* (7th ed.). Cengage. Ch. 2 (the table of level and log functional forms), ch. 3 (omitted-variable bias), ch. 6 (units of measurement, exact percent changes, $100(e^b - 1)$) and ch. 7 (dummy variables and base groups).
+9. Nau, R. *Statistical forecasting: notes on regression and time series analysis*, Duke University: "Data concepts: the logarithm transformation" and "Not-so-simple regression models". [people.duke.edu/~rnau/411log.htm](https://people.duke.edu/~rnau/411log.htm)
+10. UCLA Statistical Methods and Data Analytics (OARC). "How do I interpret a regression model when some variables are log transformed?" [stats.oarc.ucla.edu](https://stats.oarc.ucla.edu/other/mult-pkg/faq/general/faqhow-do-i-interpret-a-regression-model-when-some-variables-are-log-transformed/)
 
 </div>
 

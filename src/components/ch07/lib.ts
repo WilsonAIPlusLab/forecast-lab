@@ -49,3 +49,11 @@ export function ols(X: number[][], y: number[]) {
 
 export const mean = (v: number[]) => v.reduce((a, b) => a + b, 0) / v.length;
 export const ymLabel = (d: Date) => d.toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
+
+/** Pearson correlation (same as R's cor() for two numeric vectors). */
+export function corr(x: number[], y: number[]) {
+  const n = x.length, mx = mean(x), my = mean(y);
+  let sxy = 0, sxx = 0, syy = 0;
+  for (let i = 0; i < n; i++) { sxy += (x[i] - mx) * (y[i] - my); sxx += (x[i] - mx) ** 2; syy += (y[i] - my) ** 2; }
+  return sxy / Math.sqrt(sxx * syy);
+}

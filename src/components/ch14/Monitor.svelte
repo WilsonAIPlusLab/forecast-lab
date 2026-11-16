@@ -37,6 +37,7 @@
     const rows = out.cur.steps.map((s) => ({ ...s, date: d[s.i].date }));
     const alarms = rows.filter((r) => r.alarm);
     const W = topEl.clientWidth;
+    if (W < 200) return; // not laid out yet (or mid-resize): skip, watchLayout redraws
     const ctx = d.slice(out.t0 - 24, out.t0 + 1);
     const top = Plot.plot({
       width: W, height: 220, marginLeft: 58, marginRight: 80, marginTop: 16, style: plotStyle(),

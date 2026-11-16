@@ -37,6 +37,7 @@
     if (!el || !res) return;
     const { train, test, cur, lin, dates } = res;
     const W = el.clientWidth;
+    if (W < 260) return;                               // skip transient tiny widths (e.g. mid-resize)
     const show = train.slice(-60);
     const o = train[train.length - 1];
     const fcRow = (f: number[]) => [{ date: o.date, v: o.value }, ...f.map((v, k) => ({ date: dates[k], v }))];
@@ -61,7 +62,7 @@
       Plot.ruleY([cur.limit], { stroke: C.forecast, strokeOpacity: 0.5, strokeDasharray: '4 4', strokeWidth: 1.25 }),
       Plot.text([cur.limit], { y: (d: any) => d, frameAnchor: 'left', dx: 4, dy: -8, textAnchor: 'start', text: () => `Damped forecast levels off near ${fmt(cur.limit)}`, fill: C.forecast, fontSize: 12, stroke: C.surface, strokeWidth: 3, paintOrder: 'stroke' } as any));
     const chart = Plot.plot({
-      width: W, height: Math.max(300, Math.min(420, W * 0.5)), marginLeft: 62, marginRight: 150, marginTop: 28,
+      width: W, height: Math.max(300, Math.min(420, W * 0.5)), marginLeft: 62, marginRight: W < 520 ? 120 : 150, marginTop: 28,
       style: { ...plotStyle(), fontSize: '12px' }, x: { label: null }, y: { grid: true, nice: true, label: '$ millions (SA)', tickFormat: fmt },
       ariaLabel: `E-commerce sales with linear and damped trend forecasts from ${ORIGINS[oi].label}`,
       marks,

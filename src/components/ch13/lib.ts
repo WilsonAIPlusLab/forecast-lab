@@ -56,13 +56,15 @@ export function eigSym(S: number[][]) {
 }
 
 /** Standardize columns (sample sd), optionally clip at ±c, then PCA via the covariance of the clipped matrix (like R's prcomp). */
-export function pca(X: number[][], clip: number | null) {
+export function pca(X: number[][], clip: number | null, standardize = true) {
   const n = X.length, p = X[0].length;
   const mu = Array.from({ length: p }, (_, j) => X.reduce((s, r) => s + r[j], 0) / n);
   const sd = Array.from({ length: p }, (_, j) => Math.sqrt(X.reduce((s, r) => s + (r[j] - mu[j]) ** 2, 0) / (n - 1)));
   let Z = X.map((r) => r.map((v, j) => (v - mu[j]) / sd[j]));
   let clipped = 0;
   if (clip) Z = Z.map((r) => r.map((v) => { if (Math.abs(v) > clip) { clipped++; return Math.sign(v) * clip; } return v; }));
+  // standardize = false: put each (clipped) series back in its own units, so big-variance series dominate
+  if (!standardize) Z = Z.map((r) => r.map((v, j) => v * sd[j]));
   const m2 = Array.from({ length: p }, (_, j) => Z.reduce((s, r) => s + r[j], 0) / n);
   const C = Array.from({ length: p }, (_, a) => Array.from({ length: p }, (_, b) => Z.reduce((s, r) => s + (r[a] - m2[a]) * (r[b] - m2[b]), 0) / (n - 1)));
   const { values, vectors } = eigSym(C);
@@ -110,6 +112,14 @@ export async function loadPanel(start = '1993-01', end = '2026-09') {
   const keys: string[] = [];
   for (const k of maps[0].keys()) if (k >= start && k <= end && maps.every((m) => m.has(k))) keys.push(k);
   keys.sort();
+  return { keys, dates: keys.map((k) => new Date(k + '-01T00:00:00')), X: keys.map((k) => maps.map((m) => m.get(k)!)) };
+}
+
+/** The same 20 series in (log) levels instead of growth rates: log for 'growth' series, raw level for 'change' series. */
+export async function loadLevelPanel(start = '1993-01', end = '2026-09') {
+  const raw = await Promise.all(PANEL.map((p) => loadSeries(p.id, p.agg ? { to: 'month' } : {})));
+  const maps = raw.map((s, j) => new Map(s.data.map((p) => [ymKey(p.date), PANEL[j].kind === 'growth' ? Math.log(p.value) : p.value])));
+  const keys = [...maps[0].keys()].filter((k) => k >= start && k <= end && maps.every((m) => Number.isFinite(m.get(k)))).sort();
   return { keys, dates: keys.map((k) => new Date(k + '-01T00:00:00')), X: keys.map((k) => maps.map((m) => m.get(k)!)) };
 }
 

@@ -45,6 +45,7 @@
   function draw() {
     if (!top || !bars || !fit || !data.length) return;
     const W = top.clientWidth;
+    if (W < 200) return;                      // skip transient tiny widths (e.g. mid-resize)
     const show = data.slice(-72);
     const off = data.length - show.length;
     const last = data[data.length - 1].date;

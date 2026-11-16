@@ -13,6 +13,11 @@ function rehypeBaseLinks() {
       const h = n.properties.href;
       if (BASE !== '/' && h.startsWith('/') && !h.startsWith('//') && !h.startsWith(BASE)) n.properties.href = BASE + h.slice(1);
     }
+    // raw <a href="/…"> written inside MDX (JSX/HTML blocks) arrives as an mdxJsx element
+    if ((n.type === 'mdxJsxFlowElement' || n.type === 'mdxJsxTextElement') && n.name === 'a') {
+      const at = (n.attributes || []).find((x) => x.name === 'href' && typeof x.value === 'string');
+      if (at && BASE !== '/' && at.value.startsWith('/') && !at.value.startsWith('//') && !at.value.startsWith(BASE)) at.value = BASE + at.value.slice(1);
+    }
     (n.children || []).forEach(walk);
   };
   return (tree) => walk(tree);

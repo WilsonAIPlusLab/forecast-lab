@@ -1,12 +1,17 @@
 ---
 layout: ../../layouts/Chapter.astro
 slug: decomposition
-minutes: 50
+minutes: 120
+sessions:
+  - title: Pulling a series apart, on the right scale
+  - title: Reading seasonally adjusted numbers like an analyst
+    starts: how-the-official-numbers-are-made
 build:
   - A seasonal adjustment of U.S. retail sales with STL that lands within 1% of the Census Bureau's official X-13 numbers
   - A seasonal-strength ranking of eight kinds of stores, and the COVID trap hiding in it
   - A one-month "good or bad?" verdict that survives the December spike
-skills: [seasonal plot, subseries plot, decompose, stl, s.window, robust, seasonal adjustment, X-13ARIMA-SEATS, seasonal strength, tslm, diff]
+  - A plain-English reading of the Census Bureau's seasonal factors ("December is 12% above a typical month")
+skills: [seasonal plot, subseries plot, decompose, stl, s.window, t.window, robust, log scale, seasonal factor, seasonal adjustment, X-13ARIMA-SEATS, year-over-year growth, seasonal strength, tslm, diff]
 ---
 import CodeLab from '../../components/CodeLab.svelte';
 import Callout from '../../components/Callout.astro';
@@ -14,11 +19,15 @@ import KeyIdea from '../../components/KeyIdea.astro';
 import Predict from '../../components/Predict.svelte';
 import Term from '../../components/Term.astro';
 import InstructorKit from '../../components/InstructorKit.astro';
+import SessionBreak from '../../components/SessionBreak.astro';
 import DecompScrolly from '../../components/ch02/DecompScrolly.svelte';
 import AddMultToggle from '../../components/ch02/AddMultToggle.svelte';
 import StlExplorer from '../../components/ch02/StlExplorer.svelte';
 import FingerprintGame from '../../components/ch02/FingerprintGame.svelte';
 import MonthVerdict from '../../components/ch02/MonthVerdict.svelte';
+import SwingSpotter from '../../components/ch02/SwingSpotter.svelte';
+import FactorReader from '../../components/ch02/FactorReader.svelte';
+import YoyWindow from '../../components/ch02/YoyWindow.svelte';
 import plotsR from '../../labs/ch02/seasonal_plots.R?raw';
 import plotsPy from '../../labs/ch02/seasonal_plots.py?raw';
 import stlR from '../../labs/ch02/stl.R?raw';
@@ -33,6 +42,18 @@ import exCheckR from '../../labs/ch02/exercise_check.R?raw';
 import exPy from '../../labs/ch02/exercise.py?raw';
 import exSolPy from '../../labs/ch02/exercise_solution.py?raw';
 import exCheckPy from '../../labs/ch02/exercise_check.py?raw';
+import swR from '../../labs/ch02/ex_swing.R?raw';
+import swSolR from '../../labs/ch02/ex_swing_solution.R?raw';
+import swCheckR from '../../labs/ch02/ex_swing_check.R?raw';
+import swPy from '../../labs/ch02/ex_swing.py?raw';
+import swSolPy from '../../labs/ch02/ex_swing_solution.py?raw';
+import swCheckPy from '../../labs/ch02/ex_swing_check.py?raw';
+import facR from '../../labs/ch02/ex_factor.R?raw';
+import facSolR from '../../labs/ch02/ex_factor_solution.R?raw';
+import facCheckR from '../../labs/ch02/ex_factor_check.R?raw';
+import facPy from '../../labs/ch02/ex_factor.py?raw';
+import facSolPy from '../../labs/ch02/ex_factor_solution.py?raw';
+import facCheckPy from '../../labs/ch02/ex_factor_check.py?raw';
 
 <p class="lede">It is mid-January. Your manager forwards a chart: U.S. retail sales jumped <strong>11.8%</strong> from November to December 2025, and the line shoots up like a rocket. "Should we raise our 2026 plan?" Before you answer, you need to know how much of that jump was growth and how much was simply December.</p>
 
@@ -42,8 +63,10 @@ Every December looks like a boom, and every January looks like a bust. Shoppers 
   question="Retail sales (not seasonally adjusted) rose **11.8%** from November to December 2025. Once the normal December effect is removed, what do you expect the growth to be?"
   options={['About +12%: December was a genuine boom', 'About +6%: half real, half seasonal', 'Between 0% and +3%: almost all of it was just December', 'About −5%: December was actually weak']}
   answer={2}
-  explain="The Census Bureau's seasonally adjusted figure for this aggregate rose about **0.2%**, and the STL adjustment you will build in this chapter says about **2.1%**. A typical December sits about 12% above the underlying level and a typical November about 2% above it, so an ordinary November-to-December jump is already about 9.5%. Scroll on to see where the other 10 points went."
+  explain="The Census Bureau's seasonally adjusted figure for this aggregate rose about **0.2%**, and the STL adjustment you will build in this chapter says about **2.1%**. In the STL version, a typical December sits about 12% above the underlying level and a typical November about 2% above it, so an ordinary November-to-December jump is already about 9.5%. Scroll on to see where the other 10 points went."
 />
+
+<SessionBreak n={1} title="Pulling a series apart, on the right scale" goals={['Split a monthly series into **trend**, **seasonal** and **remainder**, and say what each one tells a manager', 'Decide between **additive** and **multiplicative** seasonality by asking whether the swing grows with the level, and use a **log** to turn one into the other', 'See how the STL **windows** change the trend and the seasonal pattern, then seasonally adjust retail sales yourself']} />
 
 ## Pulling a series apart
 
@@ -114,9 +137,54 @@ E-commerce sales (electronic shopping and mail-order houses, NSA) grew almost si
 
 The additive model gives December the same **\$9.5 billion** in 2000 and in 2018. That is far too much for 2000 and far too little for 2018, so the December remainders slope from big negatives to big positives. The multiplicative model gives December a fixed **+39.1%**, which is about \$3.8 billion in 2000 and \$19.3 billion in 2018. The remainder's correlation with itself twelve months earlier falls from 0.79 to about 0.4: most of the seasonal pattern that was leaking into the remainder is gone.
 
-<Callout type="tip" title="The log rule of thumb">
-If the seasonal swings grow as the level grows, take logs first and use an additive method on $\log y$. Every method in this course (STL, ETS, ARIMA, regression) then works in percentages. Two caveats: logs need strictly positive data, and results come back in log units, so use `exp()` to return to dollars.
+### How to tell which one you have
+
+You don't need a model to decide. Ask one question of the time plot: **does the seasonal swing grow when the level grows?**
+
+- If December adds about the same number of *dollars* every year, whatever the size of the business, the seasonality is **additive**. Model the series in its own units.
+- If December adds about the same *percentage* every year, so the dollar swing grows and shrinks with the business, it is **multiplicative**. Take logs, and the swing becomes a constant height again.
+
+The explorer below makes the check concrete. For every year it measures the seasonal swing (the highest month minus the lowest, both measured against a 12-month moving-average trend) twice: once in the data's own units and once in percent of the trend. Whichever version stays flatter is the right scale.
+
+<Predict client:load
+  question="U.S. housing starts were about **30% lower** in 2016–18 than in 2001–03. If housing seasonality is multiplicative, what should have happened to the spring-versus-winter swing, measured in **thousands of homes**?"
+  options={['It stayed about the same number of homes', 'It shrank by roughly 30%, like the level', 'It grew, because the recovery was strongest in spring']}
+  answer={1}
+  explain="Multiplicative means the swing is a fixed *share* of the level, so a smaller market has a smaller swing in homes. The data agree: the swing fell from about 54,000 to 41,000 homes a month (×0.75) while the level fell ×0.71, and the swing in percent barely moved (39% → 40%). Click **Housing starts** below to see it."
+/>
+
+<div class="breakout">
+<SwingSpotter client:load />
+</div>
+
+Read the three series the way an analyst would.
+
+- **E-commerce** grew about fourfold between 2001–03 and 2016–18 (×4.2). Its seasonal swing in dollars grew with it (×4.5, from \$4.7 billion to \$21.2 billion a month), while the swing in percent hardly changed (45% → 49%). Textbook multiplicative.
+- **Housing starts** went the other way: the level fell, and the swing in homes fell with it. Multiplicative works in both directions. (The tall 2008–09 percentage bars are the crash itself: a 12-month moving average cannot keep up with a collapse, so part of the fall shows up as "swing".)
+- **Electric and gas utility output** barely grew (×1.10). With a flat level the two measures tell the same story, so additive and multiplicative fits give almost the same answer. When the level is flat, the choice hardly matters.
+
+<Callout type="empirical" title="Spot multiplicative seasonality in ten seconds">
+1. Plot the raw series. If the December spikes (or summer peaks) get taller as the line rises, the seasonality is multiplicative.
+2. Plot it again on a **log scale** (or plot `log(y)`). If the spikes now have roughly the same height everywhere, logs fixed it: model `log(y)`.
+3. Sales, revenue and production are usually multiplicative: the same *share* of customers shops for gifts whatever the size of the business. Series that are already rates in percent (an unemployment rate, an interest rate) are often closer to additive.
+
+The choice matters most when the level jumps. In 2020 the Bureau of Labor Statistics switched most of its household-survey series (including unemployment) from multiplicative to additive seasonal models: when unemployment jumped in April 2020, a multiplicative model would have made the seasonal adjustment swell in proportion to it, so additive models were expected to track the seasonal movements more accurately.<sup>[11](#refs)</sup>
 </Callout>
+
+<Callout type="tip" title="The log rule of thumb, and how to read log results">
+If the seasonal swings grow as the level grows, take logs first and use an additive method on $\log y$. Every method in this course (STL, ETS, ARIMA, regression) then works in percentages. [Chapter 1](/chapters/time-series-data/#logs-why-and-when) covers logs and the other everyday transformations in general; here is what they mean for seasonality.
+
+- A seasonal effect of **0.11** on the log scale means "about 11% above the trend". For an exact figure, use `exp(0.11) − 1` = **11.6%**. For effects under about 10% the two readings are close; for big ones (−0.30 is −26%, not −30%) always convert.
+- Two caveats: logs need strictly positive data, and results come back in log units, so use `exp()` to return to dollars.
+</Callout>
+
+**You are the analyst.** Your manager at an online retailer asks: "Has the holiday bump grown, or just the business?" Answer with numbers.
+
+<div class="breakout">
+<CodeLab client:load id="ch02-ex-swing" exercise title="Exercise: has December's boost grown, or just the business?" r={swR} solution={swSolR} check={swCheckR} py={swPy} solutionPy={swSolPy} checkPy={swCheckPy} pyPackages={['statsmodels']}
+  goal="Measure every December's gap from trend in dollars and in percent for U.S. e-commerce sales, 2000–2019, and decide whether the seasonality is additive or multiplicative."
+  hints={['Percent above trend is 100 × (data ÷ trend − 1). The trend is already stored: `dec$trend` in R, `dec.trend` in Python.', 'December is month number 12. In R, `cycle(ecom)` gives each month’s number; in Python, `ecom.index.month` does.', 'Look at the printed table: the dollar column grows about fivefold, the percent column stays in the 30s and 40s. A constant percentage means multiplicative, so the verdict is TRUE (Python: True).']} />
+</div>
 
 ## STL: a decomposition that bends
 
@@ -148,6 +216,28 @@ Try these four settings and compare what you see with these numbers from R.
   explain="A trend in one month's remainders means the true seasonal effect is changing faster than your seasonal window allows. A smaller `s.window` lets the seasonal component follow it. Don't overdo it: a very small window starts absorbing one-off shocks, as `s.window = 7` did with COVID."
 />
 
+### The trend window changes your growth story
+
+The seasonal window decides what counts as "normal for the month". The trend window decides what counts as "the business". Drag the **trend window** in the explorer and watch the trend line: at 7 months it dips with the 2020 lockdown, at 61 months it barely notices.
+
+<Predict client:load
+  question="You widen STL's trend window from the default 21 months to 61 months. What happens to the **seasonally adjusted** growth from November to December 2025?"
+  options={['It barely changes', 'It falls by about half, because the trend is flatter', 'It doubles, because the trend absorbs less']}
+  answer={0}
+  explain="Seasonal adjustment removes only the *seasonal* component, and the seasonal layer hardly depends on the trend window. In R, the adjusted December 2025 growth is +2.1% with `t.window = 21` and +2.1% with `t.window = 61` (+2.1% with 7, too). What does change is the trend itself, and with it any answer to 'how fast are we growing?'"
+/>
+
+<Callout type="empirical" title="Before you quote a trend growth rate, name the window">
+"How fast is the business growing?" is usually answered by reading the trend. On log retail sales from 2005 (robust STL, `s.window = 13`), the trend's growth over the last twelve months of data (September 2025 to September 2026) depends heavily on `t.window`:
+
+| `t.window` | 7 months | 21 (R's default) | 35 | 61 |
+|---|---|---|---|---|
+| Trend growth, last 12 months | +6.1% | +5.6% | +4.4% | +3.0% |
+| Trend, Feb → Apr 2020 | −3.2% | +1.1% | +1.2% | +1.2% |
+
+A short window follows every wiggle (it even dips with the lockdown). A long window averages in older years, so at the end of the sample it reacts slowly to a recent speed-up. Neither is "right". Pick the window to match the question (recent momentum or long-run pace), say which you used, and compare with a simple check that needs no window: Census's seasonally adjusted sales grew **6.2%** over the same twelve months.
+</Callout>
+
 Now the real thing in code: fit STL, seasonally adjust, and compare your result with the Census Bureau's.
 
 <div class="breakout">
@@ -155,6 +245,8 @@ Now the real thing in code: fit STL, seasonally adjust, and compare your result 
 </div>
 
 Your twenty-line adjustment differs from the official series by **0.81%** on average. The robust fit flagged 14 months as outliers: the 2008–09 crisis, the spring of 2020 and the stimulus-fueled spring of 2021, among others. The Python version gives the same numbers because it passes R's settings to `statsmodels`.
+
+<SessionBreak n={2} title="Reading seasonally adjusted numbers like an analyst" goals={['Read a **seasonal factor** out loud, in percent and in dollars, and get from raw data to seasonally adjusted data and back', 'Avoid the classic traps: mixing **SA and NSA** months, leap years and holidays, and revised factors', 'Judge whether a month was good using **seasonally adjusted** changes, **year-over-year** changes and a seasonal norm, and know when each one misleads', 'Apply it: adjust December 2025 yourself and brief a manager on it']} />
 
 ## How the official numbers are made
 
@@ -166,10 +258,48 @@ The **SA** and **NSA** labels on FRED series matter. <Term def="Not seasonally a
 - Adjustment is **concurrent**: every new month re-estimates the factors, so recent seasonally adjusted values get revised.<sup>[3](#refs)</sup>
 - Some series are also **annualized**. `HOUST` (housing starts, SA) is a seasonally adjusted *annual rate*: the monthly pace multiplied by 12. `HOUSTNSA` is the raw monthly count. Divide `HOUST` by 12 before comparing the two.
 
+### Reading a seasonal factor
+
+Agencies publish the seasonally adjusted series, but you can recover the factor they used yourself: divide the raw number by the adjusted one. For a multiplicative adjustment like Census's, that ratio is the **seasonal factor**, and it is the easiest thing in this chapter to explain to a manager. Read it like a percentage of a normal month, the way classic business-forecasting texts read seasonal indices.<sup>[13](#refs)</sup>
+
+- A factor of **1.121** for December 2025 means December's sales ran **12.1% above a typical month**, purely because of the calendar.
+- In dollars: raw sales were \$694.1 billion and seasonally adjusted sales \$619.1 billion, so about **\$75 billion** of December's sales were "just December".
+- A factor below 1 works the same way: February 2025's **0.881** means February ran 11.9% *below* a typical month.
+
+<div class="breakout">
+<FactorReader client:load />
+</div>
+
+<Predict client:load kind="check"
+  question="Census's February factor for retail sales was **0.916 in 2024** but **0.881 in 2025**. What is the most likely reason?"
+  options={['Shoppers became less seasonal in 2025', '2024 was a leap year: February had 29 days', 'The Census Bureau changed its method in 2025', 'Valentine’s Day fell on a weekend in 2024']}
+  answer={1}
+  explain="An extra day adds about 1/28 = 3.6% to February's sales, and the factor absorbs it: 0.916 ÷ 0.881 = 1.04. Look at the Februaries in the explorer: 2016 (0.915), 2020 (0.907) and 2024 (0.916) all stand out. That is a **calendar effect**, and it is exactly why you should compare a leap-year February with the seasonally adjusted data, not with last February's raw number."
+/>
+
+<Callout type="empirical" title="Say a seasonal factor out loud">
+- **Multiplicative factor** (Census, BLS, or `exp()` of a log-scale STL seasonal): "December is **12% above** a typical month." Not "December grows 12%": the factor compares December with the year's normal level, not with November.
+- **Additive component** (STL or `decompose()` in the data's units): "December adds about **\$62 billion**" (the classical figure from the first lab).
+- **From raw to adjusted:** SA = raw ÷ factor. **From adjusted back to raw:** raw = SA × factor. That second step is how you turn a seasonally adjusted forecast back into the raw monthly numbers a store manager plans with.
+- **Factors drift.** December's factor fell from **1.162** in 2015 to **1.101** in 2023 (1.121 in 2025). The STL explorer showed the same slide in December's effect. Do not hard-code last decade's December factor into this year's plan.
+</Callout>
+
+<Callout type="empirical" title="Never compare a seasonally adjusted month with a raw one">
+Suppose a colleague divides January 2026 *seasonally adjusted* sales by December 2025 *raw* sales. They get **−11.4%** and announce a collapse. The right comparisons tell a calmer story:
+
+| Comparison | Jan 2026 vs Dec 2025 |
+|---|---|
+| SA vs SA (the underlying pace) | **−0.7%** |
+| Raw vs raw (mostly calendar) | −19.2% |
+| SA vs raw (**meaningless**) | −11.4% |
+
+The mixed number removes January's seasonal dip from one month but leaves December's holiday boost in the other. Sometimes the mix looks harmless by luck: SA December over raw November gives −0.2%, close to the right answer, only because November's factor (1.004) happens to be near 1. Check the SA/NSA label of every series before you divide.
+</Callout>
+
 <Callout type="intuition" title="Calendar effects: the calendar is not the same every year">
 Seasonality is the effect of the *month*. Calendar effects are the extra wrinkles that come from the *particular year's* calendar.
 
-- **Length of month.** February has 28 days, about 8% fewer than the average month (28 ÷ 30.4 ≈ 0.92). Turn on *per day* in the fingerprint game below and much of February's dip disappears for restaurants and grocery stores.
+- **Length of month.** February has 28 days, about 8% fewer than the average month (28 ÷ 30.4 ≈ 0.92). Turn on *per day* in the fingerprint game below and much of February's dip disappears for restaurants and grocery stores. Leap years show up directly: Census's February factor is about 3–4% higher in 2016, 2020 and 2024 than in the years around them.
 - **Trading days.** November 2025 had five Saturdays and five Sundays; December 2025 had four of each. For stores whose sales depend on the day of the week, the same month can be bigger or smaller depending on how its weekdays fall.
 - **Moving holidays.** Easter falls anywhere from March 22 to April 25, shifting spring spending between March and April. Census research finds elevated sales before Easter in many retail series.<sup>[7](#refs)</sup> Thanksgiving is the fourth Thursday of November (November 22–28). When it is late, as on November 27, 2025, Cyber Monday falls in December (December 1, 2025), and the holiday shopping season is shorter.
 
@@ -192,13 +322,15 @@ Total retail sales mix very different businesses. Each one has its own calendar.
 <FingerprintGame client:load />
 </div>
 
-To compare seasonality across series, you need a number. Hyndman and Athanasopoulos define the <Term def="F_S = max(0, 1 − Var(R) / Var(S + R)). Close to 1 means the seasonal pattern dominates the remainder; close to 0 means little seasonality.">seasonal strength</Term> of a decomposition as<sup>[2](#refs)</sup>
+To compare seasonality across series, you need a number. Hyndman and Athanasopoulos define the <Term def="F_S = max(0, 1 − Var(R) / Var(S + R)). Close to 1 means the seasonal pattern dominates the remainder; close to 0 means little seasonality.">seasonal strength</Term> $F_S$ of a decomposition, a score between 0 and 1.<sup>[2](#refs)</sup> If the remainder is tiny compared with the seasonal swings, $F_S$ is close to 1. If the remainder is as big as everything else, $F_S$ is close to 0.
 
+<Callout type="math" title="The seasonal strength formula">
 $$
-F_S = \max\left(0,\; 1 - \frac{\text{Var}(R_t)}{\text{Var}(S_t + R_t)}\right).
+F_S = \max\left(0,\; 1 - \frac{\text{Var}(R_t)}{\text{Var}(S_t + R_t)}\right)
 $$
 
-If the remainder is tiny compared with the seasonal swings, $F_S$ is close to 1. If the remainder is as big as everything else, $F_S$ is close to 0.
+It compares how much the remainder varies with how much the seasonal component and the remainder vary together. Because it is a ratio of variances, a few huge remainders can drag it down.
+</Callout>
 
 <Predict client:load
   question="Before COVID, clothing stores had a seasonal strength of about **0.99**. What happens to it if you add 2020–2026 to the sample?"
@@ -233,6 +365,33 @@ For December 2025, the raw change is +11.8%. A typical December over the previou
 | Year over year (same month last year) | How do we compare with a year ago? | Lags turning points by months; distorted if last year was unusual (2021 vs 2020) |
 | Raw change vs the seasonal norm | Did this month beat a normal version of itself? | The "norm" depends on which years you average |
 
+### Year over year: the free, slow seasonal fix
+
+Comparing a month with the same month a year earlier needs no model at all: December is compared with December, so the holiday boost cancels. That is why company reports and many news stories use it. ([Chapter 1](/chapters/time-series-data/#growth-rates-mom-annualized-and-yoy) introduced year-over-year growth and base effects; here the question is how it compares with seasonal adjustment.) But it answers a different question from the seasonally adjusted month-over-month change, and the explorer shows why.
+
+<Predict client:load
+  question="In April 2021, U.S. retail sales were about **47% higher** than in April 2020. How much did seasonally adjusted sales change **during April 2021 itself** (April over March)?"
+  options={['About +47%: a record month', 'About +4%: one-twelfth of the yearly gain', 'Under +1%: almost nothing happened that month']}
+  answer={2}
+  explain="Seasonally adjusted sales rose just **0.6%** in April 2021. The 47% is a **base effect**: April 2020 was the lockdown low, so any normal April looks spectacular next to it. Year-over-year growth is the twelve monthly moves of the past year compounded together, and in this case almost all of them happened months earlier (May 2020 alone was +18.5%)."
+/>
+
+<div class="breakout">
+<YoyWindow client:load />
+</div>
+
+Year-over-year growth is all twelve monthly moves of the past year multiplied together. For December 2025 that is +0.2% (December's own seasonally adjusted move) on top of +1.6% from the eleven months before it, giving +1.8%. So a year-over-year number is mostly old news, which has two consequences.
+
+- **It turns late.** In May 2020, seasonally adjusted sales jumped **18.5%** from April as stores reopened, yet year-over-year growth still read **−0.7%**. A reader who watched only the year-over-year line would have missed the rebound for a month.
+- **It echoes last year's shocks.** A strange month shows up twice: once when it happens, and again twelve months later as a base effect, in the opposite direction (April 2021 above).
+
+<Callout type="empirical" title="Use year over year as a cross-check, not a verdict">
+- **When it shines:** no seasonally adjusted series exists (a company's own sales, a regional series), or you need a quick, model-free answer. It removes most seasonality with one division.
+- **When it misleads:** right after a turning point (it lags; analysts prefer seasonally adjusted month-over-month changes for spotting turns quickly<sup>[12](#refs)</sup>) and twelve months after any shock (base effects). Look at the same month two years back, or at the seasonally adjusted series, before you call a boom.
+- **It does not remove calendar effects.** December 2025 raw sales were **3.4%** above December 2024, but seasonally adjusted sales only **1.8%**. The two Decembers' calendars and seasonal factors differ (1.104 in 2024, 1.121 in 2025), and a raw year-over-year comparison keeps that difference. A leap-year February is the extreme case: about 3.6% of its year-over-year "growth" is the extra day.
+- **Never mix the two frequencies in one sentence:** "+0.2% this month" (month over month) and "+1.8% on the year" (year over year) are both true, and they answer different questions.
+</Callout>
+
 ### Removing trend and seasonality: two routes
 
 Some methods want a series with no trend and no seasonality. You can get one in two ways, and the next lab compares them.
@@ -256,40 +415,103 @@ Was December 2025 a good month? Fill in the two blanks (`______`) and press **Ru
   hints={['Seasonal adjustment on the log scale is the log data minus the seasonal component. That component is stored in the object `seasonal`.', 'Growth is (new value / old value) − 1. `last2` holds November and December, in that order, so December is `last2[2]` (Python: `sa["2025-11-01"]` is November).']} />
 </div>
 
+Now brief your manager. They want one sentence for the board deck: "How big is the holiday effect, in percent and in dollars?" Use the Census Bureau's own numbers this time, so nobody can argue with your method.
+
+<div class="breakout">
+<CodeLab client:load id="ch02-ex-factor" exercise title="Exercise: put December's seasonal factor into words" r={facR} solution={facSolR} check={facCheckR} py={facPy} solutionPy={facSolPy} checkPy={facCheckPy}
+  goal="Recover the Census Bureau's seasonal factors as raw ÷ seasonally adjusted sales, then state how far December 2025 sat above a typical month, in percent and in dollars."
+  hints={['The factor is raw divided by adjusted. Which of `nsa` and `sa` is the raw series?', 'A factor of 1.05 means 5% above typical, so percent = 100 × (factor − 1). Use the December number stored in `f_dec`.']} />
+</div>
+
 ## Chapter checklist
 
 - **Plot first:** a time plot, a seasonal plot and a subseries plot show trend, seasonality and outliers before any model.
-- If seasonal swings grow with the level, the seasonality is **multiplicative**: take **logs** and use an additive method.
+- **Additive or multiplicative?** Ask whether the seasonal swing grows with the level. If it does, model `log(y)`: a log-scale seasonal effect of 0.11 reads as "about 11% above trend" (exactly `exp(0.11) − 1` = 11.6%).
 - **Classical decomposition** is a good teaching tool but loses the ends, freezes the seasonal pattern and is hurt by outliers.
 - **STL** lets trend and seasonality change: `s.window` sets how fast the seasonal pattern moves, `t.window` how smooth the trend is, `robust = TRUE` keeps shocks in the remainder. Check the remainder for leftover pattern.
 - **Seasonally adjusted = data minus the seasonal component** (or divided by it). Official SA series come from X-13ARIMA-SEATS and also remove trading-day and holiday effects.
+- **Windows change answers.** `s.window` decides how fast "normal for the month" can drift; `t.window` decides how smooth the trend is, and can halve or double a quoted trend growth rate. Name the window when you quote a trend.
+- **Read a seasonal factor out loud:** factor = raw ÷ SA, so 1.12 means "12% above a typical month", and raw − SA is the seasonal effect in dollars. Raw = SA × factor takes you back.
+- **Never mix SA and NSA** in one growth rate, and remember calendar effects (leap years, trading days, Easter, Thanksgiving) and that recent factors get revised.
+- **Year over year** is a free, model-free seasonal fix, but it lags turning points, echoes last year's shocks (base effects) and keeps calendar differences.
 - Judge a month against its seasonal norm, against the same month last year, or with SA data. **Never by the raw month-to-month change.**
 
 <InstructorKit
-  minutes={60}
-  data={['RSXFSN', 'RSAFS', 'RSFSDP', 'MRTSSM4541USN', 'MRTSSM4541USS', 'MRTSSM448USN', 'RSCCAS', 'HOUSTNSA', 'HOUST', 'TOTALNSA', 'TOTALSA']}
+  data={['RSXFSN', 'RSAFS', 'RSFSDP', 'MRTSSM4541USN', 'MRTSSM4541USS', 'MRTSSM448USN', 'RSCCAS', 'HOUSTNSA', 'HOUST', 'IPG2211A2N', 'TOTALNSA', 'TOTALSA']}
+  sessions={[
+    { title: 'Pulling a series apart, on the right scale', plan: [
+      '5 min · Warm-up Predict: "retail sales jumped 11.8% in December". How much was real? Collect votes, do not reveal.',
+      '10 min · Scroll story: trend, seasonal, remainder. Ask what business question each layer answers.',
+      '10 min · Lab: seasonal plots and `decompose()`. Read the December figure (about $62bn) and the three weaknesses of classical decomposition.',
+      '15 min · Additive or multiplicative: e-commerce toggle, then the swing explorer on all three series. Predict on housing starts first.',
+      '20 min · Activity: the swing audit (below). Teams measure the swing in units and in percent and give a verdict.',
+      '10 min · STL explorer: drag `s.window`, then `t.window`; Predict on the trend window; show the trend-growth table.',
+      '5 min · Wrap-up: reveal the warm-up answer (+2.1% STL, +0.2% Census). Assign the STL lab and the e-commerce exercise as homework.',
+    ] },
+    { title: 'Reading seasonally adjusted numbers like an analyst', plan: [
+      '5 min · Warm-up: a colleague reports January 2026 sales fell 11.4%. What did they do wrong? (SA divided by NSA.)',
+      '10 min · How official numbers are made; the seasonal-factor explorer. Students say three factors out loud, in percent and dollars.',
+      '5 min · Leap-year Predict and the calendar-effects callout.',
+      '25 min · Activity: the seasonal adjustment desk (below).',
+      '15 min · Was it a good month? Month verdict, then the year-over-year explorer; Predict on April 2021 base effects.',
+      '12 min · Your turn: the December 2025 adjustment and the seasonal-factor briefing exercise, in pairs.',
+      '3 min · Wrap-up with the chapter checklist.',
+    ] },
+  ]}
   objectives={[
     'Read a time plot, a seasonal plot and a seasonal subseries plot, and say what each one reveals.',
-    'Decide between additive and multiplicative seasonality, and explain why taking logs turns one into the other.',
-    'Decompose a monthly series with `decompose()` and `stl()`, and explain the role of `s.window`, `t.window` and `robust`.',
-    'Build a seasonally adjusted series and compare it with an official X-13ARIMA-SEATS series.',
+    'Decide between additive and multiplicative seasonality by checking whether the seasonal swing grows with the level, and explain why taking logs turns one into the other.',
+    'Decompose a monthly series with `decompose()` and `stl()`, and explain how `s.window`, `t.window` and `robust` change the seasonal pattern and the trend.',
+    'Read a seasonal factor in words ("December is 12% above a typical month"), convert between raw and seasonally adjusted values, and build an SA series to compare with X-13ARIMA-SEATS.',
+    'Avoid mixing SA and NSA data, and recognize calendar effects (leap years, trading days, moving holidays) in seasonal factors.',
     'Compute and interpret the seasonal strength $F_S$, including how outliers distort it.',
-    'Judge whether a month was good or bad using SA data, year-over-year growth and a seasonal norm.'
+    'Judge whether a month was good or bad using SA data, year-over-year growth and a seasonal norm, and explain base effects and the lag of year-over-year growth.'
   ]}
   discussion={[
     'A news story says "retail sales jumped 12% in December". What two questions would you ask before repeating it?',
-    'Year-over-year growth needs no model. Why do economists still prefer seasonally adjusted month-over-month changes for spotting turning points?',
-    'Should a seasonal adjustment method treat April 2020 as an outlier or as a new seasonal pattern? What would go wrong in 2021 under each choice?'
+    'Year-over-year growth needs no model. Why do economists still prefer seasonally adjusted month-over-month changes for spotting turning points? When would you still use year over year?',
+    'Should a seasonal adjustment method treat April 2020 as an outlier or as a new seasonal pattern? What would go wrong in 2021 under each choice?',
+    'Two analysts quote trend growth of 6% and 3% for the same retail series. Both used STL. How can both be "right", and what should each have reported alongside the number?'
   ]}
   misconceptions={[
     '“Seasonally adjusted data have been smoothed.” Adjustment removes only the seasonal (and calendar) component; the remainder, with all its noise, stays in.',
     '“A big December increase means strong sales.” Between 2019 and 2025, December rose about 8–14% over November every year (NSA), news or no news.',
+    '“A seasonal factor of 1.12 means December grew 12%.” It means December sits 12% above a typical month at the same underlying level; it says nothing about growth from November.',
+    '“Logs are just a rescaling.” On the log scale a constant seasonal height means a constant percentage effect, which is what makes multiplicative seasonality additive.',
+    '“Year-over-year growth tells you what happened this month.” It is the last twelve monthly moves compounded, so it lags turning points and echoes last year’s shocks.',
     '“A larger seasonal strength always means a more predictable business.” $F_S$ falls when a single shock inflates the remainder, even if the seasonal pattern is unchanged.',
     '“STL and X-13 should give identical results.” They are different methods; X-13 also adjusts for trading days and holidays and extends the series with ARIMA forecasts.'
   ]}
 >
 
-**Seasonal adjustment desk (25 minutes).** Split the class into four teams. Each team gets one NSA series and its official SA counterpart, and takes the role of a statistical agency.
+**Session 1 activity: the swing audit (20 minutes).** Teams of three each get one NSA series and decide whether its seasonality is additive or multiplicative, with numbers.
+
+```r
+x  <- fred("HOUSTNSA", start = 2000, end = c(2019, 12))     # change the ID for your team
+tr <- decompose(x)$trend                                    # centered 12-month moving average
+yr <- floor(time(x))                                        # calendar year of each month
+units <- tapply(x - tr, yr, function(v) diff(range(v)))     # yearly swing in the data's units
+pct   <- tapply(100 * (x / tr - 1), yr, function(v) diff(range(v)))   # yearly swing in % of trend
+round(cbind(units, pct), 1)                                 # 2000 and 2019 are NA (no trend at the ends)
+```
+
+1. **Predict (3 min).** From the time plot alone: does the swing grow with the level?
+2. **Measure (10 min).** Run the code. Average the swing in units and in percent for 2001–03 and for 2016–18, and compute each ratio (later ÷ earlier). Do the same for the trend level (`tapply(tr, yr, mean)`).
+3. **Verdict (7 min).** Whichever swing changed less is the right scale. Each team gives its verdict in one sentence.
+
+*Expected results* (2001–03 → 2016–18, ratio later ÷ earlier):
+
+| Team | Series | Trend level | Swing in units | Swing in % | Verdict |
+|---|---|---|---|---|---|
+| E-commerce | `MRTSSM4541USN` | ×4.20 | ×4.52 | ×1.09 | Multiplicative |
+| Housing | `HOUSTNSA` | ×0.71 | ×0.75 | ×1.04 | Multiplicative (it works on the way down too) |
+| Total retail | `RSXFSN` | ×1.61 | ×1.47 | ×0.91 | Multiplicative |
+| Utilities | `IPG2211A2N` | ×1.10 | ×1.31 | ×1.20 | Level barely moved: either choice works |
+| Clothing | `MRTSSM448USN` | ×1.51 | ×1.24 | ×0.82 | In between: December's share shrank, so no fixed pattern fits; use logs and let STL's seasonal pattern drift |
+
+Use clothing to discuss why real data rarely sit exactly in one box, and why STL's moving seasonal pattern exists.
+
+**Session 2 activity: the seasonal adjustment desk (25 minutes).** Split the class into four teams. Each team gets one NSA series and its official SA counterpart, and takes the role of a statistical agency.
 
 | Team | NSA series | Official SA series to compare with |
 |---|---|---|
@@ -329,6 +551,9 @@ Use the disagreements in the last column to discuss end-point uncertainty and ca
 8. U.S. Energy Information Administration. Gasoline explained: gasoline price fluctuations. [eia.gov](https://www.eia.gov/energyexplained/gasoline/price-fluctuations.php)
 9. Internal Revenue Service (2008). Economic stimulus payments on the way; some people will see direct deposit payments today (April 28, 2008). [irs.gov](https://www.irs.gov/pub/irs-news/ir-08-066.pdf)
 10. Internal Revenue Service (2021). IR-2021-54: IRS begins delivering third round of Economic Impact Payments (March 12, 2021). [irs.gov](https://www.irs.gov/newsroom/irs-begins-delivering-third-round-of-economic-impact-payments-to-americans)
+11. U.S. Bureau of Labor Statistics (2020). The challenges of seasonal adjustment during the COVID-19 pandemic. Commissioner's Corner, December 21, 2020. [bls.gov](https://www.bls.gov/blog/2020/the-challenges-of-seasonal-adjustment-during-the-covid-19-pandemic.htm)
+12. Federal Reserve Bank of Dallas. DataBasics: Seasonally adjusting data. [dallasfed.org](https://www.dallasfed.org/research/basics/seasonally)
+13. Nau, R. Statistical forecasting: notes on regression and time series analysis, "Seasonal adjustment" (seasonal indices and the ratio-to-moving-average method). Duke University. [people.duke.edu/~rnau](https://people.duke.edu/~rnau/411outbd.htm)
 
 </div>
 

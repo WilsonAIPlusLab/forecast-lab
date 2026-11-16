@@ -45,3 +45,17 @@ viz_compare(history = window(train, start = 2018), actual = test,
             title = "A forest trained on levels cannot forecast above its training maximum")
 mae <- function(f) mean(abs(test - f))        # mean absolute error, $ millions
 round(c(levels = mae(fc_level), growth = mae(fc_growth)))
+
+#| **Two more ways out: differences and detrending.** Any target that stays inside its training range works. *Differences*: forecast the dollar change, then add the changes up from the last level. *Detrending*: fit a straight line to log sales (a constant growth trend), let the forest forecast the gap from that line, then add the line back and undo the log with `exp()`. All three fixes land far below the level forest's error.
+dd <- diff(train)                             # monthly change, $ millions
+set.seed(11)
+rf_diff <- randomForest(y ~ ., data = lag_table(dd), ntree = 200)
+fc_diff <- as.numeric(tail(train, 1)) + cumsum(recursive(rf_diff, dd, h))   # last level + running total of changes
+tt  <- seq_along(train)                       # time index 1, 2, ..., n
+trend <- lm(log(as.numeric(train)) ~ tt)      # log-linear trend: log sales = a + b * t
+gap <- residuals(trend)                       # how far each month sits above (+) or below (-) the trend line
+set.seed(11)
+rf_gap <- randomForest(y ~ ., data = lag_table(gap), ntree = 200)
+line_ahead <- predict(trend, data.frame(tt = length(train) + 1:h))   # the trend line extended h months
+fc_detr <- exp(line_ahead + recursive(rf_gap, gap, h))   # trend + forecast gap, back from logs to dollars
+round(c(levels = mae(fc_level), growth = mae(fc_growth), differences = mae(fc_diff), detrended = mae(fc_detr)))

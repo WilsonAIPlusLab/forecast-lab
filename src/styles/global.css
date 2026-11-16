@@ -67,6 +67,7 @@
   --c-actual: #d97706;
   --c-fitted: #0891b2;
   --accent-text: #5b3fe0;
+  --danger: #c62828; --good: #15803d; --warm: #b45309;   /* darker status colours so text stays readable on white */
   --c-s1: #4477aa; --c-s2: #d1495b; --c-s3: #228833; --c-s4: #a8971f; --c-s5: #2a9dc4; --c-s6: #aa3377; --c-grey: #8a93a8;
   --shadow: 0 1px 2px rgba(20,25,50,.06), 0 12px 40px -18px rgba(20,25,50,.25);
   --glow: 0 0 0 1px rgba(98,70,234,.3), 0 10px 30px -12px rgba(98,70,234,.35);

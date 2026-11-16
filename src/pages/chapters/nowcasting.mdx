@@ -1,7 +1,11 @@
 ---
 layout: ../../layouts/Chapter.astro
 slug: nowcasting
-minutes: 55
+minutes: 130
+sessions:
+  - title: "Forecasting the present: mixed frequencies, the ragged edge and reading a nowcast"
+  - title: "Many series: factors from big panels and forecasts that add up"
+    starts: many-series-one-factor
 build:
   - A live nowcast of this month's payroll change from weekly jobless claims, with an honest real-time evaluation
   - A one-line "economic activity" index extracted from 20 indicators with principal components
@@ -14,6 +18,22 @@ import KeyIdea from '../../components/KeyIdea.astro';
 import Predict from '../../components/Predict.svelte';
 import Term from '../../components/Term.astro';
 import InstructorKit from '../../components/InstructorKit.astro';
+import SessionBreak from '../../components/SessionBreak.astro';
+import FlowStock from '../../components/ch13/FlowStock.svelte';
+import NewsUpdate from '../../components/ch13/NewsUpdate.svelte';
+import PanelPrep from '../../components/ch13/PanelPrep.svelte';
+import exMonR from '../../labs/ch13/ex_monthly.R?raw';
+import exMonSolR from '../../labs/ch13/ex_monthly_solution.R?raw';
+import exMonCheckR from '../../labs/ch13/ex_monthly_check.R?raw';
+import exMonPy from '../../labs/ch13/ex_monthly.py?raw';
+import exMonSolPy from '../../labs/ch13/ex_monthly_solution.py?raw';
+import exMonCheckPy from '../../labs/ch13/ex_monthly_check.py?raw';
+import exFacR from '../../labs/ch13/ex_factor.R?raw';
+import exFacSolR from '../../labs/ch13/ex_factor_solution.R?raw';
+import exFacCheckR from '../../labs/ch13/ex_factor_check.R?raw';
+import exFacPy from '../../labs/ch13/ex_factor.py?raw';
+import exFacSolPy from '../../labs/ch13/ex_factor_solution.py?raw';
+import exFacCheckPy from '../../labs/ch13/ex_factor_check.py?raw';
 import RaggedEdge from '../../components/ch13/RaggedEdge.svelte';
 import FactorWall from '../../components/ch13/FactorWall.svelte';
 import HierarchyMachine from '../../components/ch13/HierarchyMachine.svelte';
@@ -41,6 +61,8 @@ Forecasting the present sounds like a contradiction. It isn't. Official statisti
 
 <KeyIdea>A nowcast is only as good as what it knows <em>on the day you make it</em>. Track exactly which data exist on that date, and judge the model only with information that was really available.</KeyIdea>
 
+<SessionBreak n={1} title="Forecasting the present: mixed frequencies, the ragged edge and reading a nowcast" goals={['Read a release calendar and explain the **ragged edge** and publication lags in plain words', 'Turn weekly or daily data into a monthly number with the right rule (**flow, stock or price**)', 'Build a bridge nowcast and read each revision as **coefficient × surprise**', 'Judge a nowcast honestly: same vintage, a benchmark, and the turning points']} />
+
 ## Three kinds of "big"
 
 "Big data" in forecasting usually means one of three problems. Each needs a different tool.
@@ -64,9 +86,68 @@ Every statistic has a release schedule. These are the ones that matter most for 
 
 Line them up on any given day, and the newest observation of each series falls in a different month. Claims are current to last Saturday. Payrolls are current to last month. GDP is current to last quarter. This uneven end of the dataset is called the <Term def="The uneven end of a dataset at any moment: because series are published on different schedules, the latest available observation falls in a different period for each one.">ragged edge</Term>, and every nowcasting model must handle it.
 
+In plain words, each series has a <Term def="The time between the end of the period a statistic describes and the day it is published. Claims: about 5 days. Payrolls: about 1 week. Retail sales: about 2 weeks. GDP: about 4 weeks after the quarter ends.">publication lag</Term>: the wait between the end of the period and the day the number comes out. Claims for the week ending Saturday, November 7, came out five days later. October's payrolls came out on Friday, November 6, about a week after October ended. GDP's advance estimate usually arrives about four weeks after the quarter ends. Picture a spreadsheet with one column per series. Every column stops at a different row. The ragged edge is that jagged bottom of the sheet, and a nowcast is your best guess for the empty cells.
+
 <Callout type="pitfall" title="When the calendar breaks: the 2025 shutdown">
 The federal government shut down from October 1 to November 12, 2025, for 43 days. During a lapse in funding, BLS doesn't collect data. It never published an October 2025 CPI, and the October unemployment rate was never measured.<sup>[5](#refs)</sup> You can see the hole in the bundled data: `UNRATE.csv` and `CPIAUCSL.csv` have a blank for 2025-10. The national claims report stopped too, but the Labor Department kept posting state-level claims files. Private economists added them up each week, and those estimates became one of the few timely signals.<sup>[24](#refs)</sup> When official data stop, nowcasts become more valuable.
 </Callout>
+
+## Mixed frequencies: one number per month
+
+Before any nowcast, you must put a weekly or daily series on the same footing as a monthly target. [Chapter 1](/chapters/time-series-data/#changing-frequency-sum-average-or-last-value) gave the general rule: it depends on what the series measures. Nowcasting adds a twist, because you work month by month, and months are not all the same length.
+
+| What the series is | Example in this chapter | Sensible monthly number | Avoid |
+|---|---|---|---|
+| **Flow**: an amount *during* each week | Initial claims (`ICSA`): new filings that week | **Average week** (a rate). A monthly total only if you adjust for the number of weeks | A plain sum compared month to month |
+| **Stock**: a level *at a point* in time | Continuing claims (`CCSA`): people on benefits that week | **End of month**, or the monthly average | Any sum: it counts the same people again every week |
+| **Price or rate** | Gasoline price, oil price, interest rates | **Average** (what was paid during the month) or **end of month** (where it closed) | Any sum |
+
+Here is the twist. The bridge lab assigns each week to the month that contains its week-ending Saturday. A month then holds four or five weeks. October 2026 has five Saturdays (the 3rd through the 31st). September has four.
+
+<Predict client:load
+  question="Average weekly initial claims **fell** from 200,500 in September 2026 to 195,800 in October. Suppose you **sum** the weekly numbers instead. How does October compare with September?"
+  options={['Down about 2%, the same story', 'About the same', 'Up about 22%', 'Down about 20%']}
+  answer={2}
+  explain="The sums are 802,000 for September and 979,000 for October: **up 22%**, although every single week in October was calm. October simply has five weeks and September four. Over 2010–2019, the sum jumped by about **22%** on average whenever a month had one more week than the month before; the average barely moved (−0.5%). A model fed the sum would read a layoff wave into the calendar."
+/>
+
+<div class="breakout">
+<FlowStock client:load />
+</div>
+
+Try the three summaries on each series:
+
+- **Initial claims, Sum.** The rose bars in the lower panel are the months with an extra week. They stick out every time. In calm years (2010–2019) the summed series swings by about 19% a month (standard deviation), against 3.7% for the average.
+- **Continuing claims, Sum.** The same sawtooth, but now the number has no meaning at all: the same person, on benefits all month, is counted four or five times.
+- **Gasoline or oil, End of month vs Average.** Both are sensible. The end-of-month price is jumpier: it is one print, not an average of four or twenty. Pick the one that matches your target. Consumer spending responds to the average price paid; a trader marking a position cares about the close.
+
+<Callout type="empirical" title="Decide flow, stock or price before you aggregate">
+Ask one question of every fast series: *is this an amount during the period, a level at a moment, or a price?* Then:
+<ul>
+<li><strong>Flows</strong> (claims, sales, card spending): use the average per week or per day. If you need a monthly total, divide by the number of weeks or days and multiply by a standard month, or compare each month only with the same month a year earlier.</li>
+<li><strong>Stocks</strong> (continuing claims, inventories, employment): take the end-of-month value, or the average. Never sum.</li>
+<li><strong>Prices and rates</strong> (gas, oil, yields, spreads): average, unless your question is "where did the month close?"</li>
+</ul>
+FRED's own frequency tool offers exactly these three choices (average, sum, end of period) and uses the average by default.<sup>[25](#refs)</sup> Whatever you choose, write it in the chart note.
+</Callout>
+
+<Callout type="empirical" title="Line up the dates before you merge">
+Most nowcasting bugs are date bugs, not model bugs.
+<ul>
+<li><strong>Know what a date means.</strong> A claims date is the <em>last</em> day of a week (a Saturday). The week ending Saturday, August 1, 2026, is six days of July and one of August, yet it counts as an August week. A FRED monthly date such as 2026-10-01 means "the whole of October", not October 1.</li>
+<li><strong>Know the reference period.</strong> The payroll survey counts jobs in the pay period that includes the <strong>12th</strong>. That is why claims from late March 2020 barely showed up in the March jobs report (see the Predict below).</li>
+<li><strong>Count your weeks.</strong> After aggregating, tabulate how many weeks each month got (the bridge lab's <code>weeks</code> column). A newest month with one week is a <em>partial</em> month, not a calm one.</li>
+<li><strong>Going from months to quarters?</strong> GDP is a flow at an annual rate, so a quarter is the <em>average</em> of its three months, as [Chapter 1](/chapters/time-series-data/#changing-frequency-sum-average-or-last-value) explains for SAAR data.</li>
+</ul>
+</Callout>
+
+**You are the analyst.** Your manager wants monthly versions of both claims series, to sit next to the jobs report. Choose the right rule for each.
+
+<div class="breakout">
+<CodeLab client:load id="ch13-ex-monthly" exercise title="Exercise: a flow and a stock, one number per month" r={exMonR} solution={exMonSolR} check={exMonCheckR} py={exMonPy} solutionPy={exMonSolPy} checkPy={exMonCheckPy}
+  goal="Turn weekly initial claims (a flow) into a monthly average and weekly continuing claims (a stock) into an end-of-month value, then see why the monthly sum misleads."
+  hints={['Initial claims are new filings each week. Which summary gives "a typical week this month" whether the month has four or five weeks?', 'Continuing claims are a head count at a moment. The file already defines a helper that keeps the last week of a group (Python: the resample method named after the final element).', 'R: `FUN = mean` and `FUN = last_value`. Python: `.mean()` and `.last()`.']} />
+</div>
 
 ## Nowcasting with a bridge equation
 
@@ -119,11 +200,38 @@ Now build it yourself. The lab aggregates the weekly file to months, fits the br
 
 The verdict in numbers: over 2023–2026 the bridge model's mean absolute miss is about 95,000 jobs, the same as the AR benchmark's. Over 2008–2009 it is 132,000 against 153,000, about 14% better. The model nowcasts November 2026 at **+140,000** jobs, with a 90% prediction interval from −71,000 to +350,000. (The explorable shows +144,000 because it uses a regression built for exactly one week of claims.)
 
+### Reading a nowcast as the data arrive
+
+A nowcast is not one number. It is a sequence of numbers, one after each release, and professionals read the **changes**. Every change has two parts. The **news** is the part of the new print you did not expect. The **coefficient** says how many jobs each unit of news is worth. Read the bridge coefficient in plain words first: with two weeks of claims known, each extra 1,000 claims a week in the month's average goes with about **2,400 fewer jobs** that month, holding last month's payroll change fixed.
+
+<Predict client:load
+  question="One week of November claims is in (200,000). Next Thursday's print comes in at **220,000**: 20,000 above last week. Roughly how much should the payroll nowcast fall?"
+  options={['About 2.4 million jobs', 'About 240,000 jobs', 'About 24,000 jobs', 'About 2,400 jobs']}
+  answer={2}
+  explain="About **24,000**. With two weeks known, a 20,000 surprise in one week lifts the month's *average* by only 10,000. Times about 2.4 jobs per claim, that is −24,000 jobs: from +143,000 (no surprise) to +119,000. The 90% band is about ±214,000, so one ordinary surprise barely matters. Drag the slider below to see what a 100,000 spike does."
+/>
+
+<div class="breakout">
+<NewsUpdate client:load />
+</div>
+
+Over the last three years, weekly claims moved by about 9,700 from one week to the next (standard deviation). In this model that is worth roughly ±12,000 jobs: a rounding error next to the band. A print of 300,000, a spike of 100,000, would cut the nowcast to about +23,000 jobs. That is the "turning point" behavior from above, seen one Thursday at a time.
+
+<Callout type="empirical" title="Read every revision as coefficient × surprise">
+When a nowcast moves, write the move as a sentence with units: "Claims came in 20,000 above last week, which raised the month's average by 10,000; at about 2.4 jobs per claim, the nowcast fell by 24,000." Three checks follow from that sentence:
+<ul>
+<li><strong>Is the size plausible?</strong> If a modest surprise moves the nowcast by hundreds of thousands, look for a units error (claims in thousands vs ones) or a partial month treated as a full one.</li>
+<li><strong>Is the sign right?</strong> More claims should lower the jobs nowcast. A wrong sign usually means a mis-merged month.</li>
+<li><strong>Is it news?</strong> Only the unexpected part should move the nowcast. GDPNow and the New York Fed publish exactly this "news" breakdown after each update.<sup>[26](#refs)</sup></li>
+</ul>
+Here "expected" simply means "the same as last week". Professional systems use the model's own forecast of each indicator, but the logic is the same.
+</Callout>
+
 <Callout type="pitfall" title="Real-time data are not today's data">
 Two shortcuts in this lab make the evaluation look better than real life:
 <ul>
 <li>We use <strong>today's revised</strong> payrolls and claims. On the day of a nowcast, you would have had first prints and older seasonal factors.</li>
-<li>Researchers who care about this use <em>real-time vintages</em>: what was published on each date. The St. Louis Fed's ALFRED database stores them ([Chapter 1](/chapters/time-series-data/)).</li>
+<li>Researchers who care about this use <em>real-time vintages</em>: what was published on each date. The St. Louis Fed's ALFRED database stores them ([Chapter 1](/chapters/time-series-data/#data-get-revised-vintages-and-alfred)).</li>
 </ul>
 A model that looks great on revised data can disappoint in real time. Say which kind of data you used.
 </Callout>
@@ -157,9 +265,22 @@ Two quarters tell the whole story. In **2015 Q1**, GDPNow's final nowcast was 0.
   goal="Score GDPNow's final nowcasts against revised GDP, compare with a naive benchmark, and explain why the answer depends on which vintage you score against." />
 </div>
 
+<Callout type="empirical" title="How to judge a nowcast: four questions">
+Before you call a nowcast good or bad, answer these, with the lab's numbers as the example:
+<ol>
+<li><strong>Which vintage is the "truth"?</strong> A <em>vintage</em> is the dataset as it looked on one date. GDPNow aims at BEA's advance estimate. Scored against it, the Atlanta Fed reports an average miss of 0.76 points for 2011 Q3 to 2026 Q3. Scored against today's revised data, the lab finds 1.37 points over the same 61 quarters. Same nowcasts, different target. Say which one you used.</li>
+<li><strong>Compared with what?</strong> An error of 1.3 points means little alone. Leaving out the two COVID quarters (2020 Q2–Q3), GDPNow misses by 1.31 points and the naive rule "growth equals last quarter's" by 2.42 points, so GDPNow cuts the typical miss almost in half.</li>
+<li><strong>Is it biased?</strong> The mean miss is +0.21 points: growth came in slightly above the nowcast on average. Small next to the typical miss, but worth tracking.</li>
+<li><strong>Where are the big misses?</strong> List them and explain each one (COVID, the 2025 shutdown, revisions). A nowcast that misses at turning points is less useful than one that misses in calm quarters, even with the same average error.</li>
+</ol>
+Use the same four questions on your own bridge model: it was judged against an AR benchmark, in calm years and in a recession, on revised data (a caveat you should state).
+</Callout>
+
 <Callout type="business" title="How professionals use a nowcast">
 Nobody treats a nowcast as the truth. Traders use it to judge whether the official number will surprise. Policymakers use it to see the economy weeks earlier. Analysts read the <em>changes</em>: which release moved the nowcast, and by how much. GDPNow publishes this "news" decomposition after every update. A nowcast is a tool for being less surprised, not for being right to the decimal.
 </Callout>
+
+<SessionBreak n={2} title="Many series: factors from big panels and forecasts that add up" goals={['Prepare a panel for PCA: **growth rates first, then z-scores**, and say why', 'Read **loadings** and **% of variance explained** in plain words', 'Test a factor forecast honestly against an AR benchmark', 'Make forecasts for a hierarchy **add up**, and pick a method by level']} />
 
 ## Many series, one factor
 
@@ -185,6 +306,50 @@ $$
 The weights $w_1$ are the **loadings**, and $f_1$ is the first factor. The sign of $w_1$ is arbitrary, so we flip it to make payrolls load positively. Stock and Watson showed that with many series, the principal components consistently estimate the true factors, even when each series is noisy.<sup>[14](#refs)</sup>
 </Callout>
 
+### Prepare the panel: transform, then standardize
+
+The wall looked clean because two preparation steps happened before PCA. Every series was turned into a monthly growth rate or change, and every series was **standardized**: converted to a <Term def="A value expressed as standard deviations from the series' own mean: z = (x − mean) / sd. A z-score of −2 means 'two standard deviations below normal for this series'.">z-score</Term>, so 0 means "a normal month for this series" and −2 means "two standard deviations below normal". Skip either step and PCA quietly answers a different question.<sup>[27](#refs)</sup>
+
+<Predict client:load
+  question="Run PCA on the 20 growth rates **without** standardizing them. Which series do you expect to get the biggest weight (in absolute size) in component 1?"
+  options={['Payroll jobs, the broadest measure of the economy', 'Initial jobless claims', 'Consumer spending', 'Financial conditions (NFCI)']}
+  answer={1}
+  explain="**Initial claims**, with a loading of about −0.57, followed by housing starts (+0.47) and clothing sales (+0.36). Claims swing by about 14% in a typical month; payrolls by 0.8%. In raw units, PCA chases the biggest swings, so payrolls get a weight of just 0.02. Standardizing gives every series the same yardstick."
+/>
+
+<div class="breakout">
+<PanelPrep client:load />
+</div>
+
+| Preparation | PC 1 explains | What the factor turns out to be |
+|---|---|---|
+| **Growth rates, standardized** (the lab) | 36% | A business-cycle factor: 15 series load positively; claims, credit spreads and financial stress load negatively; it plunges in every recession |
+| Growth rates, raw units | 44% | Mostly claims, housing starts and clothing sales, the series with the largest swings. Payrolls: 0.02 |
+| Log levels, standardized | 55% | Mostly a time trend. Most series that grew since 1993 load about +0.29 or +0.30 |
+| Log levels, raw units | 41% | A mix of trend and units |
+
+The highest "% explained" belongs to a useless factor. A big number is not a good number.
+
+<Callout type="empirical" title="Make every series stationary before you combine them">
+Trending series are all correlated with each other in levels, simply because they all grow. Real income and restaurant sales both rose for 30 years, so in levels PCA "finds" that shared trend and calls it 55% of the variance. Before PCA, a diffusion index or any regression on many series:
+<ul>
+<li>Turn levels that grow (jobs, output, sales, prices) into <strong>growth rates</strong>: 100 × the change in the log, which is roughly the % change. See [Chapter 1](/chapters/time-series-data/#transformations-every-analyst-uses) for the transformation and [Chapter 7](/chapters/arima/#the-cure-differencing) for why differencing removes a wandering (stochastic) trend.</li>
+<li>Turn rates, spreads and indexes (hours, credit spreads, the NFCI) into <strong>changes</strong>.</li>
+<li>Use <strong>seasonally adjusted</strong> data, or the factor may just be the calendar.</li>
+<li>Then <strong>standardize</strong> and <strong>clip extreme months</strong> (±4 standard deviations here), so no single series or single month owns the factor.</li>
+</ul>
+</Callout>
+
+<Callout type="empirical" title="Read loadings and “% of variance” in plain words">
+<ul>
+<li><strong>"% of variance explained."</strong> "Component 1 explains 36%" means: one weighted average of the 20 standardized series captures 36% of all their month-to-month movement. That is as much as about 7 of the 20 series (0.36 × 20) would carry on their own. The next component adds only 11%.</li>
+<li><strong>Loadings.</strong> A loading is a weight. Retail sales excluding autos (+0.30) and vehicle sales (+0.30) carry the most weight; payrolls carry +0.14. A <em>negative</em> loading (initial claims −0.18, credit spreads −0.20) means the series rises when the factor falls, which is exactly what claims and spreads do in a downturn.</li>
+<li><strong>The factor's units.</strong> The factor is in "standard units", not percent or jobs. Read it relative to zero: 0 is an average month, and the 3-month average below −0.7 has been a recession warning for the Chicago Fed's 85-series version.</li>
+<li><strong>The sign is arbitrary.</strong> PCA can return the factor upside down. Flip it so that payrolls load positively, then "up" means "stronger economy".</li>
+</ul>
+A loading is not a causal effect. It only says how strongly a series moves with the common factor.
+</Callout>
+
 <div class="breakout">
 <CodeLab client:load id="ch13-factor" title="Extract an activity factor from 20 indicators" r={factorR} py={factorPy} pyPackages={['scikit-learn']}
   goal="Build a 20-series panel with one function and lapply, run prcomp, read the scree plot and loadings, and chart the factor against recessions." />
@@ -194,13 +359,27 @@ The weights $w_1$ are the **loadings**, and $f_1$ is the first factor. The sign 
 The Chicago Fed National Activity Index (CFNAI) is this idea at scale: a weighted average of <strong>85</strong> monthly indicators, scaled to mean 0 and standard deviation 1. The Chicago Fed watches its 3-month average (CFNAI-MA3). After an expansion, a reading below −0.70 has historically signaled a rising chance of recession.<sup>[15](#refs)</sup> Our 20-series version is a home-made cousin.
 </Callout>
 
+**You are the analyst.** Your manager wants a single "consumer activity" index from five spending series for the monthly board pack. Prepare the panel correctly, run PCA, and report how much of the movement one index captures.
+
+<div class="breakout">
+<CodeLab client:load id="ch13-ex-factor" exercise title="Exercise: a five-series spending index" r={exFacR} solution={exFacSolR} check={exFacCheckR} py={exFacPy} solutionPy={exFacSolPy} checkPy={exFacCheckPy}
+  goal="Turn five spending series into growth rates, standardize them, run PCA, and read the share of variance and the loadings of component 1."
+  hints={['Step 1 is a growth rate: 100 times the month-to-month change of the log. Which function takes month-to-month changes?', 'Step 2 puts every column in standard-deviation units. R has a one-word base function for it; in pandas you divide by each column’s standard deviation.', 'R: `diff(...)` and `scale(panel)`. Python: `.diff()` and `.std()`.']} />
+</div>
+
+Read your result as a sentence for the board pack: *"One index captures about 46.5% of the month-to-month movement in five spending series. All five move with it; restaurants the least."* Then read the check message: it shows what the same code reports if you skip either preparation step.
+
 ## Forecasting with factors: the diffusion index
 
-A factor is useful for more than charts. Stock and Watson's <Term def="A forecasting regression that adds a few estimated factors from a large panel to a small benchmark model, such as an autoregression. Named for the way it 'diffuses' information from many series into a few predictors.">diffusion index</Term> forecast adds the first few factors to a benchmark autoregression:<sup>[16](#refs)</sup>
+A factor is useful for more than charts. Stock and Watson's <Term def="A forecasting regression that adds a few estimated factors from a large panel to a small benchmark model, such as an autoregression. Named for the way it 'diffuses' information from many series into a few predictors.">diffusion index</Term> forecast adds the first few factors to a benchmark autoregression.<sup>[16](#refs)</sup> In words: next month's growth = a constant + a share of this month's and last month's growth (the AR benchmark) + a weight on each of the first two factors this month + a surprise. If the factors carry no extra information, their weights are near zero and the forecast is just the AR.
 
+<Callout type="math" title="The diffusion-index regression">
 $$
-y_{t+1} = \alpha + \phi_1 y_t + \phi_2 y_{t-1} + \gamma_1 \hat f_{1t} + \gamma_2 \hat f_{2t} + \varepsilon_{t+1}.
+y_{t+1} = \alpha + \phi_1 y_t + \phi_2 y_{t-1} + \gamma_1 \hat f_{1t} + \gamma_2 \hat f_{2t} + \varepsilon_{t+1},
 $$
+
+where $\hat f_{1t}$ and $\hat f_{2t}$ are the first two principal components of the panel, estimated with data through month $t$ only.
+</Callout>
 
 The honest test re-estimates the factors **at every forecast origin**, using only data available then. The lab does exactly that for next month's industrial production growth, with 179 forecast origins from January 2005 to November 2019 (so the forecasts cover February 2005 to December 2019).
 
@@ -210,6 +389,8 @@ The honest test re-estimates the factors **at every forecast origin**, using onl
 </div>
 
 The factors cut the RMSE by about **5%** over 2005–2019 (0.667 vs 0.704 percentage points) and by **15%** during the 2008–09 recession. The Diebold–Mariano p-value is **0.18**, so this sample alone can't rule out luck. That is a typical result. Big panels often help a little, and they help most when the economy turns.
+
+In plain words: industrial production growth is in percent per month, so the typical miss next month is about two-thirds of a percentage point with or without factors. The factors shave off about 0.04 points. That is worth having, but it is not a different forecast.
 
 <Predict client:load kind="check"
   question="A colleague adds 200 more indicators to the panel and reports that the in-sample R² of the diffusion-index regression rose from 0.20 to 0.35. What should you ask first?"
@@ -223,6 +404,8 @@ The factors cut the RMSE by about **5%** over 2005–2019 (0.667 vs 0.704 percen
 The second "big" problem is not many predictors but many **targets**. A retailer forecasts every product in every store. The sum of those forecasts should equal the company forecast that finance uses, or two departments will plan for two different futures. Series that sum to totals form a <Term def="A collection of time series where some are sums of others, such as stores within regions within a country, or categories within total sales.">hierarchy</Term>. Forecasts that respect the sums are called <Term def="Forecasts in which every aggregate equals the sum of its components, just as the actual data do.">coherent</Term>.
 
 U.S. retail sales form a real hierarchy. Total retail and food services (`RSAFS`) = motor vehicles & parts (`RSMVPD`) + everything else (`RSFSXMV`). Everything else splits into nine published categories plus "Other" (grocery, sporting goods and miscellaneous stores, computed as the remainder).
+
+**Reconciliation in plain words.** Forecast each of the 13 series on its own and the numbers will not add up. In the lab, the total's own forecast for October 2025 is about \$0.9 billion *below* the sum of its 11 parts, and the gap grows to \$3.0 billion by December. Nobody made a mistake; each model just learned from its own series. Reconciliation is the bookkeeping step that fixes this: nudge the forecasts until every total equals the sum of its parts, the way the real data do. The methods differ only in *who gets nudged*. Bottom-up trusts the parts and rewrites the total. Top-down trusts the total and splits it. OLS, WLS and MinT move every forecast a little; WLS and MinT move the noisiest ones most.<sup>[23](#refs)</sup>
 
 <div class="breakout">
 <HierarchyMachine client:load />
@@ -251,6 +434,15 @@ With $W = I$ this is OLS. With $W = \text{diag}(S\mathbf 1)$ (each node weighted
 <CodeLab client:load id="ch13-hier" title="Forecast a hierarchy: bottom-up, top-down and reconciliation" r={hierR} py={hierPy} packages={['forecast']} pyPackages={['statsmodels']}
   goal="Fit ETS to 13 retail series in one loop, make the forecasts coherent four ways, and score each method at every level." />
 </div>
+
+<Callout type="empirical" title="Before you ship hierarchical forecasts">
+<ul>
+<li><strong>Check the sums in the data first.</strong> Published totals do not always equal the sum of published parts (rounding, seasonal adjustment done series by series, categories that are not published). That is why "Other" is built as the remainder: it makes the data add up exactly, so the forecasts can too.</li>
+<li><strong>Check the sums in the forecasts.</strong> One line, total minus the sum of its parts, for every month. It must print zeros. The lab's "Adds up?" column does this.</li>
+<li><strong>Score every level, in percent.</strong> Use MAPE or another scale-free measure, so a \$700 billion total and an \$8 billion category can sit in one table. Report the method that wins for each user: finance cares about the total; a category manager cares about her own line.</li>
+<li><strong>Same transformation, same units.</strong> Reconcile in dollars, not in logs or growth rates. Logs of parts do not add up to the log of the total.</li>
+</ul>
+</Callout>
 
 <Callout type="tip" title="Going further">
 In R, the `fable` package's `reconcile(min_trace(...))` and the older `hts` package implement MinT for hierarchies with thousands of series. In Python, use `hierarchicalforecast` from Nixtla. The matrix algebra is the same as in the lab.
@@ -290,50 +482,90 @@ Forecast the two halves of U.S. retail sales and add them up. Fill in the two bl
 ## Chapter checklist
 
 - "Big" means three things: **many predictors**, **many series**, and **mixed frequencies**. Each has its own tool.
-- Know the **release calendar**. Every nowcast lives on the **ragged edge**, and every evaluation must use only data available on the nowcast date.
-- A **bridge equation** aggregates fast data to the target frequency and is re-run as each print arrives. Claims help most at **turning points**.
-- **Principal components** compress many indicators into a few factors. Read the **scree plot**, standardize first, and tame outliers.
+- Know the **release calendar**. Every series has a **publication lag**, every nowcast lives on the **ragged edge**, and every evaluation must use only data available on the nowcast date.
+- Before merging frequencies, decide **flow, stock or price**. Average a flow per week (a plain sum makes five-week months look about 22% bigger), take a stock at month end, average a price. Know what each date means (week-ending Saturday, the payroll week of the 12th).
+- A **bridge equation** aggregates fast data to the target frequency and is re-run as each print arrives. Read every revision as **coefficient × surprise**, in units: 20,000 extra claims in one week ≈ 24,000 fewer jobs. Claims help most at **turning points**.
+- Judge a nowcast with four questions: **which vintage**, **against which benchmark**, **is it biased**, and **where are the big misses**. Revisions are part of the "error".
+- Before PCA, make each series **stationary** (growth rates or changes, SA), then **standardize** to z-scores and clip outliers. Otherwise the "factor" is a trend or the noisiest series.
+- Read PCA in words: "% of variance" is how much of the panel's movement one index captures; **loadings** are weights, and a negative loading means the series rises when the factor falls. Flip the sign so "up" means stronger.
 - **Diffusion-index** forecasts usually beat an AR benchmark modestly. Re-estimate factors in real time.
-- Forecasts of a **hierarchy** must be **coherent**: bottom-up, top-down or reconciliation (OLS, WLS, MinT). The best method can differ by level.
-- Always ask **which vintage** a forecast is scored against. Revisions are part of the "error".
+- Forecasts of a **hierarchy** must be **coherent**: the totals must add up. Bottom-up, top-down and reconciliation (OLS, WLS, MinT) differ only in who gets nudged. Score every level in percent, and reconcile in dollars, not logs.
 
 <InstructorKit
-  minutes={75}
-  data={['ICSA', 'PAYEMS', 'GDPNOW', 'A191RL1Q225SBEA', 'RSAFS', 'RSFSXMV', 'RSMVPD', 'INDPRO', 'USREC']}
+  minutes={150}
+  data={['ICSA', 'CCSA', 'GASREGW', 'DCOILWTICO', 'PAYEMS', 'GDPNOW', 'A191RL1Q225SBEA', 'RSAFS', 'RSFSXMV', 'RSMVPD', 'PCE', 'TOTALSA', 'RSFSDP', 'INDPRO', 'USREC']}
+  sessions={[
+    { title: 'Forecasting the present: mixed frequencies, the ragged edge and reading a nowcast', plan: [
+      '5 min · Hook: the lede (decide on holiday hiring before the jobs report). Ask: what do we know today, and since when?',
+      '8 min · Release calendar, publication lags and the ragged edge; the 2025 shutdown as the calendar breaking',
+      '12 min · Mixed frequencies: Predict (sum of claims, Sep vs Oct 2026), then the five-week-trap explorable on all four series; flow/stock/price table',
+      '10 min · Exercise in pairs: a flow and a stock, one number per month (R or Python)',
+      '25 min · Activity: Nowcasting desk (March 2020 Predict, ragged-edge explorable, team debrief)',
+      '8 min · Bridge lab walkthrough: the coefficient in plain words and the honest out-of-sample test; then the news explorable and its Predict',
+      '7 min · GDPNow: Predict, track-record explorable, the four questions for judging a nowcast'
+    ] },
+    { title: 'Many series: factors from big panels and forecasts that add up', plan: [
+      '5 min · Warm-up: why 200 predictors and 400 months break a regression; the three kinds of "big"',
+      '8 min · Factor wall: extract the common factor, then unclip outliers ("what surprised you?")',
+      '25 min · Activity: Index committee (panel-prep Predict and explorable in four settings, factor lab, team verdicts)',
+      '10 min · Exercise: a five-series spending index (growth rates, scale, prcomp)',
+      '7 min · Diffusion index: run the lab, read a 5% gain and p = 0.18 honestly; the R² check question',
+      '15 min · Hierarchy: explorable, reconciliation in plain words, hierarchy lab, "which method would you ship?"',
+      '5 min · Your turn exercise (bottom-up vs direct) started in class, finished at home; alternative data and working at scale as reading'
+    ] }
+  ]}
   objectives={[
-    'Explain the **ragged edge** and read a release calendar (claims, payrolls, retail sales, GDP).',
-    'Build and update a **bridge equation** that nowcasts monthly payrolls from weekly claims, and evaluate it in pseudo real time.',
-    'Extract a common factor from 20 indicators with `prcomp`, interpret the scree plot and loadings, and explain why outliers must be handled.',
+    'Explain the **ragged edge** and **publication lags** in plain words, and read a release calendar (claims, payrolls, retail sales, GDP).',
+    'Convert weekly or daily data to monthly with the right rule for a **flow, stock or price**, and explain the five-week trap.',
+    'Build and update a **bridge equation** that nowcasts monthly payrolls from weekly claims, read each revision as coefficient × surprise, and evaluate it in pseudo real time.',
+    'Prepare a panel for PCA (growth rates, z-scores, clipping), extract a factor with `prcomp`, and read **% of variance** and **loadings** in words.',
     'Compare a **diffusion-index** forecast with an AR benchmark and interpret a modest, non-significant gain honestly.',
     'Produce **coherent** forecasts for a hierarchy with bottom-up, top-down and OLS/WLS reconciliation, and describe what MinT adds.',
-    'Distinguish nowcast error from **data revisions** when evaluating GDPNow.'
+    'Judge a nowcast against the right **vintage** and a benchmark, as with GDPNow.'
   ]}
   discussion={[
     'March 2020: claims exploded, but the March jobs report showed a far smaller loss. Was the bridge model "wrong", or was it answering a different question from the survey?',
+    'Your intern summed weekly claims to months and reports "claims up 22% in October". What two questions do you ask before you forward the email?',
     'GDPNow missed 2015 Q1 by 3.5 points against today\'s data, but by 0.1 points against the advance estimate. Which number should a trading desk care about? Which should a historian care about?',
+    'PCA on log levels "explains" 55% and on growth rates only 36%. Why is the smaller number the more useful factor?',
     'Your CFO wants store-level forecasts that add up to the corporate budget. Which reconciliation method would you propose, and what would you need to estimate MinT?'
   ]}
   misconceptions={[
+    '"Summing weekly data gives the monthly number." For a stock or a price the sum is meaningless; for a flow it depends on whether the month has four or five weeks.',
     '"More data always means better forecasts." More predictors raise in-sample fit; out-of-sample gains are usually modest and need real-time testing.',
+    '"A small surprise in claims should move the nowcast a lot." One week is a fraction of the monthly average; an ordinary surprise moves this nowcast by about ±12,000 jobs against a band of ±214,000.',
     '"The nowcast was 3 points off, so the model is bad." Part of the miss is revision to the target itself.',
-    '"PCA finds the economically meaningful factor." It finds the direction of maximum variance. With outliers or a lopsided panel, that can be something else, such as April 2020.',
+    '"A higher % of variance explained means a better factor." Log levels give 55%, but that factor is a time trend.',
+    '"PCA finds the economically meaningful factor." It finds the direction of maximum variance. Without standardizing, or with outliers, that can be the noisiest series or April 2020.',
     '"Bottom-up is always best." It won for the total in our test; top-down or MinT can win when bottom series are very noisy.'
   ]}
 >
 
-**Nowcasting desk (30 minutes).** Teams of three each take one month in the ragged-edge explorable.
+**Session 1 · Nowcasting desk (25 minutes).** Teams of three each take one month in the ragged-edge explorable.
 
 1. **Predict (5 min).** Before pressing Play, each team writes its nowcast for the payroll change and a 90% range.
-2. **Play (10 min).** Step through the month day by day. Record the nowcast after each Thursday's claims print. Note when it moves most.
-3. **Debrief (15 min).** Each team reports its path and the miss on jobs report day.
+2. **Play (8 min).** Step through the month day by day. Record the nowcast after each Thursday's claims print. Write the biggest move as "coefficient × surprise" in one sentence.
+3. **Debrief (12 min).** Each team reports its path and the miss on jobs report day.
 
 *Expected results (from the explorable's model):*
 - **October 2026:** the nowcast drifts from about +77k to +91k as five weeks arrive; actual +165k.
 - **September 2008:** −159k → −257k; actual (revised) −451k, first print −159k.
-- **March 2020:** about +230k with no claims or one week, +157k after two weeks, then −2.2 million and −6.1 million after the last two weeks; actual −1.4 million (first print −701k).
-- **November 2026:** +144k after one week, band about ±215k; the answer arrives December 4, 2026. Ask students to post their nowcast and check it in class after the release.
+- **March 2020:** about +230k with no claims or one week, +157k after two weeks, then −2.2 million and −6.1 million after the last two weeks; actual −1.4 million (first print −701k). The lesson is the payroll reference week (the pay period including the 12th).
+- **November 2026:** +144k after one week, band about ±215k; the answer arrives December 4, 2026. In the news explorable, a second week at 220k gives about +119k, and 300k gives about +23k. Ask students to post their nowcast and check it in class after the release.
 
-**Follow-up (20 minutes).** Run the hierarchy lab. Ask: *which method would you ship if finance only cares about the total, and which if store managers care about their own category?* Expected: bottom-up for the total (MAPE 1.87%); base or bottom-up for the categories (average 3.52%); OLS hurts small categories (average 4.00%).
+**Session 2 · Index committee (25 minutes).** Four teams, one setting each in the panel-prep explorable: growth + standardized, growth + raw, log levels + standardized, log levels + raw.
+
+1. **Record (8 min).** PC 1's share of variance, the three largest loadings, the payroll loading, and whether the factor drops in 2008–09.
+2. **Pitch (10 min).** Each team argues in one minute that *its* index should go in the board pack. The class votes.
+3. **Debrief (7 min).** Run the factor lab and confirm the winner's numbers.
+
+*Expected results (1993–2026, clipped at ±4 SD):*
+- **Growth, standardized:** 36%; largest loadings about +0.30 (retail ex autos, vehicle sales, auto dealers); payrolls +0.14; claims −0.18, credit spreads −0.20; falls in every recession. The right choice.
+- **Growth, raw units:** 44%; initial claims −0.57, housing starts +0.47, clothing +0.36; payrolls +0.02. Dominated by the noisiest series.
+- **Log levels, standardized:** 55%; most growing series about +0.30; the factor is a smooth upward trend. Highest % explained, least useful.
+- **Log levels, raw units:** 41%; a mix of trend and units.
+
+If time remains, run the hierarchy lab and ask *which method you would ship if finance only cares about the total, and which if category managers care about their own line.* Expected: bottom-up for the total (MAPE 1.87%); base or bottom-up for the categories (average 3.52%); OLS hurts small categories (average 4.00%).
 
 </InstructorKit>
 
@@ -365,6 +597,9 @@ Forecast the two halves of U.S. retail sales and add them up. Fill in the two bl
 22. Fixler, D. J., de Francisco, E., & Schaaf, I. (2024). Revisions to GDP, GDI, and their major components. *Survey of Current Business*, August 2024. [apps.bea.gov/scb](https://apps.bea.gov/scb/issues/2024/08-august/0824-revisions-to-gdp-gdi.htm)
 23. Hyndman, R. J., & Athanasopoulos, G. (2021). *Forecasting: Principles and Practice* (3rd ed.), ch. 11. [otexts.com/fpp3](https://otexts.com/fpp3/)
 24. Bloomberg News (Oct. 17, 2025). US initial jobless claims fell last week, state data suggest. See also Reuters coverage of Haver Analytics estimates during the shutdown.
+25. Federal Reserve Bank of St. Louis. *What is frequency aggregation?* FRED Help, and "Time aggregation in FRED", *FRED Blog* (Sept. 2015). [fredhelp.stlouisfed.org](https://fredhelp.stlouisfed.org/fred/data/understanding-the-data/what-is-frequency-aggregation), [fredblog.stlouisfed.org](https://fredblog.stlouisfed.org/2015/09/time-aggregation-in-fred/)
+26. Bańbura, M., Giannone, D., Modugno, M., & Reichlin, L. (2013). Now-casting and the real-time data flow. In G. Elliott & A. Timmermann (Eds.), *Handbook of Economic Forecasting*, Vol. 2A (pp. 195–237). Elsevier.
+27. Stock, J. H., & Watson, M. W. (2019). *Introduction to Econometrics* (4th ed.), ch. 14: Prediction with many regressors and big data. Pearson.
 
 </div>
 

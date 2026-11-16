@@ -1,16 +1,22 @@
 ---
 layout: ../../layouts/Chapter.astro
 slug: time-series-data
-minutes: 55
+minutes: 130
+sessions:
+  - title: Where the numbers come from, and how to store them
+  - title: Reading one series many ways, the transformation toolkit
+    starts: transformations-every-analyst-uses
 build:
   - An auto-labelled “economy at a glance” panel of five key U.S. indicators, with recessions shaded, that updates itself when the data do
   - A transformation table that reads one series six ways (levels, logs, MoM, YoY, annualized, index) and says when each is right
   - Real (inflation-adjusted) retail sales, built by hand from nominal sales and CPI and checked against FRED’s official series
-skills: [ts, start/end/frequency, window, read.csv, aggregate, diff, log, "stats::lag", resample, shift, deflating, FRED]
+  - A one-page transformation decision guide, plus three analyst answers backed by data (a seasonal headline, a “record” gas price, a GDP growth rate)
+skills: [ts, start/end/frequency, window, read.csv, aggregate, diff, log, exp, "stats::lag", resample, shift, deflating, per capita, rebasing, annualizing, FRED]
 ---
 import CodeLab from '../../components/CodeLab.svelte';
 import Callout from '../../components/Callout.astro';
 import KeyIdea from '../../components/KeyIdea.astro';
+import SessionBreak from '../../components/SessionBreak.astro';
 import Predict from '../../components/Predict.svelte';
 import Term from '../../components/Term.astro';
 import InstructorKit from '../../components/InstructorKit.astro';
@@ -19,6 +25,9 @@ import TransformLab from '../../components/ch01/TransformLab.svelte';
 import FrequencyZoom from '../../components/ch01/FrequencyZoom.svelte';
 import RealNominal from '../../components/ch01/RealNominal.svelte';
 import WorkflowMap from '../../components/ch01/WorkflowMap.svelte';
+import LogRuler from '../../components/ch01/LogRuler.svelte';
+import YoYWindow from '../../components/ch01/YoYWindow.svelte';
+import RebaseIndex from '../../components/ch01/RebaseIndex.svelte';
 import inspectR from '../../labs/ch01/inspect.R?raw';
 import inspectPy from '../../labs/ch01/inspect.py?raw';
 import aggR from '../../labs/ch01/aggregate.R?raw';
@@ -33,10 +42,30 @@ import exCheckR from '../../labs/ch01/exercise_check.R?raw';
 import exPy from '../../labs/ch01/exercise.py?raw';
 import exSolPy from '../../labs/ch01/exercise_solution.py?raw';
 import exCheckPy from '../../labs/ch01/exercise_check.py?raw';
+import yoyR from '../../labs/ch01/ex_yoy.R?raw';
+import yoySolR from '../../labs/ch01/ex_yoy_solution.R?raw';
+import yoyCheckR from '../../labs/ch01/ex_yoy_check.R?raw';
+import yoyPy from '../../labs/ch01/ex_yoy.py?raw';
+import yoySolPy from '../../labs/ch01/ex_yoy_solution.py?raw';
+import yoyCheckPy from '../../labs/ch01/ex_yoy_check.py?raw';
+import gasR from '../../labs/ch01/ex_real.R?raw';
+import gasSolR from '../../labs/ch01/ex_real_solution.R?raw';
+import gasCheckR from '../../labs/ch01/ex_real_check.R?raw';
+import gasPy from '../../labs/ch01/ex_real.py?raw';
+import gasSolPy from '../../labs/ch01/ex_real_solution.py?raw';
+import gasCheckPy from '../../labs/ch01/ex_real_check.py?raw';
+import annR from '../../labs/ch01/ex_annualize.R?raw';
+import annSolR from '../../labs/ch01/ex_annualize_solution.R?raw';
+import annCheckR from '../../labs/ch01/ex_annualize_check.R?raw';
+import annPy from '../../labs/ch01/ex_annualize.py?raw';
+import annSolPy from '../../labs/ch01/ex_annualize_solution.py?raw';
+import annCheckPy from '../../labs/ch01/ex_annualize_check.py?raw';
 
 <p class="lede">Your manager forwards a headline: <em>“Retail sales jumped 12% last month!”</em> and asks whether to hire more staff. Before you build any model, you need to know what that 12% actually measures. Was it December? Is it in dollars or in goods? Will the number be revised next month? This chapter covers the questions every forecaster asks about the data before modeling it.</p>
 
-(The 12% is real, by the way: U.S. retail sales (excluding food services) rose 11.8% from November to December 2025, before seasonal adjustment. You will see in a few minutes why it means almost nothing.)
+(The 12% is real, by the way: U.S. retail sales (excluding food services) rose 11.8% from November to December 2025, before seasonal adjustment. By the end of this chapter you will compute the number that should have been in the headline.)
+
+<SessionBreak n={1} title="Where the numbers come from, and how to store them" goals={['State the five parts of a forecast', 'Store a series with its dates, keep missing months in place, and change its frequency with the right rule', 'Explain revisions and answer the **five questions** about any series before using it']} />
 
 ## What exactly is a forecast?
 
@@ -110,7 +139,7 @@ Models need every series at the same frequency. Often that means converting dail
 
 | Kind of series | What it measures | Combine by | Examples |
 |---|---|---|---|
-| <Term def="A quantity measured over a period of time, such as dollars spent per month. Flows over consecutive periods add up.">Flow</Term> | An amount **during** the period | **Sum** (or the average, for a per-period rate) | Retail sales, jobless claims, new orders |
+| <Term def="A quantity measured over a period of time, such as dollars spent per month. Flows over consecutive periods add up.">Flow</Term> | An amount **during** the period | **Sum**, when every period has the same coverage (months of a quarter); **average** weekly flows when comparing months | Retail sales, jobless claims, new orders |
 | <Term def="A quantity measured at a point in time, such as the number of people employed. Adding stocks double-counts.">Stock</Term> | A level **at a point** in time | **Average** or **end of period** | Payroll jobs, money supply, inventories |
 | Rate or price | A ratio or price at a point in time | **Average** or **end of period** | Interest rates, unemployment rate, CPI |
 
@@ -118,7 +147,7 @@ Models need every series at the same frequency. Often that means converting dail
 Some flows are published at a **seasonally adjusted annual rate** (SAAR): housing starts, vehicle sales, GDP. A monthly SAAR value answers "how many per year, if this month's pace lasted twelve months?" To get a quarterly SAAR value, *average* the three months. Summing them would triple the number.
 </Callout>
 
-The explorable below starts from a daily rate, the gap between the 10-year and 3-month Treasury yields (`T10Y3M`, in percentage points). When it drops below zero the yield curve is *inverted*, a classic recession warning: it turned negative before every U.S. recession since 1969 except one, when it only flattened (Chapter 5).<sup>[4](#refs)</sup> Try every rule at every frequency. Then switch to weekly jobless claims, a flow, where the sum is the right answer.
+The explorable below starts from a daily rate, the gap between the 10-year and 3-month Treasury yields (`T10Y3M`, in percentage points). When it drops below zero the yield curve is *inverted*, a classic recession warning: it turned negative before every U.S. recession since 1969 except one, when it only flattened. Chapter 5 will turn it into a recession-probability model.<sup>[4](#refs)</sup> Try every rule at every frequency. Then switch to weekly jobless claims, a flow. The sum gives each month's total, but a month holds four or five weeks, so the sum jumps whenever a month gains a week. To compare months, average the weeks (Chapters 8 and 13 come back to this five-week trap).
 
 <div class="breakout">
 <FrequencyZoom client:load />
@@ -138,67 +167,6 @@ The explorable below starts from a daily rate, the gap between the 10-year and 3
 
 In 2020 Q2 the end-of-quarter payroll count was **3.96 million jobs higher** than the quarter's average, because jobs collapsed in April and partly recovered by June. Neither number is wrong. Whichever you use, say so in your chart note.
 
-## Transformations every analyst uses
-
-Almost nobody forecasts the raw level of a series without first looking at it in other forms. Each transformation answers a different question. Switch between them below and watch the same data tell six different stories.
-
-<Predict client:load
-  question="Retail sales here are **not seasonally adjusted**. Which view would you use to judge whether spending is speeding up or slowing down?"
-  options={['Level', 'Month-over-month % change', 'Year-over-year % change', 'Annualized monthly change']}
-  answer={2}
-  explain="Year-over-year growth compares each month with the same month a year earlier, so December is compared with December and the seasonal pattern cancels out. Month-over-month growth of NSA data mostly measures the calendar, and annualizing it makes things worse. Check it in the explorer below: click MoM %, then YoY %."
-/>
-
-<div class="breakout">
-<TransformLab client:load />
-</div>
-
-| View | Formula | Answers | Use it when… |
-|---|---|---|---|
-| **Level** | $y_t$ | How big is it? | You need the actual quantity (dollars, people) |
-| **Difference** | $y_t - y_{t-1}$ | How much did it change, in its own units? | Changes are what matter: "payrolls rose by 120,000" |
-| **Log** | $\ln y_t$ | Is growth steady? | A series grows by percentages; makes growth linear and seasonal swings proportional |
-| **MoM %** | $100\left(\frac{y_t}{y_{t-1}} - 1\right)$ | What happened last month? | The data are seasonally adjusted |
-| **YoY %** | $100\left(\frac{y_t}{y_{t-12}} - 1\right)$ | How fast is it growing over a year? | Always safe, even for NSA data; the standard for inflation |
-| **Annualized** | $100\left[\left(\frac{y_t}{y_{t-1}}\right)^{12} - 1\right]$ | What if last month's pace lasted a year? | SA data only; comparing with yearly figures such as GDP growth |
-| **Index** | $100\,\frac{y_t}{\bar y_{2019}}$ | How does it compare with a base period? | Comparing series in different units on one chart |
-
-<Callout type="math" title="Why log differences are (almost) percent changes">
-For a small growth rate $g$, $\ln(1+g) \approx g$. Since $y_t / y_{t-1} = 1 + g_t$,
-
-$$
-100\,\Delta \ln y_t = 100 \ln\frac{y_t}{y_{t-1}} = 100\ln(1+g_t) \approx 100\, g_t .
-$$
-
-The approximation is excellent for moves of a few percent and poor for big ones. In the lab, January 2026 retail sales fell 19.2%, while the log difference says −21.3. Log differences have one big advantage: they add up. The log change over a year is exactly the sum of the twelve monthly log changes, which is why models are usually written in logs.
-</Callout>
-
-<div class="breakout">
-<CodeLab client:load id="ch01-transform" title="Six ways to read one series" r={transR} py={transPy}
-  goal="Compute differences, logs, MoM, YoY, annualized and indexed versions of retail sales, and compare them side by side for the last six months." />
-</div>
-
-Read the table the lab produces. In September 2026, the same retail sales data say −3.2% (MoM) and +6.7% (YoY). Both are correct arithmetic; only one is a sensible headline for NSA data. The SA annualized column jumps from −4.8% in July to +16.6% in August, which shows how much compounding magnifies monthly noise.
-
-## Real vs. nominal: more stuff, or higher prices?
-
-Retail sales are measured in current dollars. These are <Term def="Measured in the prices of the time. Nominal growth mixes changes in quantity with changes in price.">nominal</Term> values. When prices rise 30%, nominal sales rise even if people buy exactly the same things. To measure the quantity of goods, you divide by a price index. The result is a <Term def="Adjusted for inflation by dividing by a price index; measured in the prices of a fixed base period.">real</Term> series, also called a *deflated* series. Guess first.
-
-<div class="breakout">
-<RealNominal client:load />
-</div>
-
-From the 2019 average to September 2026, nominal retail and food services sales grew 47.4%. Consumer prices grew 31.5% over the same span. Real sales grew only **12.0%**. Notice that subtracting gives about 15.8 points (the lab subtracts the unrounded rates), not 12.0. Growth rates combine by division, not subtraction: $1.474 / 1.315 \approx 1.12$.
-
-<div class="breakout">
-<CodeLab client:load id="ch01-real" title="Deflate retail sales by hand" r={realR} py={realPy}
-  goal="Turn nominal retail sales into real sales with the CPI, verify your series against FRED's official real retail sales, and split growth since 2019 into price and quantity." />
-</div>
-
-<Callout type="business" title="When a company reports “record sales”">
-With inflation running at 3–4%, a company whose nominal sales grew 3% sold *fewer* units than last year. Annual reports, budgets and wage negotiations all hinge on this. Pick the deflator that matches what is being bought: CPI for consumer spending, a producer price index for business inputs, the GDP deflator for the whole economy.
-</Callout>
-
 ## Data get revised: vintages and ALFRED
 
 The numbers you download today are not necessarily the numbers that were published at the time. Statistical agencies release a first estimate fast, then revise it as more complete source data arrive.
@@ -215,7 +183,7 @@ For GDP, the Bureau of Economic Analysis (BEA) publishes an *advance* estimate r
 Each published version of a series is called a <Term def="The version of a data series as it was published on a particular date. Real-time forecast evaluation uses the vintage that was available at each forecast origin.">vintage</Term>. The St. Louis Fed keeps every vintage of many FRED series in <Term def="Archival FRED: the St. Louis Fed's archive of past vintages of FRED series, at alfred.stlouisfed.org.">ALFRED</Term>.<sup>[8](#refs)</sup>
 
 <Callout type="pitfall" title="Revisions are a hidden form of look-ahead leakage">
-If you test a forecasting model on today's revised data, you give it cleaner numbers than any forecaster had at the time. For a fair "how would this have done in 2009?" test, use the vintage available at each forecast origin. Chapter 3 shows how leakage flatters a model; Chapter 8 runs a pseudo out-of-sample test and explains what a fully real-time test with ALFRED vintages would add.
+If you test a forecasting model on today's revised data, you give it cleaner numbers than any forecaster had at the time. For a fair "how would this have done in 2009?" test, use the vintage available at each forecast origin. Chapter 3 will show how leakage flatters a model, and Chapter 8 will run a pseudo out-of-sample test and explain what a fully real-time test with ALFRED vintages would add.
 </Callout>
 
 ## Where the data come from
@@ -257,7 +225,7 @@ The file you get is exactly the format you opened in the first lab: a date colum
 4. **Nominal or real?** If real, in which base year's prices?
 5. **Release and revision**: when does it come out, and how much does it get revised?
 
-FRED's series page answers the first four in the line under the title. Write the answers in your chart notes.
+FRED's series page answers the first four in the line under the title. Write the answers in your chart notes. The second session of this chapter shows what to *do* with each answer.
 </Callout>
 
 ## The forecasting workflow
@@ -268,9 +236,274 @@ Everything in this course fits into one loop. This chapter covers step 2, gettin
 <WorkflowMap client:load />
 </div>
 
-## Your turn
+<SessionBreak n={2} title="Reading one series many ways, the transformation toolkit" goals={['Read a log change as a percent change (0.01 ≈ 1%), and say when the shortcut breaks', 'Choose between MoM, annualized and YoY growth for SA and NSA data, and spot a **base effect**', 'Convert nominal to real, totals to per-capita, and rebase an index, then convert any result back to the original units', 'Use the **transformation decision guide** to answer three manager questions with data']} />
 
-The Bureau of Labor Statistics reports inflation as the percent change in CPI from a year earlier. Compute it yourself and find the latest month you *can* compute from published data. The lab reads the raw CSV, so the unpublished October 2025 stays `NA`. Fill in the blanks (`______`) and press **Run & check**.
+## Transformations every analyst uses
+
+Almost nobody forecasts the raw level of a series without first looking at it in other forms. A <Term def="A rule applied to every value of a series, such as taking the log, dividing by a price index or computing the change from a year earlier. It changes what question the numbers answer, not the underlying data.">transformation</Term> does not change the data. It changes the **question** the numbers answer. Switch between six common views below and watch the same data tell six different stories.
+
+<Predict client:load
+  question="Retail sales here are **not seasonally adjusted**. Which view would you use to judge whether spending is speeding up or slowing down?"
+  options={['Level', 'Month-over-month % change', 'Year-over-year % change', 'Annualized monthly change']}
+  answer={2}
+  explain="Year-over-year growth compares each month with the same month a year earlier, so December is compared with December and the seasonal pattern cancels out. Month-over-month growth of NSA data mostly measures the calendar, and annualizing it makes things worse. Check it in the explorer below: click MoM %, then YoY %."
+/>
+
+<div class="breakout">
+<TransformLab client:load />
+</div>
+
+| View | Formula | Answers | Use it when… |
+|---|---|---|---|
+| **Level** | $y_t$ | How big is it? | You need the actual quantity (dollars, people) |
+| **Difference** | $y_t - y_{t-1}$ | How much did it change, in its own units? | Changes are what matter: "payrolls rose by 165,000" |
+| **Log** | $\ln y_t$ | Is growth steady? | A series grows by percentages; makes growth linear and seasonal swings proportional |
+| **MoM %** | $100\left(\frac{y_t}{y_{t-1}} - 1\right)$ | What happened last month? | The data are seasonally adjusted |
+| **YoY %** | $100\left(\frac{y_t}{y_{t-12}} - 1\right)$ | How fast is it growing over a year? | Always safe, even for NSA data; the standard for inflation |
+| **Annualized** | $100\left[\left(\frac{y_t}{y_{t-1}}\right)^{12} - 1\right]$ | What if last month's pace lasted a year? | SA data only; comparing with yearly figures such as GDP growth |
+| **Index** | $100\,\frac{y_t}{\bar y_{2019}}$ | How does it compare with a base period? | Comparing series in different units on one chart |
+
+<div class="breakout">
+<CodeLab client:load id="ch01-transform" title="Six ways to read one series" r={transR} py={transPy}
+  goal="Compute differences, logs, MoM, YoY, annualized and indexed versions of retail sales, and compare them side by side for the last six months." />
+</div>
+
+Read the table the lab produces. In September 2026, the same retail sales data say −3.2% (MoM) and +6.7% (YoY). Both are correct arithmetic; only one is a sensible headline for NSA data. The SA annualized column jumps from −4.8% in July to +16.6% in August, which shows how much compounding magnifies monthly noise.
+
+<KeyIdea>Pick the question first, then the transformation. Every transformed number needs a label that says what was done to it: “% change from a year earlier, not seasonally adjusted”, “in 1982–84 dollars”, “index, 2019 = 100”.</KeyIdea>
+
+The rest of this session takes the toolkit one tool at a time. For each one you will see what it does to the picture, which question it answers, how to read a number after it, and how to get back to the original units. The [decision guide](#transformation-decision-guide) at the end puts them all on one page.
+
+## Logs: why and when
+
+The natural log, $\ln y$, does three useful things to a series that grows by percentages, as most economic series do:
+
+1. **Steady percentage growth becomes a straight line.** A series growing 5% a year curves upward in levels, because 5% of a bigger number is more dollars. In logs it is a straight line, so a bend in the log line is a change in the *growth rate*.
+2. **Swings that grow with the level become the same size.** A December spike that is always about 15% of sales looks bigger every year in dollars, and the same size in logs. That is why Chapter 2 uses logs to turn multiplicative seasonality into additive seasonality.
+3. **Changes in logs are (almost) percent changes.** This is the one you will use every day.
+
+**How to read it.** A change of **0.01 in a log is about a 1% change** in the level. Multiply log changes by 100 and you get "log points", which read like percents for small moves:
+
+| Percent change | Log change × 100 | Gap |
+|---|---|---|
+| +1% | +0.995 | tiny |
+| +5% | +4.88 | 0.1 point |
+| +10% | +9.53 | 0.5 point |
+| +50% | +40.5 | 9.5 points |
+| −50% | −69.3 | 19.3 points |
+
+The shortcut is excellent for monthly and quarterly growth, which is usually a few percent at most, and fails for big moves.<sup>[11](#refs)</sup> Two more properties make logs the forecaster's favorite units. Log changes **add up**: twelve monthly log changes sum exactly to the yearly log change. And log changes are **symmetric**: down 0.2 then up 0.2 brings you back to where you started. Percent changes have neither property.
+
+**How to convert back.** The log undoes with the exponential: $y = e^{\ln y}$. A log change $d$ is a percent change of $100\,(e^{d} - 1)$. In R that is `exp()`; in Python, `np.exp()`.
+
+<Predict client:load
+  question="The monthly average price of crude oil fell **71%** from June 2008 (\$134 a barrel) to February 2009 (\$39). How much did it have to rise to get back to \$134?"
+  options={['+71%', '+124%', '+171%', '+245%']}
+  answer={3}
+  explain="\$39 × 3.45 ≈ \$134, so oil had to rise about **245%**. A 71% fall leaves you on a much smaller base. In log points the trip is symmetric: down 123.8, then up 123.8. Try it in the explorable below."
+/>
+
+<div class="breakout">
+<LogRuler client:load />
+</div>
+
+Move B to one month after A, anywhere on the chart: the percent change and the log change nearly match, because one month's move is usually small. Stretch the span over a crash and they part ways. On the **log scale**, the 2008 and 2020 crashes, both roughly −71%, drop by the same height, even though one started at \$134 and the other at \$57.
+
+<Callout type="empirical" title="Read the slope of a log chart as a growth rate">
+On a chart of $\ln y$, the slope is the growth rate. U.S. retail sales (excluding food services) totaled \$4.64 trillion in 2015 and \$7.32 trillion in 2025. The log rose by 0.456 over ten years, so sales grew about **4.6 log points a year**, close to the exact compound rate of 4.7% a year (nominal, so part of it is inflation). On the TransformLab's log view for CPI, the line climbs about 0.021 a year from 2000 to 2020, or roughly 2.1% inflation a year, and then visibly steepens in 2021–22. When you see a log chart, ask "where does the slope change?" rather than "how high is the line?"
+</Callout>
+
+<Callout type="pitfall" title="When not to take logs">
+- **Zero or negative values.** The log of zero or a negative number does not exist. Net exports, profits, interest-rate spreads and temperature can all be negative. Even oil can: on April 20, 2020, the daily WTI spot price in the bundled data (`DCOILWTICO`) was −\$36.98 a barrel. The monthly average stayed positive, which is why the explorable above uses monthly data.
+- **Series that are already percents.** The unemployment rate or an interest rate is already a ratio. Its change is best read in **percentage points** ("unemployment fell from 4.2% to 4.1%"), so use a difference, not a log ([see below](#differences-change-in-the-original-units)).
+- **Short, flat series** with no growth and constant swings gain little from logs, and the result is harder to explain.
+</Callout>
+
+<Callout type="math" title="Why log differences are (almost) percent changes">
+For a small growth rate $g$, $\ln(1+g) \approx g$. Since $y_t / y_{t-1} = 1 + g_t$,
+
+$$
+100\,\Delta \ln y_t = 100 \ln\frac{y_t}{y_{t-1}} = 100\ln(1+g_t) \approx 100\, g_t .
+$$
+
+The next term of the expansion is $-g^2/2$, which is why the gap grows with the square of the move: for $g = 0.10$ it is about $0.005$. In the lab, January 2026 retail sales fell 19.2%, while the log difference says −21.3.
+
+Log changes add up because $\ln\frac{y_t}{y_{t-12}} = \sum_{k=0}^{11} \ln\frac{y_{t-k}}{y_{t-k-1}}$, and they are symmetric because $\ln\frac{a}{b} = -\ln\frac{b}{a}$. A straight line in logs, $\ln y_t = a + b\,t$, means $y_t = e^{a} e^{b t}$: constant growth of $100\,(e^{b} - 1)\%$ per period.
+</Callout>
+
+How a log changes the meaning of a regression coefficient (the log-level and log-log models) is the subject of [Chapter 4](/chapters/regression/). Turning a forecast made in logs back into dollars, and why the result is a median, is covered in [Chapter 10](/chapters/uncertainty/).
+
+## Growth rates: MoM, annualized and YoY
+
+A growth rate divides the change by the starting level, so it has no units: a 1% rise means the same thing for a corner store and for Walmart. There are three common growth rates for monthly data, and each answers a different question.
+
+| Growth rate | Answers | Typical use | Pitfall |
+|---|---|---|---|
+| **Month over month** (MoM) | What happened last month? | Latest news, SA data | Noisy; meaningless for NSA data |
+| **Annualized** | What if last month's pace lasted a year? | Comparing with yearly targets (the Fed's 2%) | Compounding magnifies noise |
+| **Year over year** (YoY) | How much higher than a year ago? | Inflation headlines, NSA data | Slow: it lags turning points |
+
+**Converting between them.** A monthly rate $m$ annualizes to $(1+m)^{12} - 1$: CPI rose 0.35% in October 2026, which annualizes to **4.3%**. To go back, take the 12th root: an annual rate $a$ is a monthly rate of $(1+a)^{1/12} - 1$. Quarterly data use the 4th power and the 4th root. Multiplying by 12 (or 4) is close but always a little too low for positive growth, because it ignores compounding.
+
+**YoY is the last 12 months added up.** In log points, the year-over-year change is *exactly* the sum of the last 12 monthly changes. That one fact explains the two quirks of YoY growth. First, it works on seasonal data: every 12-month window contains exactly one January and one December, so the seasonal swings cancel. Second, it moves for two reasons: when this month's change comes **in**, and when the same month of last year drops **out**. A big month a year ago can move today's YoY rate even if nothing happens this month. Economists call that a <Term def="A change in a year-over-year growth rate caused by an unusual month a year earlier dropping out of the 12-month comparison, rather than by anything happening now.">base effect</Term>.
+
+<Predict client:load
+  question="U.S. CPI (seasonally adjusted) was essentially **flat** from June to July 2022 (−0.02%). Year-over-year inflation was 9.0% in June 2022. What was it in July?"
+  options={['Still about 9.0%: prices did not move', 'About 8.5%', 'About 9.5%']}
+  answer={1}
+  explain="It fell to **8.5%**. Nothing happened in July 2022, but July 2021, when prices rose 0.46%, dropped out of the 12-month window. The YoY rate fell by roughly the size of the month that left. Find July 2022 in the explorable below."
+/>
+
+<div class="breakout">
+<YoYWindow client:load />
+</div>
+
+Now press **Apr 2021**. CPI inflation jumped from 2.7% in March to 4.1% in April 2021, and part of the jump was a base effect: April 2020, when prices *fell* 0.79% at the start of the pandemic, dropped out of the window. Then switch to **Retail sales (NSA)**. The monthly bars swing by ±10% or more with the seasons, but the YoY line is calm, because each window holds one of every month.
+
+<Callout type="empirical" title="Headline GDP growth is an annualized quarterly rate">
+When BEA reports that real GDP grew 3.4% in the third quarter of 2026 (the bundled `A191RL1Q225SBEA`), that is **not** how much GDP grew in the quarter. GDP grew 0.83% from the second quarter; 3.4% is that quarterly rate compounded over four quarters, $(1.0083)^4 - 1$.<sup>[12](#refs)</sup> Compared with a year earlier, GDP was up only 2.1%. All three numbers are correct. Before you compare a GDP growth rate with anything else (a company's sales growth, another country's GDP, a forecast), check that both are on the same basis: quarterly, annualized or year over year. You will reproduce BEA's 3.4% in the exercises.
+</Callout>
+
+<Callout type="pitfall" title="YoY growth is late at turning points">
+Because YoY growth averages a whole year of monthly changes, it reacts slowly. When a series turns down, YoY growth keeps looking healthy for months. Analysts who need an early read look at the annualized change over the last three or six months of SA data, a compromise between noise and speed.
+</Callout>
+
+## Differences: change in the original units
+
+A <Term def="The change from one period to the next in the series' own units: y(t) minus y(t-1). A seasonal difference subtracts the value from a year earlier instead.">difference</Term>, $y_t - y_{t-1}$, measures the change in the series' own units. It answers "how many more?" rather than "what percent more?". The jobs report is quoted this way: payrolls rose by **165,000** in October 2026. As a growth rate that is 0.10%, a number nobody remembers. The year-over-year version is the *seasonal difference*, $y_t - y_{t-12}$.
+
+Use differences when the unit itself is meaningful (jobs, dollars, units shipped) and for series that are **already rates or percents**. The unemployment rate fell from 4.2% in September to 4.1% in October 2026. That is a change of −0.1 **percentage point**. Saying "unemployment fell 2.4%" is technically a percent change of a percent, and it confuses everyone.
+
+**How to convert back.** Add the changes to a known starting level: $y_t = y_{t-1} + \Delta y_t$, or with many periods, the starting level plus the running total (`cumsum()` in both R and Python). Differencing a trending series to make it stable is a modeling step; [Chapter 7](/chapters/arima/) explains when and why to do it.
+
+<Callout type="empirical" title="Percent or percentage points?">
+When the thing you are changing is itself a percent, say **percentage points** (pp). Inflation fell from 9.0% in June 2022 to 3.7% in September 2026: a drop of **5.3 percentage points**. In relative terms the inflation rate fell by 59%, which is true but rarely what anyone means. For interest rates, markets use **basis points**: 1 basis point = 0.01 percentage point, so a quarter-point Fed cut is 25 basis points. Write "pp" or "points" in your table headers whenever a column is a change in a rate.
+</Callout>
+
+## Seasonally adjusted or not
+
+A <Term def="Seasonally adjusted: the agency has estimated and removed the regular calendar pattern (holidays, weather, trading days), so consecutive months can be compared directly.">seasonally adjusted</Term> (SA) series has the regular calendar pattern removed by the agency, so you can compare one month directly with the next. A <Term def="Not seasonally adjusted: the raw data, including the regular calendar pattern.">not seasonally adjusted</Term> (NSA) series is the raw count, December spike and all. Chapter 2 shows how the adjustment is done; here is how to *use* the two versions.
+
+| You have | You can | Do not |
+|---|---|---|
+| **SA** data | Compare consecutive months (MoM), annualize, chart the level | Forget that SA data are revised every year, when the seasonal factors are re-estimated |
+| **NSA** data | Compare with the same month a year earlier (YoY), model the seasonality yourself | Compare consecutive months or annualize them |
+
+The lede's headline is the textbook case. In December 2025, NSA retail sales rose **11.8%** from November. The SA series (`RSAFS`, which also includes restaurants) rose just **0.1%**. December beats November every year; the SA number asks whether this December beat a *normal* December.
+
+<Callout type="empirical" title="Never mix an SA number with an NSA number">
+Before you compare, subtract or divide two series, check that they are both SA or both NSA (and both at monthly or both at annual rates). Dividing NSA sales by SA prices, or comparing an SA month with an NSA month from the same report, builds the seasonal pattern into your answer. FRED IDs often give it away: `RSXFSN` and `MRTSSM4541USN` end in **N** for NSA, while `MRTSSM4541USS` ends in **S** for SA. When only NSA data exist, use YoY comparisons.
+</Callout>
+
+## Real vs. nominal: more stuff, or higher prices?
+
+Retail sales are measured in current dollars. These are <Term def="Measured in the prices of the time. Nominal growth mixes changes in quantity with changes in price.">nominal</Term> values. When prices rise 30%, nominal sales rise even if people buy exactly the same things. To measure the quantity of goods, you divide by a price index. The result is a <Term def="Adjusted for inflation by dividing by a price index; measured in the prices of a fixed base period.">real</Term> series, also called a *deflated* series. Guess first.
+
+<div class="breakout">
+<RealNominal client:load />
+</div>
+
+From the 2019 average to September 2026, nominal retail and food services sales grew 47.4%. Consumer prices grew 31.5% over the same span. Real sales grew only **12.0%**. Notice that subtracting gives about 15.8 points (the lab subtracts the unrounded rates), not 12.0. Growth rates combine by division, not subtraction: $1.474 / 1.315 \approx 1.12$. For one year of low inflation, subtracting is a fine shortcut (5% nominal growth with 2% inflation is about 3% real); over several years, divide.
+
+**How to read and convert.** Real = nominal ÷ price index × 100 gives values in the dollars of the index's base period: CPI averages 100 in 1982–84, so the result is in "1982–84 dollars". Those are hard to picture, so analysts usually restate real values in **today's dollars**: multiply each month by (CPI today ÷ CPI that month). To go back to nominal, multiply by the price index and divide by 100.
+
+<div class="breakout">
+<CodeLab client:load id="ch01-real" title="Deflate retail sales by hand" r={realR} py={realPy}
+  goal="Turn nominal retail sales into real sales with the CPI, verify your series against FRED's official real retail sales, and split growth since 2019 into price and quantity." />
+</div>
+
+<Callout type="empirical" title="Say which dollars, and match the deflator to the spending">
+A real number is meaningless without its base: "\$5.64 in October-2026 dollars" or "in chained 2017 dollars" (BEA's real GDP, `GDPC1`). Pick the deflator that matches what is being bought: CPI for consumer spending, a producer price index for business inputs, the GDP deflator for the whole economy. And deflate *before* you compute long-run growth or compare across years; inflation of 3–4% a year turns into a 30% difference within a decade.
+</Callout>
+
+<Callout type="business" title="When a company reports “record sales”">
+With inflation running at 3–4%, a company whose nominal sales grew 3% sold *fewer* units than last year. Annual reports, budgets and wage negotiations all hinge on this.
+</Callout>
+
+## Per capita: adjusting for population
+
+A country, a state or a customer base that grows will have rising totals even if nobody is better off. Dividing by population gives a <Term def="Per person: a total divided by the population. It removes growth that comes only from having more people.">per-capita</Term> number, which answers "is the *average person* getting more?" Hyndman and Athanasopoulos list population and inflation adjustments among the standard ways to remove a known source of variation before modeling.<sup>[1](#refs)</sup>
+
+<Predict client:load
+  question="U.S. real GDP grew **2.6%** from the third quarter of 2024 to the third quarter of 2025. The resident population grew from 340.0 million to 341.8 million over about the same year. How fast did real GDP **per person** grow?"
+  options={['3.1%', '2.6%: population does not matter', 'About 2.1%', '0.5%']}
+  answer={2}
+  explain="Population grew about 0.5%, so real GDP per person grew about 1.026 / 1.005 − 1 ≈ **2.1%**. As with real and nominal, growth rates divide; for small rates, subtracting (2.6 − 0.5) is a fine shortcut."
+/>
+
+The Census Bureau estimates the U.S. population once a year (July 1); its January 2026 release put it at 341.8 million, up 0.5%, the slowest growth since the pandemic.<sup>[13](#refs)</sup> The same idea works with any denominator that matches the question: sales per store, claims per 1,000 workers, Iowa's share of U.S. jobs. **To convert back**, multiply the per-capita value by the population.
+
+<Callout type="pitfall" title="Per capita is not always the right denominator">
+Per-capita GDP measures average output per resident, not the typical person's income or how it is shared. Use per-worker or per-hour figures for productivity, per-household for housing demand, and per-store for comparing chains. The denominator *is* the question.
+</Callout>
+
+## Index numbers and rebasing
+
+An <Term def="A series divided by its value in a base period and multiplied by 100. 112 means 12% above the base period.">index number</Term> divides a series by its value in a base period and multiplies by 100: $\text{index}_t = 100 \times y_t / y_{\text{base}}$. Many official series are published only as indexes: CPI (1982–84 = 100), industrial production (2017 = 100). Index *levels* have no meaning on their own. A CPI of 336.3 does not mean prices are \$336; it means prices are 236% higher than in 1982–84. Only **ratios** of index values carry information.
+
+<Predict client:load kind="check"
+  question="CPI rose from 324.2 in September 2025 to 336.3 in September 2026, a rise of **12.1 index points**. What was the inflation rate?"
+  options={['12.1%', '3.7%', '1.2%']}
+  answer={1}
+  explain="336.3 / 324.2 − 1 = **3.7%**. Index points depend on the base year; percent changes do not. A 12-point rise was a huge inflation rate in 1980 (CPI near 80) and a modest one today."
+/>
+
+**Rebasing** moves the base period: divide the whole index by its value in the new base period and multiply by 100. Rebasing changes every index level, but never a growth rate between two dates. That makes the choice of base year a presentation decision, and a powerful one, as the next explorable shows with jobs in Iowa and the whole United States.
+
+<div class="breakout">
+<RebaseIndex client:load />
+</div>
+
+With 2019 as the base, Iowa's index sits near 100 today while the U.S. index is about 105: since 2019, Iowa has had no net job growth and the U.S. has added 5.4%. With 1990 as the base, both look strong (U.S. +45%, Iowa +29%). Each chart is honest about its own question. Pick the base that matches yours (often the last "normal" year before the story starts) and print it on the axis.
+
+## Units and scaling
+
+Every bundled series has units, and getting them wrong by a factor of 1,000 is the most common error in student (and professional) work. Retail sales are in **millions** of dollars, payrolls in **thousands** of jobs, GDP in **billions** of chained 2017 dollars at an annual rate, housing starts in **thousands** of units at an annual rate, and CPI is an index.
+
+- **Rescaling** (dividing by 1,000, reporting in billions) changes no information, only the labels. It does change a regression coefficient by the same factor, so the units of the coefficient must always be stated; [Chapter 4](/chapters/regression/) shows how.
+- **Pick units your reader can picture**: "\$745 billion a month" beats "745,021 (millions)".
+- **Logs and growth rates are unit-free**, which is one reason forecasters like them: switching from millions to billions shifts $\ln y$ by a constant and leaves every log change untouched.
+
+<Callout type="empirical" title="Sanity-check a magnitude in one line">
+Before you report any number, check it against something you know. Seasonally adjusted retail and food services sales were \$745 billion in September 2026 (`RSAFS` = 745,021, in millions). Times 12 months is about \$8.9 trillion a year. Divided by 341.8 million people, that is roughly **\$26,000 per person per year**, or about \$2,200 a month. Plausible. If your calculation had said \$26 or \$26 million, you would know a unit went wrong before your manager does.
+</Callout>
+
+## Transformation decision guide
+
+Start from the question, not from the data. Find your question in the left column; the row tells you what to compute, how to say the result in words, and how to get back to the original units.
+
+| Your question | Transformation | Read the result as | Back to original units |
+|---|---|---|---|
+| How big is it? | **Level**, in units a reader can picture | "\$745 billion a month (SA)" | — |
+| How many more than last period? | **Difference** $y_t - y_{t-1}$ | "payrolls +165,000"; for rates, "−0.1 percentage point" | Add changes to a starting level (`cumsum`) |
+| Is growth steady? Do swings grow with the level? | **Log** $\ln y_t$ | Slope of 0.01 per period ≈ 1% growth per period | $y = e^{\ln y}$ (`exp`) |
+| What happened last month? (SA data only) | **MoM %** | "+0.35% from September" | $y_t = y_{t-1}(1 + m)$ |
+| What if this pace lasted a year? (SA data only) | **Annualized** $(1+m)^{12} - 1$ | "4.3% at an annual rate" | $m = (1+a)^{1/12} - 1$ |
+| How much higher than a year ago? (fine for NSA) | **YoY %** | "+3.7% from a year earlier" | $y_t = y_{t-12}(1 + g)$ |
+| More stuff, or higher prices? | **Real** = nominal ÷ price index × 100 | "in 1982–84 dollars" or "in October-2026 dollars" | nominal = real × index ÷ 100 |
+| Is the average person better off? | **Per capita** = total ÷ population | "\$26,000 per person per year" | total = per capita × population |
+| Compare series in different units | **Index** $100\,y_t / y_{\text{base}}$ | "105 = 5% above the 2019 level" | $y_t = \text{index}_t \times y_{\text{base}} / 100$ |
+| Is this month normal for the season? | **SA** series (published) or YoY | "SA, at an annual rate" | Use the agency's NSA series |
+
+**Order of operations.** When you need several transformations, apply them in this order, because each step assumes the one before it:
+
+1. **Units and frequency.** Same units, same frequency; sum flows (average weekly flows to compare months), average stocks and rates; never sum a SAAR series.
+2. **Real.** Deflate money values by the matching price index.
+3. **Per capita.** Divide by the population (or another denominator that matches your question).
+4. **Seasonality.** Use the SA series, or compare with the same month a year earlier.
+5. **Logs**, if the series grows by percentages.
+6. **Differences or growth rates**, if your question is about change.
+7. **Back to original units** for the final report, with a label that says what was done.
+
+<Callout type="tip" title="Linking here from later chapters">
+Later chapters link back to the sections of this toolkit: [logs](#logs-why-and-when), [growth rates](#growth-rates-mom-annualized-and-yoy), [differences](#differences-change-in-the-original-units), [seasonal adjustment](#seasonally-adjusted-or-not), [real vs. nominal](#real-vs-nominal-more-stuff-or-higher-prices), [per capita](#per-capita-adjusting-for-population), [index numbers](#index-numbers-and-rebasing), [units](#units-and-scaling) and this [decision guide](#transformation-decision-guide). Come back whenever a chart's units look strange.
+</Callout>
+
+## Your turn: you are the analyst
+
+Four requests arrive in your inbox. Each needs one transformation done right. Fill in the blanks (`______`) and press **Run & check**.
+
+**1. "What is inflation right now?"** The Bureau of Labor Statistics reports inflation as the percent change in CPI from a year earlier. Compute it yourself and find the latest month you *can* compute from published data. The lab reads the raw CSV, so the unpublished October 2025 stays `NA`.
 
 <div class="breakout">
 <CodeLab client:load id="ch01-ex1" exercise title="Exercise: compute CPI inflation and find the latest reading" r={exR} solution={exSolR} check={exCheckR} py={exPy} solutionPy={exSolPy} checkPy={exCheckPy}
@@ -278,48 +511,110 @@ The Bureau of Labor Statistics reports inflation as the percent change in CPI fr
   hints={['A monthly series has 12 observations per year, so `frequency = 12`. In Python, `shift(12)` gives the value from 12 months earlier.', 'In R, `stats::lag(cpi, -12)` gives the value from 12 months *earlier* (the minus sign means “from the past”). In Python, `last_valid_index()` returns the date of the last non-missing value.']} />
 </div>
 
+**2. "Retail sales jumped 12%. Should we hire?"** Back to the headline that opened the chapter. The data are not seasonally adjusted. Compute the month-over-month and the year-over-year change for December 2025 and decide which one belongs in your reply.
+
+<div class="breakout">
+<CodeLab client:load id="ch01-ex-yoy" exercise title="Exercise: put the December headline in context" r={yoyR} solution={yoySolR} check={yoyCheckR} py={yoyPy} solutionPy={yoySolPy} checkPy={yoyCheckPy}
+  goal="Compute MoM and YoY growth of not-seasonally-adjusted retail sales for December 2025, and report the one that measures the economy rather than the calendar."
+  hints={['A year earlier is 12 months back: `stats::lag(retail, -12)` in R, `shift(12)` in Python.', 'December 2025 is `c(2025, 12)` in R and the label `"2025-12-01"` in Python.', 'For NSA data, the headline-worthy number compares December with December: `answer <- dec_yoy`.']} />
+</div>
+
+**3. "Gas is the most expensive it has ever been."** Regular gasoline averaged \$4.31 a gallon in October 2026. Your manager wants that line in a customer email. Check it: find the record month in sticker prices and in today's (October 2026) dollars.
+
+<div class="breakout">
+<CodeLab client:load id="ch01-ex-real" exercise title="Exercise: is gas really at a record?" r={gasR} solution={gasSolR} check={gasCheckR} py={gasPy} solutionPy={gasSolPy} checkPy={gasCheckPy}
+  goal="Restate every month's gasoline price in October-2026 dollars with the CPI, and compare the nominal and the real record."
+  hints={['To express an old price in today’s dollars, multiply by today’s price level and divide by the price level of that month: `gas * cpi_now / cpi`.', 'The position of the largest value is `which.max()` in R; the date of the largest value is `.idxmax()` in Python.']} />
+</div>
+
+**4. "BEA says GDP grew 3.4%, but my spreadsheet says 0.83%. Who is right?"** Real GDP is quarterly. Annualize the latest quarterly growth rate, check the log shortcut, and compare with the rate BEA published.
+
+<div class="breakout">
+<CodeLab client:load id="ch01-ex-ann" exercise title="Exercise: reconcile quarterly and annualized GDP growth" r={annR} solution={annSolR} check={annCheckR} py={annPy} solutionPy={annSolPy} checkPy={annCheckPy}
+  goal="Compute the quarter-over-quarter, log and annualized growth of real GDP for the latest quarter and match BEA's published annualized rate."
+  hints={['Annualizing compounds the quarterly growth factor over a year: raise `q2 / q1` to the power 4.', 'The log change is the log of this quarter minus the log of last quarter: `log(q[1])` in R, `np.log(q1)` in Python.']} />
+</div>
+
 ## Chapter checklist
 
 - A forecast has a **target**, an **origin**, a **horizon**, an **information set** and an **uncertainty range**. Forecasting is not explaining, and it is not goal-setting.
-- Know your data's shape: **cross-section**, **time series** or **panel**.
-- Store series with their dates (`ts` or a `DatetimeIndex`). Keep missing months as `NA`; never delete them.
-- When changing frequency, **sum flows**, **average or take the last value of stocks and rates**, and never sum a SAAR series.
-- Use **YoY** for NSA data, **MoM** and **annualized** rates only for SA data, **logs** for growth, and an **index** to compare units.
-- **Deflate** nominal values by a price index to get real quantities. Growth rates combine by division, not subtraction.
-- Data are **revised**. Test forecasts on the vintage that was available at the time (ALFRED).
+- Know your data's shape: **cross-section**, **time series** or **panel**. Store series with their dates (`ts` or a `DatetimeIndex`); keep missing months as `NA`.
+- When changing frequency, **sum flows** over periods of equal coverage (average weekly flows to compare months), **average or take the last value of stocks and rates**, and never sum a SAAR series. Data are **revised**: test forecasts on the vintage available at the time (ALFRED).
+- **Pick the question, then the transformation**, and label every transformed number.
+- **Logs**: a 0.01 change ≈ 1%; log changes add up and are symmetric; the shortcut fails for big moves; convert back with `exp()`. No logs of zero, negatives or rates.
+- **Growth**: MoM and annualized only for **SA** data; **YoY** works for NSA data but lags turning points and has **base effects**. GDP headlines are **annualized** quarterly rates.
+- **Differences** for "how many more" and for rates (in **percentage points**). **Real** = nominal ÷ price index; **per capita** = total ÷ population; growth rates combine by **division**.
+- **Index numbers**: only ratios mean something; rebasing changes levels, never growth rates. Check **units** and sanity-check every magnitude.
 
 <InstructorKit
-  minutes={75}
-  data={['UNRATE', 'CPIAUCSL', 'PAYEMS', 'INDPRO', 'GDPC1', 'RSXFSN', 'RSAFS', 'RRSFS', 'T10Y3M', 'ICSA', 'A191RL1Q225SBEA']}
+  minutes={150}
+  data={['UNRATE', 'CPIAUCSL', 'PAYEMS', 'INDPRO', 'GDPC1', 'RSXFSN', 'RSAFS', 'RRSFS', 'T10Y3M', 'ICSA', 'A191RL1Q225SBEA', 'DCOILWTICO', 'GASREGW', 'IANA']}
+  sessions={[
+    { title: 'Where the numbers come from, and how to store them', plan: [
+      '5 min · Warm-up: show the “retail sales jumped 12%” headline. Students list what they would check before repeating it (collect answers; revisit in session 2).',
+      '10 min · What a forecast is: the five parts, forecast vs. goal vs. explanation. Run the **Check yourself** question.',
+      '8 min · Three shapes of data with the **DataShapes** explorable (restaurants vs. nonstore sales in 2020).',
+      '14 min · Live-code the **Load, inspect and chart** lab in Step-through mode; stop at the missing October 2025 and discuss why the row must stay `NA`.',
+      '10 min · Changing frequency: **FrequencyZoom** plus the inverted-months Predict (36 vs. 38 months); flows vs. stocks vs. SAAR.',
+      '8 min · Revisions: the GDP 2008 Q4 Predict (−3.8% → −8.5%), ALFRED, and the five questions to ask of any series.',
+      '20 min · Activity: **Data detective**, parts 1–2 (identify and aggregate one FRED series per team).'
+    ] },
+    { title: 'Reading one series many ways, the transformation toolkit', plan: [
+      '5 min · Warm-up Predict: which view for NSA retail sales? Confirm in **TransformLab** (MoM vs. YoY).',
+      '12 min · Logs: oil round-trip Predict (−71% needs +245%), then **LogRuler**: one-month moves agree, crashes do not; log scale; read a log slope as a growth rate.',
+      '13 min · Growth rates: base-effect Predict (July 2022), then **YoYWindow** (Jul 2022, Apr 2021, then retail NSA); GDP 0.83% vs. 3.4% vs. 2.1%.',
+      '8 min · Differences and percentage points (payrolls +165,000; unemployment −0.1 pp); SA vs. NSA with the December 2025 numbers (+11.8% vs. +0.1%).',
+      '10 min · Real, per capita and index: **RealNominal** guess, per-capita Predict (2.6% → 2.1%), **RebaseIndex** (Iowa vs. U.S. with base 2019 and 1990).',
+      '22 min · Activity: **The analyst’s inbox** (exercises 2–4 in pairs, then one-sentence replies to the manager).',
+      '5 min · Wrap-up: walk through the **transformation decision guide** and its order of operations.'
+    ] }
+  ]}
   objectives={[
     'State the five parts of a forecast (target, origin, horizon, information set, uncertainty) and distinguish a forecast from a goal and from a causal explanation.',
     'Classify a data set as cross-section, time series or panel.',
     'Create and interrogate a `ts` object (`start`, `end`, `frequency`, `time`, `window`) and a pandas series with a `DatetimeIndex`, keeping missing observations in place.',
     'Aggregate to a lower frequency with the correct rule for flows, stocks and rates.',
-    'Compute and interpret differences, logs, MoM, YoY, annualized and indexed series, and choose the right one for SA and NSA data.',
-    'Deflate a nominal series with the CPI and decompose nominal growth into real growth and inflation.',
-    'Explain data revisions and vintages, and why they matter for evaluating forecasts.'
+    'Explain data revisions and vintages, and why they matter for evaluating forecasts.',
+    'Read a log change as an approximate percent change, state when the approximation fails, and convert log results back with `exp()`.',
+    'Compute and interpret MoM, annualized and YoY growth; choose the right one for SA and NSA data; convert between monthly, quarterly and annual rates; identify a base effect.',
+    'Use differences and percentage points for changes in rates, and avoid mixing SA and NSA data.',
+    'Deflate a nominal series, restate it in today’s dollars, compute a per-capita value, and rebase an index, knowing which numbers change and which do not.',
+    'Choose a transformation from the question asked, apply several in the right order, and sanity-check the magnitude of the result.'
   ]}
   discussion={[
     'A news story says “retail sales jumped 11.8% in December.” What would you check before repeating it to your manager?',
     'Your firm’s nominal revenue grew 5% last year while CPI rose 3.7%. Did the firm grow? By how much, and what would make CPI the wrong deflator?',
-    'A model looks excellent when tested on today’s GDP data for 2008–09. Why might it have looked much worse to someone using it at the time?'
+    'A model looks excellent when tested on today’s GDP data for 2008–09. Why might it have looked much worse to someone using it at the time?',
+    'Inflation fell from 9.0% to 8.5% in July 2022 although prices were flat that month. Was that good news? How would you explain it to a reporter?',
+    'A chart of Iowa vs. U.S. jobs uses 1990 as the base year. A rival chart uses 2019. Which is “right”, and what would you print on the axis?'
   ]}
   misconceptions={[
     '“Month-over-month growth is always more up-to-date, so it is always better.” For NSA data it mostly measures the calendar.',
     '“Real growth = nominal growth − inflation.” Only approximately; over several years the gap is large (15.8 vs. 12.0 points here).',
     '“A missing month can just be dropped.” In a regularly spaced series, dropping it shifts every later date.',
-    '“Published data are final.” GDP for 2008 Q4 went from −3.8% to −8.5%.'
+    '“Published data are final.” GDP for 2008 Q4 went from −3.8% to −8.5%.',
+    '“A log change of 0.5 is a 50% rise.” It is a 65% rise; the 0.01 ≈ 1% shortcut is only for small changes.',
+    '“A 50% fall followed by a 50% rise gets you back.” It leaves you 25% below where you started.',
+    '“GDP grew 3.4% in the quarter.” It grew 0.83%; 3.4% is the annualized rate.',
+    '“If YoY inflation falls, prices fell.” Prices can still be rising; a big month may have dropped out of the window.',
+    '“CPI rose 12 points, so inflation was 12%.” Index points are not percent.'
   ]}
 >
 
-**Data detective (30 minutes).** Teams of three each get one FRED ID: `RSXFSN`, `HOUST`, `ICSA`, `T10Y3M` or `GDPC1`.
+**Session 1 activity: Data detective (20 minutes).** Teams of three each get one FRED ID: `RSXFSN`, `HOUST`, `ICSA`, `T10Y3M` or `GDPC1`.
 
 1. **Identify (10 min).** From the FRED series page, answer the five questions in the tip box: units, frequency, SA/NSA, nominal/real, release schedule.
-2. **Transform (10 min).** In the “Six ways to read one series” code lab, change the series ID and decide which single view the team would put on a slide for executives, and why.
-3. **Aggregate (10 min).** Convert the series to quarterly with the right rule, and state the rule in one sentence.
+2. **Aggregate (10 min).** Convert the series to quarterly with the right rule, and state the rule in one sentence.
 
-*Expected results:* `RSXFSN` is monthly, \$ millions, NSA, nominal, so use YoY and quarterly **sums**. `HOUST` is thousands of units at a SAAR, so quarterly **averages**, never sums. `ICSA` is weekly and SA; it is a flow, so sum to monthly (four or five weeks per month) or average. `T10Y3M` is a daily rate in percentage points, so use the average or the end of period; the lab finds 36 inverted months by average and 38 by month-end since 2019. `GDPC1` is quarterly, chained 2017 dollars (already real) and SAAR, so quote growth as annualized quarterly or YoY. Close by asking each team what they would forecast with their series, and at what horizon.
+*Expected results:* `RSXFSN` is monthly, \$ millions, NSA, nominal, so use YoY and quarterly **sums**. `HOUST` is thousands of units at a SAAR, so quarterly **averages**, never sums. `ICSA` is weekly and SA; it is a flow, but months hold four or five weeks, so **average** the weeks to compare months (the sum is a valid monthly total but jumps about 25% in five-week months). `T10Y3M` is a daily rate in percentage points, so use the average or the end of period; the lab finds 36 inverted months by average and 38 by month-end since 2019. `GDPC1` is quarterly, chained 2017 dollars (already real) and SAAR, so quote growth as annualized quarterly or YoY. Keep the team's series for session 2.
+
+**Session 2 activity: The analyst's inbox (22 minutes).** Pairs work through exercises 2–4 in **Your turn** (about 5 minutes each), then write a one-sentence reply to the manager for each, with units. In the last 7 minutes, each Data-detective team opens the “Six ways to read one series” lab, swaps in its own series ID, and names the single view it would put on a slide for executives.
+
+*Expected results:*
+- **December headline:** MoM +11.8%, YoY **+3.4%** (December 2024 also jumped 9.4% from November). The SA series rose 0.1%. Reply: “Sales were 3.4% above a year earlier; the 12% is the normal holiday jump. No case for extra hiring.”
+- **Gas record:** today \$4.31 (October 2026). Nominal record: June 2022, \$4.93. In October-2026 dollars the record is **June 2008, \$6.29**; June 2022 is \$5.64. Reply: “Gas is high, but below both the 2022 and the 2008 peaks; in today’s dollars it was 46% more expensive in June 2008.”
+- **GDP:** 0.83% from the previous quarter, 100 × log change 0.83, annualized **3.37%**, which BEA rounds to 3.4%; YoY 2.1%. Reply: “Both are right: 0.83% in the quarter is 3.4% at an annual rate.”
+- **Team views:** `RSXFSN` YoY %; `HOUST` level (it is already an annual rate) or YoY; `ICSA` level or 4-week average; `T10Y3M` level in percentage points with a zero line; `GDPC1` annualized quarterly growth or YoY.
 
 </InstructorKit>
 
@@ -327,7 +622,7 @@ The Bureau of Labor Statistics reports inflation as the percent change in CPI fr
 
 **References**
 
-1. Hyndman, R. J., & Athanasopoulos, G. (2021). *Forecasting: Principles and Practice* (3rd ed.), ch. 1 (forecasts, goals and planning) and ch. 2 (time series graphics). [otexts.com/fpp3](https://otexts.com/fpp3/)
+1. Hyndman, R. J., & Athanasopoulos, G. (2021). *Forecasting: Principles and Practice* (3rd ed.), ch. 1 (forecasts, goals and planning), ch. 2 (time series graphics) and §3.1 (calendar, population, inflation and mathematical adjustments). [otexts.com/fpp3](https://otexts.com/fpp3/)
 2. U.S. Bureau of Labor Statistics. *2025 federal government shutdown impact on the Current Population Survey.* [bls.gov/cps/methods/2025-federal-government-shutdown-impact-cps.htm](https://www.bls.gov/cps/methods/2025-federal-government-shutdown-impact-cps.htm)
 3. U.S. Bureau of Labor Statistics. *2025 federal government shutdown impact on the Consumer Price Index* (FAQ), and *Consumer Price Index, October 2026* news release (November 10, 2026). [bls.gov/cpi/additional-resources/2025-federal-government-shutdown-impact-cpi-faq.htm](https://www.bls.gov/cpi/additional-resources/2025-federal-government-shutdown-impact-cpi-faq.htm)
 4. Neely, C. J. (2023, September 7). What is the probability of a recession? The message from yield spreads. Federal Reserve Bank of St. Louis, *On the Economy*. [stlouisfed.org](https://www.stlouisfed.org/on-the-economy/2023/sep/what-probability-recession-message-yield-spreads)
@@ -337,6 +632,9 @@ The Bureau of Labor Statistics reports inflation as the percent change in CPI fr
 8. Federal Reserve Bank of St. Louis. *ALFRED: Archival Federal Reserve Economic Data.* [alfred.stlouisfed.org](https://alfred.stlouisfed.org/)
 9. Federal Reserve Bank of St. Louis. *FRED: Federal Reserve Economic Data*, and the FRED API documentation. [fred.stlouisfed.org](https://fred.stlouisfed.org/), [fred.stlouisfed.org/docs/api/fred](https://fred.stlouisfed.org/docs/api/fred/)
 10. U.S. Census Bureau. *Monthly Retail Trade Survey* (source of the retail sales series). [census.gov/retail](https://www.census.gov/retail/index.html)
+11. Nau, R. (Duke University). *The logarithm transformation*, in *Statistical forecasting: notes on regression and time series analysis* (on log changes as percent changes, their accuracy range and symmetry). [people.duke.edu/~rnau/411log.htm](https://people.duke.edu/~rnau/411log.htm)
+12. U.S. Bureau of Economic Analysis. *Why does BEA publish percent changes in quarterly series at annual rates?* (FAQ 122). [bea.gov/help/faq/122](https://www.bea.gov/help/faq/122)
+13. U.S. Census Bureau (2026, January 27). *U.S. population growth slows due to historic decline in net international migration* (Vintage 2025 national estimates, release CB26-20). [census.gov](https://www.census.gov/newsroom/press-releases/2026/population-growth-slows.html)
 
 </div>
 

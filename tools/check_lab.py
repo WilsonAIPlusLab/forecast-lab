@@ -28,5 +28,7 @@ for f in args:
     except Exception:
         ok = False; traceback.print_exc()
     viz = json.loads(course._viz_pop())
+    for v in viz:
+        if v.get("type") == "check": print(f"CHECK {'PASS' if v.get('pass') else 'FAIL'}: {v.get('message')}")
     print(f"\n-> {'OK' if ok else 'FAILED'} in {time.time()-t0:.1f}s; {len(viz)} chart(s): " + "; ".join(v['type'] + (f" '{v.get('title')}'" if v.get('title') else '') for v in viz))
     os.chdir(root)

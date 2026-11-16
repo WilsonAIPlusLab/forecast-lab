@@ -1,38 +1,63 @@
 ---
 layout: ../../layouts/Chapter.astro
 slug: forecast-studio
-minutes: 60
+minutes: 120
+sessions:
+  - title: Run the workflow honestly
+  - title: Say it in words and units, then ship
+    starts: say-it-in-words-and-units
 build:
   - A working forecast dashboard for any of 10 U.S. series, with a rolling-origin scorecard, an error-by-horizon chart and a fan chart whose ranges come from the method's real past errors
-  - A one-paragraph executive summary, generated from the numbers, that you can paste into an email to a manager
-  - An end-to-end R (or Python) script that goes from raw FRED data to benchmarks, ETS, ARIMA, a combination, tsCV and a summary in about 40 lines
+  - An empirical checklist for before, during and after modelling that pulls the whole course together
+  - A one-paragraph executive summary, worded to professional standards, for a series of your choice
+  - An end-to-end R (or Python) script that goes from raw FRED data to a data note, benchmarks, an honest test, an 80% range and a generated summary
   - A tracking-signal monitor that tells you when a deployed forecast has gone stale
-skills: [pipeline, tsCV, "ets()", "auto.arima()", combination, empirical intervals, "sprintf()", tracking signal, reproducibility, ExponentialSmoothing, SARIMAX]
+skills: [pipeline, data note, tsCV, "ets()", "auto.arima()", one change at a time, combination, empirical intervals, like-with-like comparison, percentage points, "sprintf()", tracking signal, reproducibility, ExponentialSmoothing, SARIMAX]
 ---
 import CodeLab from '../../components/CodeLab.svelte';
 import Callout from '../../components/Callout.astro';
 import KeyIdea from '../../components/KeyIdea.astro';
+import SessionBreak from '../../components/SessionBreak.astro';
 import Predict from '../../components/Predict.svelte';
 import Term from '../../components/Term.astro';
 import InstructorKit from '../../components/InstructorKit.astro';
 import Studio from '../../components/ch14/Studio.svelte';
 import Pipeline from '../../components/ch14/Pipeline.svelte';
 import Monitor from '../../components/ch14/Monitor.svelte';
+import OneChangeLadder from '../../components/ch14/OneChangeLadder.svelte';
+import LikeWithLike from '../../components/ch14/LikeWithLike.svelte';
+import WordingWorkshop from '../../components/ch14/WordingWorkshop.svelte';
 import studioR from '../../labs/ch14/studio.R?raw';
 import studioPy from '../../labs/ch14/studio.py?raw';
 import monR from '../../labs/ch14/monitor.R?raw';
+import practiceR from '../../labs/ch14/practice.R?raw';
+import practicePy from '../../labs/ch14/practice.py?raw';
 import exR from '../../labs/ch14/exercise.R?raw';
 import exSolR from '../../labs/ch14/exercise_solution.R?raw';
 import exCheckR from '../../labs/ch14/exercise_check.R?raw';
 import exPy from '../../labs/ch14/exercise.py?raw';
 import exSolPy from '../../labs/ch14/exercise_solution.py?raw';
 import exCheckPy from '../../labs/ch14/exercise_check.py?raw';
+import ocR from '../../labs/ch14/ex_onechange.R?raw';
+import ocSolR from '../../labs/ch14/ex_onechange_solution.R?raw';
+import ocCheckR from '../../labs/ch14/ex_onechange_check.R?raw';
+import ocPy from '../../labs/ch14/ex_onechange.py?raw';
+import ocSolPy from '../../labs/ch14/ex_onechange_solution.py?raw';
+import ocCheckPy from '../../labs/ch14/ex_onechange_check.py?raw';
+import yoyR from '../../labs/ch14/ex_yoy.R?raw';
+import yoySolR from '../../labs/ch14/ex_yoy_solution.R?raw';
+import yoyCheckR from '../../labs/ch14/ex_yoy_check.R?raw';
+import yoyPy from '../../labs/ch14/ex_yoy.py?raw';
+import yoySolPy from '../../labs/ch14/ex_yoy_solution.py?raw';
+import yoyCheckPy from '../../labs/ch14/ex_yoy_check.py?raw';
 
 <p class="lede">Your manager stops by your desk on a Friday: “What will retail sales look like next September, and how sure are you? I need something for Monday's planning meeting.” She does not want a residual plot or an AICc table. She wants one number, a range she can plan around, a sentence on why she should trust it, and a warning if something could go badly wrong. This chapter is about producing exactly that, quickly and honestly.</p>
 
-You already have every tool you need. In the earlier chapters you built benchmarks, smoothing models, ARIMA, regressions, tree ensembles, intervals and a scorecard. What separates a class exercise from a forecast an employer will actually use is the **workflow** around those tools: a fixed sequence of steps, honest evaluation, and communication aimed at the person making the decision. In this closing chapter you will run that workflow end to end, first in a dashboard, then in code.
+You already have every tool you need. In the earlier chapters you built benchmarks, smoothing models, ARIMA, regressions, tree ensembles, intervals and a scorecard. What separates a class exercise from a forecast an employer will actually use is the **workflow** around those tools: a fixed sequence of steps, a checklist of judgement calls, honest evaluation, and communication aimed at the person making the decision. In this closing chapter you will run that workflow end to end, first in a dashboard, then in code, and finally on a series of your own choice.
 
-<KeyIdea>A professional forecast is a number, a range, a track record and a risk, delivered to someone who has to make a decision. The model is only one ingredient.</KeyIdea>
+<KeyIdea>A professional forecast is a number, a range, a track record and a risk, delivered in plain words and the reader's units to someone who has to make a decision. The model is only one ingredient.</KeyIdea>
+
+<SessionBreak n={1} title="Run the workflow honestly" goals={['Follow the nine-step pipeline and the **before / during / after** checklist', 'Read a rolling-origin scorecard, an error-by-horizon chart and a fan chart in the Forecast Studio', 'Change **one thing at a time** and keep only what beats the benchmark', 'Reproduce the Studio forecast in one script']} />
 
 ## The pipeline, in nine steps
 
@@ -45,7 +70,70 @@ Every serious forecasting team follows some version of the sequence below. The o
 Two steps deserve a second look because students skip them most often:
 
 - **Step 1, the decision and the loss.** A forecast of grocery sales for a store manager ordering milk and a forecast for an investor valuing the chain are different products, even on the same data. The first cares about next week and hates stock-outs; the second cares about next year and hates bias. Write the decision down before you open R.
-- **Step 2, the data.** In this course alone you have met seasonally adjusted and unadjusted versions of the same series, $ millions next to $ billions, weekly data that had to be averaged to months, and a pandemic that broke every pattern in 2020. A quick plot and a one-line data note (source, units, SA or NSA) prevents most embarrassing mistakes.
+- **Step 2, the data.** In this course alone you have met seasonally adjusted and unadjusted versions of the same series, \$ millions next to \$ billions, weekly data that had to be averaged to months, and a pandemic that broke every pattern in 2020. A quick plot and a one-line data note (source, units, SA or NSA) prevents most embarrassing mistakes.
+
+## The analyst's checklist
+
+The pipeline says *what* to do. The checklist below says *what to check* at each stage. Every item is a judgement call you have practised in an earlier chapter; the link takes you back to it. Print it, keep it next to your keyboard, and run through it every time. Leading texts on forecasting practice put the same emphasis on the unglamorous steps: define the problem, look at the data, and only then fit models.<sup>[1](#refs)</sup>
+
+<Predict client:load
+  question="You download U.S. retail sales (FRED `RSXFSN`). The value for September 2026 is **635,056**. What does that number mean?"
+  options={['Americans spent \$635,056 in stores that month', 'Retail sales were about \$635.1 billion in September 2026, not seasonally adjusted', 'Retail sales were running at \$635.1 billion a year (a seasonally adjusted annual rate)', 'An index of retail sales, with 2017 = 100']}
+  answer={1}
+  explain="FRED reports this series in **\$ millions**, for one month, **not seasonally adjusted** (the catalog and the FRED page say so). Divide by 1,000 to get \$635.1 billion. It is not an annual rate: that would be about 12 times larger, and series published that way (such as housing starts `HOUST`) say “SAAR” in their units. Reading the label takes ten seconds and prevents a mistake of a factor of 1,000 or 12."
+/>
+
+<div class="breakout">
+<div class="checklist">
+  <div class="cl-col">
+    <div class="cl-h"><span class="cl-n">1</span>Before you model</div>
+    <ul>
+      <li><b>Units and scale.</b> \$ millions or \$ billions? Thousands of people or millions? Write them on every axis. (Ch. 1, <a href="/chapters/time-series-data/#where-the-data-come-from">where the data come from</a>)</li>
+      <li><b>Frequency.</b> Monthly, quarterly, weekly? If you change it, sum flows over equal periods (but average weekly flows, since months have four or five weeks), and average stocks and rates or take the end-of-period value. (Ch. 1, <a href="/chapters/time-series-data/#changing-frequency-sum-average-or-last-value">changing frequency</a>)</li>
+      <li><b>SA or NSA? Annual rate?</b> Not seasonally adjusted data need a seasonal model or a year-over-year comparison; SAAR values are 12 times the monthly pace. (Ch. 2, <a href="/chapters/decomposition/#how-the-official-numbers-are-made">how the official numbers are made</a>)</li>
+      <li><b>Real or nominal?</b> Dollar sales rise with prices. Deflate if the question is about volume. (Ch. 1, <a href="/chapters/time-series-data/#real-vs-nominal-more-stuff-or-higher-prices">real vs. nominal</a>)</li>
+      <li><b>Which transformation, and why?</b> Logs when swings grow with the level or you want percentages; growth rates or differences when the trend wanders; year-over-year changes for NSA data. (Ch. 1, <a href="/chapters/time-series-data/#transformations-every-analyst-uses">transformations</a>; Ch. 2, <a href="/chapters/decomposition/#additive-or-multiplicative">additive or multiplicative</a>; Ch. 7, <a href="/chapters/arima/#the-cure-differencing">differencing</a>)</li>
+      <li><b>Plot it.</b> Mark breaks, outliers (2020), revisions and the last reliable month.</li>
+    </ul>
+  </div>
+  <div class="cl-col">
+    <div class="cl-h"><span class="cl-n">2</span>While you model</div>
+    <ul>
+      <li><b>Benchmark first.</b> Naive, seasonal naive and drift set the bar before any model runs. (Ch. 3)</li>
+      <li><b>An honest test.</b> Rolling origins, model forms chosen on data before the first origin, no peeking. (Ch. 3, <a href="/chapters/benchmarks/#one-test-period-is-not-enough-time-series-cross-validation">time-series cross-validation</a>)</li>
+      <li><b>One change at a time.</b> Add one ingredient, re-score on the same test, keep it only if it pays. (This chapter, <a href="#one-change-at-a-time">below</a>)</li>
+      <li><b>Same test for everyone.</b> Same origins, horizon, sample and metric for every candidate.</li>
+      <li><b>Sanity-check magnitudes.</b> Does the forecast imply a growth rate you would believe? Compare it with the last few years.</li>
+    </ul>
+  </div>
+  <div class="cl-col">
+    <div class="cl-h"><span class="cl-n">3</span>After you model</div>
+    <ul>
+      <li><b>Back to levels and units.</b> If you modelled logs or growth rates, translate the forecast back to the reader's units. (Ch. 10, <a href="/chapters/uncertainty/#forecasting-in-logs-and-coming-back-to-dollars">coming back from logs</a>)</li>
+      <li><b>Compare like with like.</b> Same month last year for NSA data; percentage points for rates. (This chapter, <a href="#say-it-in-words-and-units">below</a>)</li>
+      <li><b>A range, and what it assumes.</b> Check how often past ranges caught the truth. (Ch. 10, <a href="/chapters/uncertainty/#audit-the-promise-coverage">coverage</a>)</li>
+      <li><b>Drivers in words.</b> “Goes with”, not “causes”, with units on both sides. (Ch. 4, <a href="/chapters/regression/#reading-a-regression-like-an-analyst">reading a regression</a>)</li>
+      <li><b>Explain it to a manager</b> in one paragraph: number, range, track record, one risk, one trigger.</li>
+      <li><b>State the limits.</b> What the forecast assumes, and when it expires.</li>
+    </ul>
+  </div>
+</div>
+</div>
+
+<Callout type="empirical" title="Write the data note before the first model">
+One line, at the top of every script and every report: *series, FRED ID, units, frequency, SA/NSA, sample.* For the Studio's default series it reads: “U.S. retail sales excluding food services, `RSXFSN`, \$ millions per month (we report \$ billions), monthly, not seasonally adjusted, January 2010 to September 2026.” Writing it forces the checks above. It also catches the classic traps of this course's data: `HOUST` (housing starts at a seasonally adjusted annual rate: 1,221 thousand in September 2026) and `HOUSTNSA` (the raw monthly count: 103.8 thousand that month) measure the same thing but differ by a factor of about 12, and `TOTALSA` is in millions a year while `TOTALNSA` is in thousands a month. Mixing them silently ruins a model.
+</Callout>
+
+<Callout type="empirical" title="Choose the transformation for a reason you can say out loud">
+Each transformation changes what your forecast *means*, so pick it for a reason you could explain to your manager:
+<ul>
+<li><b>Log</b>: “the seasonal swings and the errors grow with the level, and I want to talk in percentages.” A multiplicative Holt-Winters model does the same job without an explicit log, which is why the Studio offers it.</li>
+<li><b>Growth rate or difference</b>: “the level wanders like a random walk, so I model the changes” (Chapter 7). The forecast is then a forecast of change, which you must add back to the last level.</li>
+<li><b>Year-over-year change</b>: “the data are not seasonally adjusted, and I want a number that the season cannot distort.”</li>
+<li><b>Real (deflated)</b>: “the question is about quantities, not dollars.”</li>
+</ul>
+If you cannot finish the sentence, stay in levels. And whatever you choose, test it: on retail sales, switching from fixed-size to proportional seasonal swings lowers the Studio's rolling-origin error from \$12.6 to \$10.7 billion, but on light vehicle sales it raises it from 63.0 to 70.6 thousand vehicles. The data, not the textbook, decide.
+</Callout>
 
 ## The Forecast Studio
 
@@ -80,7 +168,7 @@ $$
 \Big[\;\hat y_{T+h\mid T} + q_{0.10}(e_{\cdot,h}),\;\; \hat y_{T+h\mid T} + q_{0.90}(e_{\cdot,h})\;\Big],
 $$
 
-where $q_p$ is the $p$-th sample quantile (R's default, type 7), and the 50% range uses $q_{0.25}$ and $q_{0.75}$. Nothing here assumes normal errors or a correct model, which is the appeal. The price: it assumes the next year's errors look like the last four years' errors, and with 25 to 48 errors per horizon the band edges are rough. That is why the Studio shows no 95% range: it would rest on the one or two most extreme misses. [Chapter 10](/chapters/uncertainty/) develops the same idea further as *conformal* prediction.
+where $q_p$ is the $p$-th sample quantile (R's default, type 7), and the 50% range uses $q_{0.25}$ and $q_{0.75}$. Nothing here assumes normal errors or a correct model, which is the appeal. The price: it assumes the next year's errors look like the last four years' errors, and with 25 to 48 errors per horizon the band edges are rough. That is why the Studio shows no 95% range: it would rest on the one or two most extreme misses. [Chapter 10](/chapters/uncertainty/#intervals-for-any-model-split-conformal-prediction) developed the same idea as *conformal* prediction.
 
 Each smoothing model's parameters are re-estimated at every origin by minimizing one-step squared errors with the Nelder–Mead method, so no origin ever sees data from its own future. The parameter limits match R's `ets()` ($\beta \le \alpha$, $\gamma \le 1 - \alpha$, damping between 0.8 and 0.98), but `ets()` maximizes a likelihood rather than minimizing squared errors, so its estimates can differ a little. The MASE column divides each method's MAE by the in-sample seasonal naive MAE, as R's `accuracy()` does.
 </Callout>
@@ -110,6 +198,44 @@ Neither failure is a bug. They are the honest limits of forecasting from the pas
 Every control is stored in the page address. Set up a view (series, cut-off, horizon, methods, charted method), press **Copy link to this view**, and paste it into a slide or the LMS. Students who open it see exactly the same configuration. The parameters are `s` (FRED ID), `end` (YYYY-MM), `h` (6, 12, 18 or 24), `m` (comma-separated methods: `naive,snaive,drift,ses,holt,hwa,hwm,combo`) and `f` (`best` or a method).
 </Callout>
 
+## One change at a time
+
+The scorecard tells you *which* method wins. It does not tell you *why*. A good analyst finds out by building up from the benchmark one ingredient at a time and re-scoring after each step, on the same test. If you change the seasonality, the trend and the sample all at once and the error falls, you cannot say which change did the work, and you may be carrying a useless ingredient that will hurt you next year.
+
+The ladder below starts at the naive rule and adds exactly one ingredient per rung: smoothing, then a damped trend, then seasonality, then seasonality that scales with the level. Every rung is scored on the Studio's 48 rolling origins.
+
+<Predict client:load
+  question="On U.S. retail sales (not seasonally adjusted), which single ingredient do you expect to cut the error the most?"
+  options={['Smoothing (averaging recent months instead of copying the last one)', 'A damped trend', 'Seasonality', 'Making the seasonal swings proportional to the level']}
+  answer={2}
+  explain="Adding seasonality takes the typical miss from about \$30.0 billion (Holt) to \$12.6 billion (Holt-Winters additive), a 58% cut. Smoothing helps too (\$38.6 to \$30.8 billion), the damped trend barely matters (a 2% change, a tie), and proportional swings take another 15% off (\$12.6 to \$10.7 billion). Now switch the ladder to <b>payroll jobs</b>, which are seasonally adjusted: there, adding seasonality buys almost nothing on average and doubles the one-month-ahead miss."
+/>
+
+<div class="breakout">
+<OneChangeLadder client:load />
+</div>
+
+Three lessons from the ladder, each worth checking yourself:
+
+- **The ingredient that matters depends on the series.** On retail sales seasonality is everything. On consumer prices (CPI, seasonally adjusted) the trend is everything: adding it cuts the error from 5.2 to 1.9 index points, and adding seasonality on top makes things worse (2.5).
+- **An ingredient can hurt.** On payroll jobs, switching to proportional seasonal swings raises the error by 10%. An extra ingredient is extra parameters to estimate, and if there is nothing for them to capture, they add noise.
+- **Compare with the best benchmark, not just the first rung.** On payroll jobs and consumer prices the plain drift rule (a straight line through the first and last points) beats every rung. If no ingredient beats the benchmark, ship the benchmark and say so.
+
+<Callout type="empirical" title="Hold the test fixed while you compare">
+“One change at a time” has a twin: **one test for every candidate.** Keep the origins, the horizons, the sample start and the metric identical while you compare models, and decide the test *before* you look at any results. If you move the evaluation window, a model can win just because its lucky months fell inside it. And a small gain on a small test is a tie: with 8 origins, a 3% improvement is well within the noise; with 48 origins and a 15% gain, you can believe it.
+</Callout>
+
+Now do it in code. The exercise below compares two exponential smoothing models that differ in exactly one choice, and measures what that choice buys.
+
+<div class="breakout">
+<CodeLab client:load id="ch14-ex-onechange" exercise title="Exercise: is multiplicative seasonality worth it?" r={ocR} solution={ocSolR} check={ocCheckR} py={ocPy} solutionPy={ocSolPy} checkPy={ocCheckPy}
+  packages={['forecast']} pyPackages={['statsmodels']}
+  goal="Your manager asks whether switching the retail-sales model from additive to multiplicative seasonality is worth the extra complexity. Score both, and the seasonal naive benchmark, on the same 8 rolling origins, and report the gain from that one change."
+  hints={['The “same month last year” benchmark is `snaive()` in R. In Python it is the `snaive` function defined in the code.', 'An ETS code has three letters: error, trend, seasonality. Additive everything is \"AAA\"; here the error and the seasonality are multiplicative, the trend additive. In Python, the seasonal type is \"mul\".', 'The gain compares the new model with the old one, so divide `mae_mul` by `mae_add`.']} />
+</div>
+
+The R solution finds that the one change cuts the typical miss from \$14.6 to \$13.3 billion (9%), and both models beat seasonal naive (\$16.6 billion). Python's Holt-Winters, which estimates its parameters a little differently, finds a larger gain (\$13.5 to \$11.0 billion). Both point the same way, and the Studio's 48-origin ladder agrees (15%).
+
 ## Reproduce it in code
 
 A dashboard is for exploring; a script is what you ship. The lab below rebuilds the Studio's default view in about 40 lines of R, with two upgrades the Studio cannot do instantly in a browser: R's automatic `ets()` model selection and `auto.arima()`. Both choose their model form using only the data **before the first forecast origin**, and every model is **re-estimated from scratch at every origin** on the data available at that date. Re-fitting ARIMA 48 times would take too long in your browser, so the lab uses 12 origins, one every four months over the same four years. It then builds the same kind of empirical fan chart and writes the executive summary with `sprintf()`.
@@ -130,7 +256,51 @@ When you run it, compare with the dashboard:
 A shortcut you will see online re-uses the parameters estimated on the full sample and only re-runs the model at each past origin. It is much faster, but those parameters were estimated with data from *after* the origin: look-ahead leakage, the sin from [Chapter 3](/chapters/benchmarks/). The same goes for choosing the model form on the full sample and then scoring it on part of that sample. That is why this lab selects forms on data before the first origin and re-estimates everything at each origin. When time is short, use fewer origins, not leaky ones.
 </Callout>
 
+<SessionBreak n={2} title="Say it in words and units, then ship" goals={['Compare a forecast **like with like**: same month last year for NSA data, percentage points for rates', 'Tell strong from weak wording for a forecast, a range, a track record, a driver and a risk', 'Monitor a shipped forecast and make it reproducible', 'Run the full pipeline on a series of your choice and write its executive summary']} />
+
 <span id="communicate"></span>
+
+## Say it in words and units
+
+A correct forecast can still be reported wrongly. The commonest mistakes in this course are not statistical; they are about *comparisons* and *units*. Your reader will remember one number and one comparison, so both must be right.
+
+<Predict client:load kind="check"
+  question="The Holt-Winters multiplicative forecast for U.S. retail sales in **December 2026** is about \$728.6 billion. The latest actual value, September 2026, was \$635.1 billion, and December 2025 was \$694.1 billion. The series is not seasonally adjusted. Which headline is right?"
+  options={['Retail sales are set to jump 14.7% by December', 'December sales should be about 5% above last December', 'Retail sales will grow 14.7% this quarter', 'December sales should be 4.9% below last December']}
+  answer={1}
+  explain="\$728.6 / \$694.1 ≈ 1.05: about <b>5% above last December</b>. The 14.7% rise from September is mostly the holiday season, which happens every year; reporting it as growth would mislead your reader. Compare like with like. Try it below: slide to 3 months ahead."
+/>
+
+<div class="breakout">
+<LikeWithLike client:load />
+</div>
+
+On retail sales, the comparison with the latest month swings from −8.2% (February 2027) to +14.7% (December 2026) as you slide across the next 12 months, while the comparison with the same month a year earlier stays between +2.8% and +6.7%. Only the second is news about the economy. The Studio's executive summary follows this rule: for series that are not seasonally adjusted it compares the forecast with the same month a year earlier; for seasonally adjusted series it compares with the latest month.
+
+<Callout type="empirical" title="Percent or percentage points?">
+For rates (unemployment, interest rates, inflation), say **percentage points** for the change. If unemployment goes from 4.1% to 4.3%, it rose by **0.2 percentage points**, which is about a 5% rise *relative* to its level. “Unemployment rose 0.2%” is ambiguous at best and wrong at worst. The same goes for forecast misses: the Studio reports the unemployment rate's typical miss as 0.09 percentage points one month ahead, not “0.09%”.
+</Callout>
+
+<Callout type="empirical" title="Report in levels, even if you modelled changes">
+If your model works with logs, growth rates or year-over-year changes, translate the result back into the level your reader cares about before you write a word. A forecast of “+5.0% on last December” for retail sales becomes \$694.1 billion × 1.050 ≈ **\$728.8 billion**, close to the model's level forecast of \$728.6 billion (the growth rate is rounded). For forecasts made in logs, exponentiate the forecast and the range ends, as in [Chapter 10](/chapters/uncertainty/#forecasting-in-logs-and-coming-back-to-dollars); the result is a median, and the range stays lopsided, as it should.<sup>[9](#refs)</sup> Also remember that retail sales are **nominal**: if prices rise about 3% over the same year, a 2.8% rise in dollar sales means roughly flat volumes ([Chapter 1](/chapters/time-series-data/#real-vs-nominal-more-stuff-or-higher-prices)).
+</Callout>
+
+### Model sentences: weak and strong
+
+Use the table as a phrasebook. The strong versions share four habits: a number **with units**, a **comparison** the reader understands, the **direction** of any risk, and honest words for uncertainty (“we expect”, “about”, “8 times out of 10”), never “will”.
+
+| What you report | Weak | Strong | Why it is better |
+|---|---|---|---|
+| A point forecast | “Sales will be \$652.66 billion.” | “We expect retail sales (not seasonally adjusted) to be about \$653 billion in September 2027, 2.8% above September 2026.” | Units, date, SA/NSA, like-with-like comparison; “expect” and “about” signal uncertainty |
+| An 80% range | “We are 80% sure the model is right.” | “Our 80% range is \$626 to \$658 billion: we expect the outcome to land in it about 8 times out of 10.” | The range is about the outcome, not the model |
+| A lopsided range | “±\$16 billion” | “\$27 billion below to \$6 billion above our forecast” | Says where the risk lies |
+| A track record | “MASE = 0.49.” | “Its typical miss was \$8.8 billion one month ahead, 35% smaller than using the same month last year.” | The reader's units and a benchmark they understand |
+| A model that loses | (leave the benchmark out) | “No model beat simply carrying forward the latest value, so we recommend that rule.” | Honest, and still useful |
+| A change in a rate | “Unemployment will rise 0.2%.” | “We expect unemployment to rise by about 0.2 percentage points.” | Points, not percent |
+| A driver (Chapter 4) | “Unemployment causes car sales to fall by 0.90.” | “In months when unemployment was 1 point higher, car sales ran about 900,000 a year lower, holding the model's other drivers fixed.” | Units on both sides; association, not cause |
+| A limitation | “Results should be interpreted with caution.” | “The forecast assumes no recession; in 2020 a shock pushed 8 of 12 months outside a range like this.” | Specific, with evidence |
+
+The last row's evidence comes from the Studio's September 2019 view above (4 of 12 months inside the range, so 8 outside).
 
 ## Writing for decision-makers
 
@@ -142,7 +312,11 @@ The executive summary is the only part of your work most readers will see. The S
 4. **One key risk.** Name the single thing most likely to make the forecast wrong, and in which direction: a bias, a shock in the evaluation window, a near-tie between methods.
 5. **What would change our view.** A concrete trigger (“two months in a row outside the 80% range”) tells the reader when to come back to you. It also commits you to monitoring.
 
-Plus one chart (the fan chart, titled with the takeaway) and nothing else unless asked. Keep the diagnostics in an appendix.
+Plus one chart (the fan chart, titled with the takeaway) and nothing else unless asked. Keep the diagnostics in an appendix. Practise the rules on the five claims below before you write your own.
+
+<div class="breakout">
+<WordingWorkshop client:load />
+</div>
 
 <div class="sum-compare" aria-label="A weak and a strong executive summary side by side">
   <div class="sc-bad">
@@ -151,7 +325,7 @@ Plus one chart (the fan chart, titled with the takeaway) and nothing else unless
   </div>
   <div class="sc-good">
     <div class="sc-h">After</div>
-    <p>We expect U.S. retail sales to be about \$652.7 billion in September 2027, 2.8% above September 2026. Our 80% range is \$626.1 to \$658.2 billion. Over the past four years this method's typical miss was \$8.8 billion one month ahead and \$12.8 billion a year ahead, 35% smaller than using the same month last year. Key risk: it has tended to over-forecast by about \$4.9 billion, so the outcome may land below our central number. We will revisit the forecast if actual sales fall outside the range two months in a row.</p>
+    <p>We expect U.S. retail sales (not seasonally adjusted) to be about \$652.7 billion in September 2027, 2.8% above September 2026. Our 80% range is \$626.1 to \$658.2 billion. Over the past four years this method's typical miss was \$8.8 billion one month ahead and \$12.8 billion a year ahead, 35% smaller than using the same month last year. Key risk: it has tended to over-forecast by about \$4.9 billion, so the outcome may land below our central number. We will revisit the forecast if actual sales fall outside the range two months in a row.</p>
   </div>
 </div>
 
@@ -209,7 +383,7 @@ The lab below computes the same tracking signal in R. Here keeping the parameter
 
 Two habits separate forecasts people trust from forecasts that quietly cause damage.
 
-**Reproducibility.** Anyone, including you in six months, should be able to rerun your forecast and get the same numbers. In practice that means: one script from raw data to final chart (no copy-pasting into spreadsheets); the series ID and the date you pulled the data written into the output, because economic data get revised; package versions recorded (the stamp in the lab above); and `set.seed()` before anything random, such as a random forest or simulated paths ([Chapter 11](/chapters/random-forests/)). Save the data file you used next to the script.
+**Reproducibility.** Anyone, including you in six months, should be able to rerun your forecast and get the same numbers. In practice that means: one script from raw data to final chart (no copy-pasting into spreadsheets); the series ID and the date you pulled the data written into the output, because economic data get revised ([Chapter 1](/chapters/time-series-data/#data-get-revised-vintages-and-alfred)); package versions recorded (the stamp in the lab above); and `set.seed()` before anything random, such as a random forest or simulated paths ([Chapter 11](/chapters/random-forests/)). Save the data file you used next to the script.
 
 **Honesty about uncertainty.** A forecast influences real decisions about inventory, hiring and budgets. Three rules keep you on the right side:
 
@@ -218,12 +392,25 @@ Two habits separate forecasts people trust from forecasts that quietly cause dam
 - Keep score of your own forecasts. Philip Tetlock's forecasting tournaments found that the most accurate forecasters were not the most confident ones but those who stated probabilities, tracked their record and updated often.<sup>[4](#refs)</sup>
 
 <Callout type="pitfall" title="The tempting shortcuts">
-Choosing the cut-off date that makes your model look best. Dropping 2020 without saying so. Quoting MAPE for a series near zero. Presenting a model's in-sample fit as its accuracy. Each makes the forecast look better today and costs you credibility the first time reality disagrees.
+Choosing the cut-off date that makes your model look best. Dropping 2020 without saying so. Quoting MAPE for a series near zero. Presenting a model's in-sample fit as its accuracy. Comparing an NSA forecast with last month. Each makes the forecast look better today and costs you credibility the first time reality disagrees.
 </Callout>
 
 ## Your turn
 
-Ship an executive summary for a series you have not used yet: **U.S. grocery store sales** (food and beverage stores, FRED `MRTSSM445USN`, **not seasonally adjusted**, converted to \$ billions). Fill the three blanks (`______`) and press **Run & check**. The check recomputes the forecast, the 80% range and the typical miss independently and confirms that your numbers, and your summary text, match.
+Two short tasks, each one skill.
+
+**1. Compare like with like.** Your manager asks how this holiday season will compare with last year's. Fill the three blanks and press **Run & check**.
+
+<div class="breakout">
+<CodeLab client:load id="ch14-ex-yoy" exercise title="Exercise: how does the forecast compare with last year?" r={yoyR} solution={yoySolR} check={yoyCheckR} py={yoyPy} solutionPy={yoySolPy} checkPy={yoyCheckPy}
+  packages={['forecast']} pyPackages={['statsmodels']}
+  goal="Forecast U.S. retail sales (not seasonally adjusted) 12 months ahead, then compare each forecast month with the same month a year earlier, and the next 12 months' total with the last 12 months' total."
+  hints={['The 12 forecast months are the same calendar months as the last 12 actual months, one year later.', 'So `last_year` is the last 12 values of `y`: `tail(y, 12)` in R, `y.iloc[-12:]` in Python.', 'Both like-with-like comparisons divide by `last_year`: month by month, then as totals with `sum()`.']} />
+</div>
+
+In R, December 2026 comes out at about \$743.7 billion: **7.1% above last December**, not the 17% jump over September that a careless headline would report. The next 12 months as a whole run 4.4% above the last 12. (The R model, ETS(M,Ad,M), differs a little from the Studio's Holt-Winters, so its December figure differs too; the lesson does not.)
+
+**2. Ship an executive summary** for a series you have not used yet: **U.S. grocery store sales** (food and beverage stores, FRED `MRTSSM445USN`, **not seasonally adjusted**, converted to \$ billions). Fill the three blanks (`______`) and press **Run & check**. The check recomputes the forecast, the 80% range and the typical miss independently and confirms that your numbers, and your summary text, match.
 
 <div class="breakout">
 <CodeLab client:load id="ch14-ex1" exercise title="Exercise: write the executive summary for grocery sales" r={exR} solution={exSolR} check={exCheckR} py={exPy} solutionPy={exSolPy} checkPy={exCheckPy}
@@ -232,59 +419,157 @@ Ship an executive summary for a series you have not used yet: **U.S. grocery sto
   hints={['In R the exponential smoothing function is `ets()`. In Python the class is `ExponentialSmoothing`.', 'The errors matrix has one column per horizon. The 80% range for the 12-month forecast uses column 12 in R (`h`) and column 11 in Python (`h - 1`), because Python counts from 0.', 'The last number in the summary is the typical one-month-ahead miss, stored in `mae1`.']} />
 </div>
 
-When it passes, go one step further: paste your summary into the Studio's style by adding a **key risk** and a **trigger**, then compare with the Studio's own summary for a series of your choice.
+When it passes, go one step further: add a **key risk** and a **trigger** in your own words, then compare with the Studio's own summary for a series of your choice.
+
+## Guided practice: your series, start to finish
+
+This is the payoff of the course: one forecast, done properly, on a series you choose. Work through the six steps in order. Plan on about 30 minutes, or longer if you go back to earlier chapters.
+
+**Step 1. Choose a series.** Pick one from the table. All are bundled with the site, monthly, from FRED. The last three columns are the settings for the lab below.
+
+| Series | FRED ID | FRED units | SA/NSA | `scale` | `units` | `digits` |
+|---|---|---|---|---|---|---|
+| Light vehicle sales | `TOTALNSA` | thousands of vehicles | NSA | 1 | thousand vehicles | 0 |
+| Housing starts | `HOUSTNSA` | thousands of units | NSA | 1 | thousand homes | 1 |
+| Retail sales excl. food services | `RSXFSN` | \$ millions | NSA | 1000 | billion dollars | 1 |
+| Grocery store sales | `MRTSSM445USN` | \$ millions | NSA | 1000 | billion dollars | 1 |
+| Restaurant and bar sales | `MRTSSM722USN` | \$ millions | NSA | 1000 | billion dollars | 1 |
+| Utility output | `IPG2211A2N` | index, 2017 = 100 | NSA | 1 | index points | 1 |
+| E-commerce sales | `MRTSSM4541USS` | \$ millions | SA | 1000 | billion dollars | 1 |
+| Payroll employment | `PAYEMS` | thousands of jobs | SA | 1000 | million jobs | 2 |
+| Unemployment rate | `UNRATE` | percent | SA | 1 | percent | 2 |
+| Iowa unemployment rate | `IAUR` | percent | SA | 1 | percent | 2 |
+| Consumer price index | `CPIAUCSL` | index, 1982–84 = 100 | SA | 1 | index points | 1 |
+
+**Step 2. Write the data note** in one line: series, FRED ID, units you will report, frequency, SA/NSA, sample. Then answer three questions in a sentence each: Is it nominal or real? Would you expect seasonality? Is 2020 inside your evaluation window?
+
+**Step 3. Explore in the browser.** Open your series in the [Forecast Studio](#the-forecast-studio) and in the [one-change ladder](#one-change-at-a-time). Note the best method, the best benchmark, which ingredients helped, and whether the 80% range is lopsided.
+
+**Step 4. Run the pipeline in code.** Change the six settings at the top of the lab to your series and run it. It writes the data note, plots the series, checks your SA/NSA label against the data, scores three benchmarks and one ETS model on 8 rolling origins, builds an 80% range from past errors, compares the forecast like with like and drafts the summary.
+
+<div class="breakout">
+<CodeLab client:load id="ch14-practice" title="The whole pipeline on a series of your choice" r={practiceR} py={practicePy}
+  packages={['forecast']} pyPackages={['statsmodels']}
+  goal="Change six settings, run the script, and get a data note, a label check, an honest scorecard, a forecast with an 80% range, a like-with-like comparison and a draft executive summary for your series." />
+</div>
+
+With the default settings (light vehicle sales, data through October 2026), R reports a seasonal swing from 20% below trend in January to 13% above in March, picks ETS(M,Ad,M), and drafts: *“We expect U.S. light vehicle sales (not seasonally adjusted) to be about 1,347 thousand vehicles in October 2027, 1.1% below the same month a year earlier. Our 80% range is 1,326 to 1,461 thousand vehicles…”* Note how lopsided that range is: 21 thousand vehicles below the forecast but 114 thousand above, because the model has tended to under-forecast. Python's version, with a slightly different model, says 1,349 (1,329 to 1,465). Two things to watch for on other series:
+
+- If the lab prints **“the forecast lies outside its own 80% range”** (in R it does for restaurant sales and the CPI), the method's past errors were almost all on one side. That bias is your key risk; say so.
+- If **seasonal naive or naive wins** (in R it does for housing starts and both unemployment rates), the summary says so. Recommend the benchmark. R and Python can disagree on close calls because they choose slightly different model forms; report the one you ran.
+
+**Step 5. Write the executive summary.** Start from the lab's draft and edit it into five sentences. The template:
+
+<div class="template">
+We expect <b>[series]</b> (<b>[SA/NSA]</b>) to be about <b>[number and units]</b> in <b>[month year]</b>, <b>[x% or x points] [above/below]</b> the same month a year earlier. Our 80% range is <b>[low]</b> to <b>[high]</b>. Over <b>[K]</b> past forecast origins, <b>[method]</b>'s typical miss was <b>[MAE in units]</b> one month ahead, <b>[x%] smaller</b> than <b>[benchmark]</b>. Key risk: <b>[one specific risk, its direction and size]</b>. We will revisit the forecast if <b>[a concrete trigger]</b>.
+</div>
+
+**Step 6. Check it against this list** before you send it. Every answer should be yes.
+
+- The first sentence gives a number, units, a month and the SA/NSA status.
+- The comparison is like with like: same month last year (or the latest month for SA data), percentage points for rates.
+- The range is stated as a range, and it is not described as symmetric if it is lopsided.
+- The track record is in the reader's units and compared with a benchmark.
+- If the benchmark won, the summary recommends it.
+- The key risk has a direction (above or below) and, where possible, a size.
+- The trigger is concrete enough that someone else could tell when it fires.
+- No “will be”, no “causes”, no unexplained jargon (MASE, ETS, RMSE).
+
+<Callout type="tip" title="Peer review in two minutes">
+Swap summaries with a classmate. Each reads the other's aloud, then answers three questions without looking at the text: *What is the forecast? How wrong could it be? When should I worry?* If either of you cannot answer one of them, that sentence needs rewriting.
+</Callout>
 
 ## Chapter checklist
 
 - Follow the pipeline: decision and loss, data, benchmark, candidate models, rolling-origin evaluation by horizon, combination, intervals and coverage, explanation, communication.
-- Judge every model on rolling origins against a benchmark, and report error **by horizon** in the reader's units.
-- Build ranges you can defend, for example from your method's own past errors, and check how often past ranges caught the truth.
-- Write the summary **bottom line first**: one number, one range, one track record, one risk, one trigger. One chart.
-- After shipping, **monitor** with a tracking signal and clear retraining triggers.
-- Make it **reproducible**: one script, recorded data vintage and package versions, seeds for anything random.
+- **Before modelling**, write the data note (units, frequency, SA/NSA, real or nominal) and choose a transformation for a reason you can say out loud.
+- **While modelling**, start from the benchmark, keep one honest test for every candidate, and change one thing at a time; keep an ingredient only if it pays.
+- **After modelling**, translate back to levels and the reader's units, compare **like with like** (same month last year for NSA data; percentage points for rates), and state a range and what it assumes.
+- Write the summary **bottom line first**: one number, one range, one track record, one risk, one trigger. Say “we expect” and “goes with”, never “will be” and “causes”.
+- After shipping, **monitor** with a tracking signal and clear retraining triggers, and keep it **reproducible**: one script, recorded data vintage and package versions, seeds for anything random.
 
 <InstructorKit
-  minutes={75}
-  data={['RSXFSN', 'MRTSSM4541USS', 'HOUSTNSA', 'PAYEMS', 'UNRATE', 'CPIAUCSL', 'MRTSSM445USN']}
+  data={['RSXFSN', 'MRTSSM4541USS', 'MRTSSM722USN', 'TOTALNSA', 'HOUSTNSA', 'IPG2211A2N', 'PAYEMS', 'UNRATE', 'IAUR', 'CPIAUCSL', 'MRTSSM445USN']}
+  sessions={[
+    { title: 'Run the workflow honestly', plan: [
+      '5 min · Warm-up Predict: what does **635,056** in `RSXFSN` mean? (units, NSA, not an annual rate)',
+      '10 min · The nine-step pipeline: click through it; students name the chapter behind each step',
+      '15 min · The analyst\'s checklist, before / during / after: walk through one series (retail sales) aloud, item by item',
+      '20 min · Forecast Studio: opening Predict, read the scorecard, error-by-horizon chart and lopsided fan chart; the combination Predict; drag **Data through** to Sep 2019 and Jun 2021',
+      '15 min · **Activity: the ladder race** (one change at a time, below)',
+      '10 min · Exercise: is multiplicative seasonality worth it? Show the reproduce-it-in-code lab as the take-home script'
+    ] },
+    { title: 'Say it in words and units, then ship', plan: [
+      '5 min · Warm-up Predict: December 2026 is +14.7% on September but +5% on last December. Which is the headline?',
+      '10 min · Like-with-like explorer: slide the horizon on retail sales, then payroll jobs; percent vs percentage points',
+      '15 min · Model sentences table and the wording workshop (pairs, aloud); before/after summary',
+      '10 min · Monitoring: tracking signal and retraining triggers (the monitor lab can be homework)',
+      '30 min · **Activity: forecast pitch** on a series of each team\'s choice (guided practice, below)',
+      '5 min · Wrap-up: the chapter checklist as the course checklist'
+    ] }
+  ]}
   objectives={[
     'List the nine steps of a professional forecasting pipeline in order, and name the chapter tool for each.',
-    'Use rolling-origin evaluation to choose a method, and read a scorecard and an error-by-horizon chart.',
+    'Run the **before / during / after** checklist: write a data note (units, frequency, SA/NSA, real or nominal) and justify any transformation.',
+    'Use rolling-origin evaluation to choose a method, change one ingredient at a time, and keep only what beats the benchmark.',
     'Build prediction ranges from a method’s own past errors and explain what they assume.',
-    'Write a decision-ready executive summary: bottom line first, a range, a track record in plain words, one risk, one trigger.',
-    'Monitor a deployed forecast with a tracking signal and state sensible retraining triggers.',
-    'Make a forecast reproducible (one script, data vintage, package versions, seeds).'
+    'Compare a forecast **like with like** (same month last year for NSA data, percentage points for rates) and translate it back to levels and units.',
+    'Write a decision-ready executive summary: bottom line first, a range, a track record in plain words, one risk, one trigger, with strong rather than weak wording.',
+    'Monitor a deployed forecast with a tracking signal, and make a forecast reproducible (one script, data vintage, package versions, seeds).'
   ]}
   discussion={[
     'The Studio’s range for retail sales is lopsided: far more room below the forecast than above. Is that a feature or a bug? What would a normal-distribution interval hide?',
+    'On payroll jobs, adding seasonality to the model barely helps on average and doubles the one-month-ahead miss. Why might an extra ingredient hurt? How would you explain the decision to drop it?',
+    'A colleague reports that December sales “will jump 15%”. Rewrite the sentence, and explain to them why the original misleads.',
     'On the unemployment rate, no smoothing model beats naive (SES and Holt simply copy it). Would you still ship a smoothing model to look sophisticated? What would you tell a manager who asks “why are we paying you to copy last month’s number?”',
     'A sales director wants to raise your forecast by 3% “to be ambitious”. Using the evidence on judgmental adjustments, how do you respond?'
   ]}
   misconceptions={[
     '“The best model is the one with the best in-sample fit.” Only rolling-origin, out-of-sample errors count.',
+    '“More ingredients make a better model.” On payroll jobs and the CPI, adding seasonality makes the error worse; drift beats every rung.',
     '“A combination always wins.” It wins when the ingredients are good and different; averaging in a model that ignores seasonality makes it worse.',
+    '“Up 15% since September” is growth. For NSA data it is mostly the season; compare with the same month a year earlier.',
+    '“Unemployment rose 0.2%.” A change in a rate is in percentage points.',
+    '“An 80% range means the model is 80% correct.” It is a statement about where the outcome should land, under an assumption about future errors.',
     '“Admitting uncertainty makes me look less competent.” Experiments find only a small loss of trust; confident misses cost far more.',
     '“Once deployed, a model can be left alone.” Without monitoring, bias can run for months (e-commerce alarmed within five months of deployment).'
   ]}
 >
 
-**Forecast pitch (40 minutes).** Teams of three. Assign each team one series in the Studio (data through the latest month, horizon 12, all methods ticked). Instructors can send each team a deep link, for example `/chapters/forecast-studio/?s=HOUSTNSA&h=12`.
+**Session 1 activity: the ladder race (15 minutes).** Pairs. Give each pair one series in the one-change ladder (all ten series are available). Each pair reports, in one sentence each: (1) which single ingredient helped most, (2) whether any ingredient hurt, (3) whether the best rung beats the best benchmark, and so what they would ship.
 
-1. **Investigate (15 min).** Read the scorecard and the error-by-horizon chart. Move **Data through** back to September 2019 and June 2021 to see how the chosen method performed through the pandemic. Decide whether to chart the best method or another one, and why.
-2. **Prepare (10 min).** Edit the generated summary into your own words. Keep the five elements: number, range, track record, risk, trigger. Export the fan chart PNG.
-3. **Brief (2 minutes per team).** One slide (the PNG), one paragraph spoken aloud. The rest of the class plays the management team and asks one question each.
+*Expected results (average error over 1 to 12 months ahead, data through August to October 2026 depending on the series):*
 
-*Expected results (bundled data through August, September or October 2026, depending on the series; horizon 12, all eight methods; the October 2025 gap in UNRATE and CPI is filled by linear interpolation in the data loader):*
+| Series | Biggest help | Hurt? | Best rung vs best benchmark | Ship |
+|---|---|---|---|---|
+| Retail sales (NSA) | Seasonality: \$30.0 → \$12.6 bn (−58%) | No | HW mult. \$10.7 vs seasonal naive \$16.5 bn | HW multiplicative |
+| Light vehicle sales (NSA) | Seasonality: 108.2 → 63.0 thousand (−42%) | Proportional swings +12% | HW add. 63.0 vs seasonal naive 86.6 | HW additive |
+| Housing starts (NSA) | Seasonality: 12.7 → 7.3 thousand (−43%) | Proportional swings +9% | HW add. 7.3 vs seasonal naive 8.4 | HW additive |
+| Utility output (NSA) | Seasonality: 12.7 → 3.1 points (−76%) | No | HW mult. 3.08 vs seasonal naive 3.49 | HW multiplicative |
+| Payroll jobs (SA) | Seasonality: 0.659 → 0.614 million (−7%) | Proportional swings +10% | Drift 0.507 beats every rung | Drift |
+| CPI (SA) | Trend: 5.2 → 1.9 points (−64%) | Seasonality +31% | Drift 1.72 beats every rung | Drift |
+| Unemployment rate (SA) | None | Seasonality +199% | No later rung beats naive (0.18) | Naive |
+
+Discussion: the NSA series all need seasonality, but whether the swings should be proportional is an empirical question. On SA series, extra ingredients mostly add noise. On payrolls, the small average gain from seasonality hides a doubling of the one-month-ahead error (0.131 → 0.257 million): switch the ladder to **1 month ahead** to see it.
+
+**Session 2 activity: forecast pitch (30 minutes).** Teams of three. Each team picks a series from the guided-practice table (or the instructor assigns one with a deep link, for example `/chapters/forecast-studio/?s=HOUSTNSA&h=12`).
+
+1. **Investigate (10 min).** Write the data note. Read the Studio's scorecard, error-by-horizon chart and the ladder. Move **Data through** back to September 2019 and June 2021 to see how the chosen method performed through the pandemic.
+2. **Prepare (10 min).** Run the guided-practice lab with your settings, then edit the draft into the five-sentence template. Run it through the eight-item check. Export the fan chart PNG from the Studio.
+3. **Brief (2 minutes per team).** One slide (the PNG), one paragraph spoken aloud. The rest of the class plays the management team and asks one question each, using the peer-review questions: what is the forecast, how wrong could it be, when should I worry?
+
+*Expected Studio results (bundled data through August, September or October 2026, depending on the series; horizon 12, all eight methods; the October 2025 gap in UNRATE and CPI is filled by linear interpolation in the data loader):*
 
 | Series | Best method | Forecast (12 months ahead) | 80% range | Key risk flagged |
 |---|---|---|---|---|
-| Retail sales, `RSXFSN` (NSA) | Holt-Winters multiplicative, MASE 0.49 | \$652.7 bn, Sep 2027 | \$626.1 to \$658.2 bn | Tends to over-forecast (≈ \$4.9 bn) |
+| Retail sales, `RSXFSN` (NSA) | Holt-Winters multiplicative, MASE 0.49 | \$652.7 bn, Sep 2027 (+2.8% on Sep 2026) | \$626.1 to \$658.2 bn | Tends to over-forecast (≈ \$4.9 bn) |
 | E-commerce, `MRTSSM4541USS` (SA) | Drift | \$122.5 bn, Aug 2027 | \$119.8 to \$126.1 bn | No model beat a simple benchmark |
-| Housing starts, `HOUSTNSA` (NSA) | Holt-Winters additive | 112.1 thousand, Sep 2027 | 97.2 to 119.0 thousand | Wide range (about ±10%) |
+| Housing starts, `HOUSTNSA` (NSA) | Holt-Winters additive | 112.1 thousand, Sep 2027 (+8.0% on Sep 2026) | 97.2 to 119.0 thousand | Wide range (about ±10%) |
 | Payroll jobs, `PAYEMS` (SA) | Combination | 160.08 million, Oct 2027 | 159.61 to 161.58 million | Tends to under-forecast (≈ 221 thousand) |
 | Unemployment rate, `UNRATE` (SA) | Naive | 4.1%, Oct 2027 | 4.0% to 4.6% | No model beat a simple benchmark |
 | CPI, `CPIAUCSL` (SA) | Combination | 346.1, Oct 2027 | 345.2 to 351.1 | Tends to under-forecast (≈ 1.0 points) |
 
-Good discussion points: the unemployment and e-commerce teams must defend a *benchmark* as their recommendation (a valuable lesson in itself); the housing team has the widest relative range and should talk scenarios; the payrolls and CPI teams should notice that their ranges sit mostly above the forecast because of past under-forecasting. When data are updated, numbers will shift; re-run the Studio before class.
+Good discussion points: the unemployment and e-commerce teams must defend a *benchmark* as their recommendation (a valuable lesson in itself); the housing team has the widest relative range and should talk scenarios; the payrolls and CPI teams should notice that their ranges sit mostly above the forecast because of past under-forecasting. Listen for weak wording (“will be”, “±”, “up 0.2%” for a rate, comparisons with last month for NSA series) and ask the class to fix it on the spot. When data are updated, numbers will shift; re-run the Studio before class.
 
 </InstructorKit>
 
@@ -292,7 +577,7 @@ Good discussion points: the unemployment and e-commerce teams must defend a *ben
 
 **References**
 
-1. Hyndman, R. J., & Athanasopoulos, G. (2021). *Forecasting: Principles and Practice* (3rd ed.), ch. 5 “The forecaster’s toolbox” and ch. 13 “Some practical forecasting issues” (13.4 Forecast combinations). [otexts.com/fpp3](https://otexts.com/fpp3/)
+1. Hyndman, R. J., & Athanasopoulos, G. (2021). *Forecasting: Principles and Practice* (3rd ed.), sec. 1.6 “The basic steps in a forecasting task”, ch. 5 “The forecaster’s toolbox” and ch. 13 “Some practical forecasting issues” (13.4 Forecast combinations). [otexts.com/fpp3](https://otexts.com/fpp3/)
 2. Bates, J. M., & Granger, C. W. J. (1969). The combination of forecasts. *Operational Research Quarterly*, 20(4), 451–468. See also Clemen, R. T. (1989). Combining forecasts: A review and annotated bibliography. *International Journal of Forecasting*, 5(4), 559–583.
 3. Fildes, R., Goodwin, P., Lawrence, M., & Nikolopoulos, K. (2009). Effective forecasting and judgmental adjustments: an empirical evaluation and strategies for improvement in supply-chain planning. *International Journal of Forecasting*, 25(1), 3–23.
 4. Tetlock, P. E., & Gardner, D. (2015). *Superforecasting: The Art and Science of Prediction*. New York: Crown.
@@ -300,10 +585,21 @@ Good discussion points: the unemployment and e-commerce teams must defend a *ben
 6. Ben-David, I., Graham, J. R., & Harvey, C. R. (2013). Managerial miscalibration. *Quarterly Journal of Economics*, 128(4), 1547–1584.
 7. Trigg, D. W. (1964). Monitoring a forecasting system. *Operational Research Quarterly*, 15(3), 271–274. (Trigg proposes a smoothed version of the signal; the Studio and the lab use the cumulative version.)
 8. SAP documentation, “Monitoring the selected forecast model” (tracking signal, default limit 4.00). [help.sap.com](https://help.sap.com/saphelp_46C/helpdata/EN/7d/c27422454011d182b40000e829fbfe/content.htm)
+9. Nau, R. (Duke University). “The logarithm transformation”, from *Statistical forecasting: notes on regression and time series analysis* (back-transforming forecasts and confidence limits from logs). [people.duke.edu/~rnau/411log.htm](https://people.duke.edu/~rnau/411log.htm)
 
 </div>
 
 <style>{`
+  .checklist { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin: 1.6rem 0 2rem; }
+  @media (max-width: 900px) { .checklist { grid-template-columns: 1fr; } }
+  .cl-col { border: 1px solid var(--border); border-top: 3px solid var(--ch, var(--accent)); border-radius: var(--radius-sm); background: var(--surface); padding: .9rem 1rem .4rem; }
+  .cl-h { display: flex; align-items: center; gap: .55rem; font: 650 1rem var(--font-ui); color: var(--text); margin-bottom: .5rem; }
+  .cl-n { width: 1.7rem; height: 1.7rem; border-radius: 50%; display: grid; place-items: center; font-size: .82rem; color: var(--bg); background: var(--ch, var(--accent)); }
+  .cl-col ul { padding-left: 1.05rem; margin: 0; font-size: .88rem; line-height: 1.55; color: var(--text-2); }
+  .cl-col li { margin: 0 0 .5rem; }
+  .cl-col b { color: var(--text); }
+  .template { border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); background: var(--bg-2); padding: .9rem 1.1rem; margin: 1rem 0 1.6rem; font-size: .93rem; line-height: 1.7; color: var(--text-2); }
+  .template b { color: var(--text); font-weight: 650; }
   .sum-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.6rem 0 2rem; }
   @media (max-width: 760px) { .sum-compare { grid-template-columns: 1fr; } }
   .sum-compare > div { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: .9rem 1.1rem; background: var(--surface); }

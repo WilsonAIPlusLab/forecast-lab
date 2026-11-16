@@ -72,7 +72,7 @@
 
   function drawDetail() {
     if (!detail || !cur) return;
-    const r = cur, n = r.data.length, W = detail.clientWidth || 260;
+    const r = cur, n = r.data.length, W = Math.max(200, detail.clientWidth || 260);   // width floor: avoids negative bars mid-resize
     const hist = r.data.slice(n - 48);
     const back = r.back.map((v, i) => ({ date: r.backDates[i], v }));
     const fwd = r.fwd.mean.map((v, i) => ({ date: r.fwdDates[i], v, lo: r.fwd.lo[i], hi: r.fwd.hi[i] }));

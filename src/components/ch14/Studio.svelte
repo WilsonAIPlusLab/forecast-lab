@@ -64,7 +64,8 @@
     const inside = actual.filter((p, i) => p.value >= rows[i].lo80 && p.value <= rows[i].hi80).length;
     const evalStart = data[res.origins[0]].date;
     const summary = makeSummary({ s: meta, res, featured, lastDate: last.date, targetDate: dates[H - 1], evalStart, evalEnd: last.date,
-      point: fc[H - 1], lo80: b80.lo[H - 1], hi80: b80.hi[H - 1], latest: last.value });
+      point: fc[H - 1], lo80: b80.lo[H - 1], hi80: b80.hi[H - 1], latest: last.value,
+      sameMonth: train[endIdx + H - 12 * Math.ceil(H / 12)] }); // same calendar month as the target, latest year of data
     return { res, featured, rows, last, train, actual, inside, evalStart, summary };
   });
 

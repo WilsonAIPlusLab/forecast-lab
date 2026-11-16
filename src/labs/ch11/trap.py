@@ -40,3 +40,18 @@ viz_compare(history=train["2018":], actual=test,
             **{"Forest on levels": pd.Series(fc_level, index=test.index), "Forest on growth": pd.Series(fc_growth, index=test.index)},
             title="A forest trained on levels cannot forecast above its training maximum")
 print({"levels": round(float(np.mean(np.abs(test - fc_level)))), "growth": round(float(np.mean(np.abs(test - fc_growth))))})   # MAE, $ millions
+
+#| **Two more ways out: differences and detrending.** *Differences*: forecast the dollar change, then add the changes up from the last level. *Detrending*: fit a straight line to log sales, let the forest forecast the gap from that line, then add the line back and undo the log with `np.exp()`.
+dd = train.diff().dropna()                    # monthly change, $ millions
+tab_d = lag_table(dd)
+rf_diff = RandomForestRegressor(n_estimators=200, max_features=1, min_samples_leaf=5, random_state=11).fit(tab_d[cols], tab_d["y"])
+fc_diff = train.iloc[-1] + np.cumsum(recursive(rf_diff, dd, h))   # last level + running total of changes
+tt = np.arange(1, len(train) + 1)             # time index 1, 2, ..., n
+b, a = np.polyfit(tt, np.log(train.values), 1)   # log-linear trend: log sales = a + b * t (slope first)
+gap = np.log(train.values) - (a + b * tt)     # how far each month sits above (+) or below (-) the trend line
+tab_r = lag_table(gap)
+rf_gap = RandomForestRegressor(n_estimators=200, max_features=1, min_samples_leaf=5, random_state=11).fit(tab_r[cols], tab_r["y"])
+line_ahead = a + b * (len(train) + np.arange(1, h + 1))   # the trend line extended h months
+fc_detr = np.exp(line_ahead + recursive(rf_gap, gap, h))  # trend + forecast gap, back from logs to dollars
+mae = lambda f: round(float(np.mean(np.abs(test.values - f))))   # mean absolute error, $ millions
+print({"levels": mae(fc_level), "growth": mae(fc_growth), "differences": mae(fc_diff), "detrended": mae(fc_detr)})

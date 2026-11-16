@@ -30,8 +30,8 @@ for ext in ("R", "py"):
         r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf8", errors="replace")
         line = [l for l in r.stdout.splitlines() if l.startswith("-> ")]
         ok = bool(line) and line[-1].startswith("-> OK")
-        if "solution" in name and ok and '"pass": false' in r.stdout.replace("'", '"'):
-            ok = False
+        if "solution" in name and ok and ("CHECK FAIL" in r.stdout or "CHECK PASS" not in r.stdout):
+            ok = False   # an exercise solution must print at least one passing check and no failing one
         results.append((f, ok, line[-1] if line else r.stderr[-300:]))
 bad = [x for x in results if not x[1]]
 print(f"{len(results)} runs, {len(results) - len(bad)} OK, {len(bad)} failed")

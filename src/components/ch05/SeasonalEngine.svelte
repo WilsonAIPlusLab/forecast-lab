@@ -39,6 +39,7 @@
   function draw() {
     if (!main || !side || !s || !res) return;
     const W = main.clientWidth;
+    if (W < 160) return;                      // skip transient tiny widths (e.g. mid-resize)
     const fitted = s.data.map((p, t) => ({ date: p.date, v: res.a.fitted[t] })).filter((r) => r.v != null);
     const y0 = new Date(year, 0, 1), y1 = new Date(year, 11, 31);
     main.replaceChildren(Plot.plot({
@@ -55,7 +56,7 @@
     }));
     const now = indices(year), first = indices(years[0]);
     const both = [...first.map((r) => ({ ...r, k: String(years[0]) })), ...now.map((r) => ({ ...r, k: String(year) }))];
-    const sw = side.clientWidth || 260;
+    const sw = Math.max(180, side.clientWidth || 260);   // width floor: avoids negative bars mid-resize
     side.replaceChildren(Plot.plot({
       width: sw, height: 300, marginLeft: 34, marginRight: 8, marginTop: 10, marginBottom: 26,
       style: { ...plotStyle(), fontSize: '12px' },

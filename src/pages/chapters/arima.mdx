@@ -1,12 +1,17 @@
 ---
 layout: ../../layouts/Chapter.astro
 slug: arima
-minutes: 55
+minutes: 130
+sessions:
+  - title: Why and when to difference
+  - title: Reading, fitting and forecasting with ARIMA
+    starts: fingerprints-the-acf-and-pacf
 build:
   - A 12-month core PCE inflation outlook with 80% and 95% fan bands, converted exactly from a model of log prices
   - An inflation scorecard from rolling-origin evaluation, where ARIMA, ETS and a 12-month benchmark compete on the same errors
   - A unit-root verdict table (ADF, KPSS, ndiffs) and a residual check (Ljung–Box) you can defend in a meeting
-skills: [stationarity, random walk, diff, adf.test, kpss.test, ndiffs, nsdiffs, acf, pacf, Arima, auto.arima, checkresiduals, Box.test]
+  - A written "difference or not?" decision for a real series, a half-life for a shock, and a forecast of log changes turned back into a price level
+skills: [stationarity, random walk, spurious regression, diff, log difference, half-life, adf.test, kpss.test, ndiffs, nsdiffs, acf, pacf, Arima, auto.arima, checkresiduals, Box.test, cumsum + exp]
 ---
 import CodeLab from '../../components/CodeLab.svelte';
 import Callout from '../../components/Callout.astro';
@@ -14,6 +19,30 @@ import KeyIdea from '../../components/KeyIdea.astro';
 import Predict from '../../components/Predict.svelte';
 import Term from '../../components/Term.astro';
 import InstructorKit from '../../components/InstructorKit.astro';
+import SessionBreak from '../../components/SessionBreak.astro';
+import TrendTwins from '../../components/ch06/TrendTwins.svelte';
+import UnitRootVerdict from '../../components/ch06/UnitRootVerdict.svelte';
+import BackToLevels from '../../components/ch06/BackToLevels.svelte';
+import diffR from '../../labs/ch06/difference.R?raw';
+import diffPy from '../../labs/ch06/difference.py?raw';
+import exDiffR from '../../labs/ch06/ex_difference.R?raw';
+import exDiffSolR from '../../labs/ch06/ex_difference_solution.R?raw';
+import exDiffCheckR from '../../labs/ch06/ex_difference_check.R?raw';
+import exDiffPy from '../../labs/ch06/ex_difference.py?raw';
+import exDiffSolPy from '../../labs/ch06/ex_difference_solution.py?raw';
+import exDiffCheckPy from '../../labs/ch06/ex_difference_check.py?raw';
+import exHlR from '../../labs/ch06/ex_halflife.R?raw';
+import exHlSolR from '../../labs/ch06/ex_halflife_solution.R?raw';
+import exHlCheckR from '../../labs/ch06/ex_halflife_check.R?raw';
+import exHlPy from '../../labs/ch06/ex_halflife.py?raw';
+import exHlSolPy from '../../labs/ch06/ex_halflife_solution.py?raw';
+import exHlCheckPy from '../../labs/ch06/ex_halflife_check.py?raw';
+import exLvR from '../../labs/ch06/ex_levels.R?raw';
+import exLvSolR from '../../labs/ch06/ex_levels_solution.R?raw';
+import exLvCheckR from '../../labs/ch06/ex_levels_check.R?raw';
+import exLvPy from '../../labs/ch06/ex_levels.py?raw';
+import exLvSolPy from '../../labs/ch06/ex_levels_solution.py?raw';
+import exLvCheckPy from '../../labs/ch06/ex_levels_check.py?raw';
 import PersistenceDial from '../../components/ch06/PersistenceDial.svelte';
 import SpotRandomWalk from '../../components/ch06/SpotRandomWalk.svelte';
 import DifferencingMachine from '../../components/ch06/DifferencingMachine.svelte';
@@ -33,6 +62,10 @@ import exCheckR from '../../labs/ch06/exercise_check.R?raw';
 <p class="lede">In September 2026, core PCE prices, the Federal Reserve's preferred inflation gauge, were up 3.1% from a year earlier. The Fed's target is 2%. Your manager asks a simple question: <strong>where will inflation be a year from now?</strong> Before you can answer, you have to decide something deeper. When inflation is pushed away from its usual level, does it come back on its own, or does it stay wherever the last shock left it?</p>
 
 That question has a name: **stationarity**. It decides whether your forecast drifts back toward a long-run average or stays flat at today's value. It decides whether your forecast intervals level off or widen forever. This chapter turns it into something you can see, test and model, and ends with a 12-month inflation outlook you could hand to a manager.
+
+The first session is about one practical decision that comes before any model: **should you difference the series, and why?** The second session builds ARIMA models, reads their output in plain words, and turns their forecasts back into the units your manager cares about.
+
+<SessionBreak n={1} title="Why and when to difference" goals={['Read an AR coefficient as **persistence** and turn it into a **half-life**', 'See what a trend does to a regression and to a forecast, and what differencing removes and costs', 'Read **ADF and KPSS** results in words and defend a "difference or not?" decision', 'Use **log + difference ≈ growth rate**, seasonal differences, and spot over-differencing']} />
 
 ## Shocks that fade, shocks that stick
 
@@ -62,6 +95,35 @@ Three regimes appear as you turn the dial:
 - **φ above 1 (explosive).** Shocks are amplified. That is how bubbles look, and few economic series behave like this for long.
 
 <KeyIdea>A stationary series forgets its shocks; a random walk remembers every one. That single difference decides whether a forecast returns to an average or stays put, and whether its intervals level off or keep widening.</KeyIdea>
+
+### Reading φ in plain words: persistence and half-life
+
+An estimated AR coefficient is easiest to explain as a share. **φ is the fraction of today's gap from the long-run mean that is still there next month.** With φ = 0.8, a shock that pushes a series 10 units above its mean leaves 8 units next month, 6.4 the month after, and $10 \times 0.8^h$ after $h$ months. The gap shrinks by the same *percentage* every month, so it never quite reaches zero. That is why analysts summarize persistence with the **half-life**: the number of periods until half of the shock is gone.
+
+| φ (monthly) | Left after 1 month | Left after 12 months | Half-life |
+|---|---|---|---|
+| 0.50 | 50% | 0.02% | 1 month |
+| 0.80 | 80% | 7% | 3.1 months |
+| 0.90 | 90% | 28% | 6.6 months |
+| 0.95 | 95% | 54% | 13.5 months |
+| 0.99 | 99% | 89% | 69 months |
+| 1.00 | 100% | 100% | never |
+
+Notice how the table bends. Moving φ from 0.5 to 0.9 adds five and a half months to the half-life; moving it from 0.95 to 0.99 adds more than four years. Near 1, small differences in φ are huge differences in behavior, and that is exactly where many economic series live.
+
+<Predict client:load
+  question="A regional bank's loan-default rate is modeled as an AR(1) in deviations from its average, with a monthly φ of 0.90. A shock pushes defaults 2 points above average. Roughly how long until the gap is down to 1 point?"
+  options={['About 2 months', 'About 7 months', 'About 10 months', 'About 20 months']}
+  answer={1}
+  explain="The half-life is log(0.5) / log(0.9) = 6.6 months. The gap falls by 10% of what is left each month, not by a fixed amount, so it does not close in 10 months (that would be a straight line). After 6.6 months half of the 2-point shock, 1 point, is still there."
+/>
+
+<Callout type="empirical" title="Report persistence as a half-life, with its units">
+"φ = 0.962" means little to a manager. "Half of an inflation surprise is still there after about a year and a half" means a lot. Two habits make the number honest:
+
+- **State the frequency.** The same persistence is φ = 0.962 in monthly data, about 0.89 in quarterly data ($0.962^3$) and about 0.63 in annual data ($0.962^{12}$). The half-life in *months* is the same in each case. Compare φ's only across series of the same frequency.
+- **Use the right model's φ.** In this chapter's fit lab, a plain AR(1) on monthly core inflation gives φ = 0.43 (a half-life under one month), but the ARMA(1,1) gives φ = 0.96 (18 months). The MA term soaks up month-to-month noise, so the AR coefficient measures how long the *underlying* rate stays away from its mean. Ask which persistence your question is about.
+</Callout>
 
 Formally, a series is <Term def="A series whose mean, variance and autocorrelations do not change over time. It fluctuates around a fixed level and keeps returning to it.">stationary</Term> if its mean and variance stay constant over time, and the correlation between $y_t$ and $y_{t-k}$ depends only on the gap $k$, not on the date. White noise and an AR(1) with $|\phi| < 1$ are stationary. A random walk is not: its variance grows with time.
 
@@ -94,8 +156,31 @@ Most economic series in levels go up over time: prices, GDP, payrolls. A trend c
 
 The two can look nearly identical in a chart. They imply very different forecasts, though: after a recession, does output return to its old trend path, or has the path been permanently lowered? Nelson and Plosser (1982) famously found that most long U.S. macroeconomic series behave more like the stochastic kind.<sup>[5](#refs)</sup> That is why differencing, not detrending, is the default in this chapter.
 
-<Callout type="pitfall" title="Trending series make fake relationships">
-Regress one random walk on another, completely unrelated one, and you will often find a "highly significant" slope and a large R². This is <Term def="A regression between unrelated nonstationary series that looks statistically significant only because both trend.">spurious regression</Term>, and it is the main reason econometricians test for unit roots before running regressions on time series. Chapter 8 returns to it.
+## What a trend does to a regression and a forecast
+
+Why not just model the level and be done with it? Because a trend, especially a stochastic one, quietly breaks two things you care about.
+
+**It invents relationships.** Two series that both trend upward will line up in a scatter plot even when nothing connects them. Food prices and online sales both rose steadily from 2000 to 2019, for completely different reasons.
+
+<Predict client:load
+  question="From 2000 to 2019, regress log food prices on log e-commerce sales (monthly). Then regress *monthly growth* of food prices on *monthly growth* of e-commerce sales. What R² do you expect from the two regressions?"
+  options={['About 0.96 in both', 'About 0.96 in levels, about 0 in growth rates', 'About 0 in levels, about 0.96 in growth rates', 'About 0.5 in both']}
+  answer={1}
+  explain="In the lab below, the levels regression has R² = 0.96 and a slope t-statistic of 76. In growth rates, R² is 0.000 and t = −0.08. The shared trend made two unrelated series look tightly linked; once you remove the trend, nothing is left."
+/>
+
+<div class="breakout">
+<TrendTwins client:load />
+</div>
+
+This is <Term def="A regression between unrelated nonstationary series that looks statistically significant only because both trend.">spurious regression</Term>. It is the main reason econometricians test for unit roots before regressing one time series on another. [Chapter 8](/chapters/dynamic-regression/#spurious-regression-when-two-random-walks-look-related) will show by simulation how often it happens with pure random walks (about three times in four).
+
+**It decides where the forecast goes.** A model fitted to a trending level must say what happens to the trend. A model with a unit root says shocks are permanent: its forecast stays wherever the last shock left it (or keeps rising at the average drift) and **never reverts**. A stationary model says the series comes back to its mean or trend line. You saw both on the persistence dial; in session 2 you will see them disagree about real inflation by 0.3 points a year out.
+
+<Callout type="empirical" title="Difference before you correlate trending series">
+Before you report a correlation or a regression between two time series, look at both in levels. If both trend, rerun the analysis on **growth rates** (100 × the change in logs) or **changes**. A relationship that survives differencing is about *movements*: "months when online sales grow faster are months when food prices…". One that vanishes was about two trends.
+
+In the lab below, the levels regression of food prices on e-commerce sales reports R² = 0.96 and t = 76. In growth rates, R² = 0.000 and t = −0.08. The one exception is when two trending series share the *same* stochastic trend, so a combination of them is stationary (<Term def="Two nonstationary series are cointegrated when some combination of them is stationary: they wander, but together, like a dog on a leash.">cointegration</Term>); Chapter 8 will discuss it. For reading the slope of a growth-rate regression, see [Chapter 4](/chapters/regression/#logs-reading-coefficients-as-percentages): with both sides in log differences, it reads as an elasticity of growth rates.
 </Callout>
 
 ## Spot the random walk
@@ -114,6 +199,37 @@ The game uses two formal tests, and the most important fact about them is that *
 | KPSS<sup>[3](#refs)</sup> | `kpss.test()` | The series is stationary | Evidence of a unit root |
 
 Because the nulls are opposite, use the tests together. When ADF rejects and KPSS does not, both point to stationary. When KPSS rejects and ADF does not, both point to a unit root. When they disagree, the data cannot settle the question, and you need judgment. The function `ndiffs()` from the forecast package automates the common recipe: it applies KPSS, differences, and repeats until the test stops rejecting, then tells you how many differences it took.
+
+### Reading the two tests in words
+
+A p-value is the answer to one narrow question: *if the null were true, how surprising is this sample?* So every test result turns into a sentence with three parts: **the null, the decision, and what it means for differencing.**
+
+- ADF, p = 0.82: "If the series had a unit root, data like these would be quite ordinary. We **cannot reject** a unit root." That is weak evidence: it does *not* prove there is one.
+- KPSS, p ≤ 0.01: "If the series were stationary, data like these would be very unusual. We **reject** stationarity." That is evidence *for* a unit root.
+- Together: both point the same way, so **difference once and test the result again.**
+
+<Predict client:load kind="check"
+  question="Log housing starts, 1990–2019: ADF p = 0.82, KPSS p ≤ 0.01. After one difference: ADF p ≤ 0.01, KPSS p ≥ 0.10. What should you do?"
+  options={['Model the level: ADF p = 0.82 is high, so the series is fine', 'Difference once: both tests say unit root in levels and stationary after one difference', 'Difference twice, to be safe', 'Nothing can be concluded because the tests disagree']}
+  answer={1}
+  explain="In levels, ADF cannot reject a unit root and KPSS rejects stationarity: both say unit root. After one difference, ADF rejects a unit root and KPSS cannot reject stationarity: both say stationary. One difference, no more. A second would be over-differencing."
+/>
+
+The map below puts six real series in one of four boxes. Pick a series, read the sentence, then press **After one difference** and watch the dot move.
+
+<div class="breakout">
+<UnitRootVerdict client:load />
+</div>
+
+Four lessons from the map. Most trending levels (housing starts, payroll jobs, sentiment, unemployment) land in the "unit root" box and move to "stationary" after one difference. **Monthly core inflation lands in "conflict"**: ADF rejects a unit root (p = 0.049) *and* KPSS rejects stationarity (p ≤ 0.01). The yield spread, in levels, does the same. A conflict usually means a series is very persistent, or that its mean has shifted, and the decision has to come from judgment and out-of-sample forecasts. **Payroll growth lands in "can't tell"**: neither test rejects, so the sample does not settle it. And a series whose difference has a lag-1 autocorrelation near −0.5 deserves a second look for over-differencing.
+
+<Callout type="empirical" title="Write the unit-root decision as one defensible sentence">
+Your memo should never say "the series is stationary (p = 0.03)". Write the decision the way you would defend it in a meeting: the test, its null, the result, and the action.
+
+> "In levels, ADF cannot reject a unit root (p = 0.82) and KPSS rejects stationarity (p ≤ 0.01); after one difference both tests point to stationary. We therefore model the monthly change (d = 1)."
+
+Then add the economics. Housing starts cannot grow forever, so "unit root" here means "persistent enough that, for a 1–2 year forecast, treating shocks as permanent works better". When the tests conflict, say so, pick d, and show that the forecast holds up out of sample, as the outlook lab does.
+</Callout>
 
 <Callout type="pitfall" title="ADF has low power near φ = 1">
 Failing to reject a unit root is not proof of one. In 1,000 simulations of an AR(1) with φ = 0.9, which is stationary, the ADF test at the 5% level correctly rejected the unit root only **19%** of the time with 120 months of data, **51%** with 240 months and **84%** with 360 months. Ten years of monthly data is often not enough to tell "very persistent" from "permanent". (The simulation code is in the Instructor kit below.)
@@ -149,6 +265,55 @@ Three patterns are worth memorizing from the machine:
   explain="A single negative spike at lag 1 is the fingerprint of an MA(1) with a negative coefficient. Differencing a series that was already stationary produces exactly that, so check whether the original series was stationary. Sometimes the MA(1) is genuine: inflation's changes look like this, as you will see in the next lab."
 />
 
+### What differencing removes, and what it costs
+
+Differencing removes **everything that is permanent**: the level, any stochastic trend, and (for a series with drift) the straight-line growth becomes a constant average change. What is left is the month-to-month movement, which is what a stationary model can describe. That is the benefit. The costs are real too:
+
+- **You lose the level.** A model of changes knows nothing about whether the level is high or low. If the series really does return to a mean (an unemployment rate, an interest-rate spread), differencing throws that information away, and the forecast will **never revert**. This is the cost that matters most.
+- **You lose observations.** One per regular difference, twelve per seasonal difference of monthly data.
+- **You add noise.** A change is the difference of two noisy numbers. Difference a series that did not need it, and its spread *rises* instead of falling. That is the over-differencing signal below.
+- **The forecast must be turned back.** Your manager wants the price level or the inflation rate, not "the change in the change in log prices". Session 2 shows how to undo differences and logs.
+
+Robert Nau's notes at Duke give a useful way to read *d* as a forecasting assumption:<sup>[12](#refs)</sup> **d = 0** says the series returns to a mean; **d = 1** says it has no fixed mean, but its average change is constant (the forecast is flat, or a straight line if you add a drift); **d = 2** says even the growth rate wanders (the forecast is a straight line from wherever the recent trend points). Choosing *d* is choosing which of those stories you believe.
+
+### Log first, then difference: growth rates
+
+Most business and economic series grow by percentages: prices, sales, GDP, payrolls. For those, take the **log first** and then difference. The result is (almost exactly) the growth rate, because $\ln(1+g) \approx g$ for small $g$. [Chapter 1](/chapters/time-series-data/#logs-why-and-when) introduced the idea; here is why it matters for ARIMA.
+
+| What you compute | What it is | Example: core PCE, September 2026 |
+|---|---|---|
+| `100 * diff(log(p))` | monthly growth rate, % | 0.316 (exact % change: 0.3165) |
+| `1200 * diff(log(p))` | same, annualized: "% per year at this month's pace" | 3.79 |
+| `100 * diff(log(p), lag = 12)` | 12-month (year-over-year) log growth, % | 3.07 (exact: 3.12) |
+| `diff(diff(log(p)))` | change in the monthly growth rate | what ARIMA(0,2,1) models |
+
+<Callout type="empirical" title="Why we model inflation as a log difference">
+Three reasons, all visible in the lab below.
+
+1. **It is the inflation rate.** One difference of log prices *is* monthly inflation, so "does the price level need one difference or two?" is the same question as "is inflation stationary?". An ARIMA(0,2,1) on log prices is an ARIMA(0,1,1) on inflation.
+2. **Log changes add up.** Twelve monthly log changes sum exactly to the 12-month log change: 3.073 for core PCE through September 2026. To get the familiar percent, take $100\,(e^{3.073/100} - 1) = 3.12\%$, which matches the published year-over-year rate. Percent changes do not add up like this.
+3. **A seasonal difference of logs is year-over-year growth.** For seasonal data that are *not* seasonally adjusted, `diff(log(y), lag = 12)` removes the seasonal pattern and leaves the 12-month growth rate. That is why ARIMA models of NSA retail sales so often have D = 1. Seasonally adjusted data usually need no seasonal difference.
+
+Annualize a monthly rate (× 12 for log changes) only to compare it with yearly figures such as the 2% target, and remember that annualizing multiplies the noise by 12 too.
+</Callout>
+
+<div class="breakout">
+<CodeLab client:load id="ch06-diff" title="Why and when to difference, on real data" r={diffR} py={diffPy} packages={['forecast']} pyPackages={['statsmodels']}
+  goal="Show a spurious levels regression and its disappearance in growth rates, check that log differences are growth rates that add up, and pick d for unemployment by spread and lag-1 autocorrelation." />
+</div>
+
+### How to tell you went one difference too far
+
+Over-differencing is easy to do and easy to spot. Two numbers settle it, both printed by the last step of the lab for the unemployment rate (1990–2019):
+
+| | Standard deviation | Lag-1 autocorrelation |
+|---|---|---|
+| d = 0 (level) | 1.60 | 0.99 |
+| d = 1 (monthly change) | **0.15** | 0.12 |
+| d = 2 (change in the change) | 0.20 | **−0.57** |
+
+The first difference cuts the spread by a factor of ten and leaves a small positive autocorrelation: it removed the trend. The second difference makes the spread *larger* and produces a lag-1 autocorrelation below −0.5. Both are the fingerprints of over-differencing: you are now modeling noise you created. A practical rule (Nau): **choose the d with the smallest standard deviation, and back off if the lag-1 autocorrelation drops to −0.5 or below.**<sup>[12](#refs)</sup> Mild under-differencing can be patched with an AR term, mild over-differencing with an MA term, but the cleaner fix is the right d.
+
 The same steps in code, on core PCE prices. Watch for the moment the ACF of *changes in inflation* snaps into a clean shape.
 
 <div class="breakout">
@@ -159,6 +324,18 @@ The same steps in code, on core PCE prices. Watch for the moment the ACF of *cha
 <Callout type="pitfall" title="A real-data quirk: the missing October 2025 CPI">
 The federal government shutdown of October 1 to November 12, 2025 stopped CPI data collection, and the Bureau of Labor Statistics never published the October 2025 index for most CPI series, including all-items and core CPI. It also said it will not publish 12-month changes for October 2026 where October 2025 is missing.<sup>[9](#refs)</sup> The bundled `CPIAUCSL` and `CPILFESL` files have a blank for that month. `fred()` fills a short gap like this by linear interpolation and prints a note, so your code runs, but the October 2025 value is the course's estimate, not an official number, and any monthly or 12-month change that touches it inherits that guess. That is why this chapter uses core PCE prices, which have no gap in the bundled data. If you use CPI, either stop at September 2025 with `fred("CPIAUCSL", end = c(2025, 9))` or say in your memo that one month was interpolated.
 </Callout>
+
+## Decide and defend: difference or not?
+
+You are the analyst. The treasury desk wants a monthly forecasting model for the **10-year Treasury yield** (monthly average, %, 1990 to the latest data) and asks a first question: *should the model use the level of the yield or its monthly change?* Run both tests on the level and on the change, then make the call. The check prints the sentence you would put in the memo.
+
+<div class="breakout">
+<CodeLab client:load id="ch06-ex-diff" exercise title="Exercise: should the 10-year yield be differenced?" r={exDiffR} solution={exDiffSolR} check={exDiffCheckR} py={exDiffPy} solutionPy={exDiffSolPy} checkPy={exDiffCheckPy} packages={['tseries']} pyPackages={['statsmodels']}
+  goal="Run ADF and KPSS on the level and on the first difference of the 10-year yield, then choose d and defend it."
+  hints={['KPSS is the test whose null is "stationary": `kpss.test()` in R, `kpss()` in Python. The first difference is `diff(y)` in R and `y.diff()` in Python.', 'Read each pair of p-values as a box on the verdict map: ADF above 0.05 with KPSS below 0.05 means "unit root"; the reverse means "stationary".', 'If the level is in the unit-root box and the change is in the stationary box, you need exactly one difference.']} />
+</div>
+
+<SessionBreak n={2} title="Reading, fitting and forecasting with ARIMA" goals={['Shortlist models from the ACF and PACF, and read a **(p,d,q)(P,D,Q)[m]** label in words', 'Read a fitted ARIMA: **AR as persistence**, **MA in words**, σ and the residual checks', 'Turn a forecast of differences and logs back into **levels** and 12-month inflation', 'Build and defend a 12-month inflation outlook']} />
 
 ## Fingerprints: the ACF and PACF
 
@@ -203,7 +380,22 @@ Put the pieces together and you have the <Term def="AutoRegressive Integrated Mo
 | **d** | number of differences | unit-root tests, `ndiffs()` |
 | **q** | number of MA terms (lags of the shocks) | ACF cut-off, then AICc |
 
-So ARIMA(0,1,1) means "difference once, then fit an MA(1)". Seasonal data add a second set in capitals: **ARIMA(p,d,q)(P,D,Q)[m]**, where P, D and Q are the same ideas at the seasonal lag $m$ (12 for monthly data). In Chapter 0, `auto.arima()` chose ARIMA(2,0,2)(0,1,1)[12] with drift for log retail sales since 2012: no regular difference but one seasonal difference (D = 1), two AR and two MA terms, one *seasonal* MA term at lag 12, and a drift for the upward trend.
+So ARIMA(0,1,1) means "difference once, then fit an MA(1)". Seasonal data add a second set in capitals: **ARIMA(p,d,q)(P,D,Q)[m]**, where P, D and Q are the same ideas at the seasonal lag $m$ (12 for monthly data). Read a label from the middle out: **first the differences (d and D), because they say what is being modeled; then the AR and MA terms, which describe the short-run dynamics of that differenced series.**
+
+| Label | What is modeled | In words | What the forecast does |
+|---|---|---|---|
+| ARIMA(1,0,0) with mean | the level | an AR(1): the gap from the mean shrinks by a fixed share each period | returns to the mean |
+| ARIMA(0,1,0) | the change | a random walk | flat at the last value |
+| ARIMA(0,1,0) with drift | the change | a random walk with an average change per period | a straight line |
+| ARIMA(0,1,1) | the change | simple exponential smoothing (Chapter 6) | flat at a smoothed recent level |
+| ARIMA(0,2,1) on log prices | the change in inflation | inflation follows an IMA(1,1) | inflation flat; prices a straight line in logs |
+| ARIMA(0,1,1)(0,1,1)[12] on logs | the change in the year-over-year growth rate | the classic "airline" model for seasonal sales | the seasonal pattern and recent trend, carried forward |
+
+In Chapter 0, `auto.arima()` chose ARIMA(2,0,2)(0,1,1)[12] with drift for log retail sales since 2012. In words: one seasonal difference (D = 1), so it models year-over-year growth; no regular difference (d = 0), so that growth rate returns to an average; two AR and two MA terms for the short-run wiggles; one *seasonal* MA term that lets the model learn from last year's same-month surprise; and a drift, which pins down the average growth rate that year-over-year growth returns to.
+
+<Callout type="empirical" title="What 'drift', 'mean' and 'intercept' mean depends on d">
+The constant in an ARIMA printout changes meaning with the number of differences. With **d = 0** R calls it `mean` (or `intercept`): the long-run level the series returns to, in the series' own units. With **d = 1** it is called `drift`: the average change per period, so on log core PCE prices the ARIMA(1,1,1) drift of 0.0018 (R rounds it to 0.002) means prices rise about 0.18% per month, or 2.2% per year, on average. With **d = 2** R leaves it out, because a constant there would make the forecast curve like a parabola, which is rarely sensible. Always translate the constant into units before you report it.
+</Callout>
 
 `auto.arima()` makes these choices for you, using the Hyndman–Khandakar algorithm.<sup>[4](#refs)</sup> It chooses d with repeated KPSS tests, chooses D with a measure of seasonal strength, then searches over p, q, P and Q by AICc, stepping from a simple starting model to its neighbours. It is fast and usually sensible, but it cannot know things you know: that a pandemic distorted two years of data, or that the Fed is committed to a target.
 
@@ -232,12 +424,91 @@ What the lab shows, with data from January 2000 to September 2026:
 - The residuals pass the <Term def="A test of whether a group of autocorrelations is jointly zero. Applied to residuals, its null is 'no autocorrelation left', so a large p-value is good news.">Ljung–Box test</Term><sup>[10](#refs)</sup> (p = 0.27, 24 lags): only 1 of 36 residual autocorrelations falls outside the band, about what chance alone produces.
 
 <Callout type="pitfall" title="Never compare AICc across different d">
-`auto.arima()` uses AICc to choose p and q **after** fixing d. Differencing changes the data the likelihood is computed on, so an ARIMA(0,1,1) and an ARMA(1,1) for the same series are not on the same AICc scale. To compare models with different d, compare their **out-of-sample forecasts**, which is exactly what the next section does.
+`auto.arima()` uses AICc to choose p and q **after** fixing d. Differencing changes the data the likelihood is computed on, so an ARIMA(0,1,1) and an ARMA(1,1) for the same series are not on the same AICc scale. To compare models with different d, compare their **out-of-sample forecasts**, which is exactly what the outlook section below does.
 </Callout>
 
 <Callout type="business" title="Analyst judgment versus auto.arima">
 The two models fit history about equally well, but they disagree about the future. The IMA model says inflation stays wherever it is now, forever. The ARMA model says it drifts back to its 26-year average. The second view is also a statement about policy credibility: it assumes the central bank keeps pulling inflation back toward a stable anchor. Stock and Watson (2007) found that U.S. inflation is well described by an IMA(1,1), equivalently a random-walk trend plus short-lived noise, whose parameters shift over time.<sup>[6](#refs)</sup> Whichever you pick, say which one, and why.
 </Callout>
+
+## Reading a fitted ARIMA in plain words
+
+An ARIMA printout has four things worth reading aloud. Here they are for the two inflation models from the lab, translated into sentences a manager can use. (Units: annualized monthly core PCE inflation, % per year.)
+
+| Printout | Value | Say it like this |
+|---|---|---|
+| `ar1` in ARMA(1,1) | 0.962 | "Each month, 96% of the gap between the underlying inflation rate and its average is still there. Half of a surprise has faded after about 18 months." |
+| `mean` in ARMA(1,1) | 2.16 | "The model's long-run inflation rate is 2.2% per year, its 2000–2026 average." |
+| `ma1` in ARIMA(0,1,1) | −0.818 | "When inflation surprises by 1 point, the model raises its forecast by only 0.18 point. It treats 82% of each surprise as noise that will reverse and 18% as a lasting change." |
+| `sigma^2` | 1.64 | "A typical one-month surprise is $\sqrt{1.64} \approx 1.3$ points of annualized inflation, about 0.11 point at the monthly rate." |
+
+**An AR term is about the series' own past.** It says how much of where the series *was* carries into where it *will be*, so read it as persistence and turn it into a half-life. Watch the sign: a negative AR(1) coefficient means the series tends to flip back and forth around its mean (common in inventory changes, rare in prices).
+
+**An MA term is about past surprises.** It says how much of last period's *forecast error* carries into this period. A negative MA coefficient on a differenced series, as here, means the model expects part of each surprise to be undone: a spike in one month's inflation is partly a measurement blip. A positive one means surprises tend to be followed by more of the same, for one period only. Unlike an AR term, an MA(q) term's influence ends completely after q periods.
+
+**Standard errors** are read the usual way: θ = −0.818 with a standard error of 0.033 is far from zero. They matter less here than in a regression, because the question in ARIMA is rarely "is this coefficient zero?" but "does the model forecast well and leave no pattern behind?".
+
+<Callout type="empirical" title="Read the residual check like a mechanic, not a judge">
+`checkresiduals()` shows three panels and a test. Read them in this order.
+
+1. **Time plot of residuals.** Look for structure, not size: stretches of all-positive errors, a change in spread (here the residual standard deviation is 0.8 point in 2010–19 and 1.8 points in 2020–22), or single huge months. The two largest residuals in the inflation model are a pair in September and October 2001, a sharp one-month drop in measured core inflation that reversed the next month.
+2. **Residual ACF.** With 36 bars and a 95% band, one or two outside the band are expected by chance (36 × 5% ≈ 2). Worry about spikes at meaningful lags: 1, 2, or 12 in monthly data. Here 1 of 36 falls outside.
+3. **Histogram.** A roughly bell-shaped center is enough. Fat tails do not bias the point forecast, but they make the normal-theory intervals too narrow in turbulent times.
+4. **Ljung–Box test.** Null: "no autocorrelation left". p = 0.27 means no evidence of leftover pattern. A small p-value says "something is left"; look at the residual ACF to see *where*, add an AR or MA term at that lag, or check for a seasonal lag you missed. With very long samples the test flags tiny correlations, so let the forecast accuracy decide whether a fix is worth it.
+
+Passing the check does not make a model *right*. Both inflation models pass it, and they disagree about the future by 0.3 points.
+</Callout>
+
+### Practice: how long does a sentiment shock last?
+
+You are the analyst at a retailer. The University of Michigan consumer sentiment index has just dropped 10 points below its average, and your manager asks: *"How long until it recovers?"* Fit an AR(1) to sentiment (1990–2019, before the pandemic), read φ, and turn it into a half-life and a one-year-ahead gap.
+
+<div class="breakout">
+<CodeLab client:load id="ch06-ex-halflife" exercise title="Exercise: the half-life of a sentiment shock" r={exHlR} solution={exHlSolR} check={exHlCheckR} py={exHlPy} solutionPy={exHlSolPy} checkPy={exHlCheckPy} packages={['forecast']} pyPackages={['statsmodels']}
+  goal="Estimate the AR(1) persistence of consumer sentiment, compute the half-life of a shock, and the expected gap 12 months after a 10-point drop."
+  hints={['An AR(1) has one autoregressive lag, so the order is c(1, 0, 0) in R and (1, 0, 0) in Python.', 'The half-life h solves φ^h = 0.5, so h = log(0.5) / log(φ).', 'After h months a gap of 10 points has shrunk to 10 × φ^h.']} />
+</div>
+
+## From differences back to levels
+
+Your model may live in log differences, but your manager asks about **prices** and **12-month inflation**. Every forecast of a differenced, logged series has to be translated back, and the recipe is always the same: **undo the transformations in reverse order.** The last thing you did was difference, so first undo the difference by adding up the forecast changes (a running sum). The first thing you did was take logs, so last undo the log with exp().
+
+<Predict client:load
+  question="Your model forecasts that monthly inflation (the log difference of prices) stays at exactly 3% per year for the next two years. What does the forecast of the price index look like?"
+  options={['Flat at today’s level', 'A line rising at a constant percentage rate, about 0.25% per month', 'A line that rises and then levels off', 'It cannot be computed without the model’s coefficients']}
+  answer={1}
+  explain="A constant forecast of the change is a straight line in the level of the log: 3%/12 = 0.25% is added every month. After exp(), the index rises by about 0.25% per month, compounding. A flat forecast in differences is never a flat forecast in levels, unless the change is zero."
+/>
+
+Try it below. The left chart is a forecast in differences: monthly inflation starts at the latest 12-month rate (3.07% in log terms) and closes the gap to an anchor at the speed you choose. The right chart turns it into the price index and into 12-month inflation.
+
+<div class="breakout">
+<BackToLevels client:load />
+</div>
+
+With a half-life of 18 months and a 2% anchor, the index reaches 134.7 in September 2027 and 12-month inflation is 2.9%. Set the half-life to ∞ (a unit root) and it is 135.0 and 3.1%, the ARIMA(0,2,1) answer. Notice what the levels chart shows that the differences chart hides: **every month of above-anchor inflation raises the price level permanently.** Even when inflation returns to 2%, prices do not come back down; they just rise more slowly from a higher base.
+
+<Callout type="empirical" title="Undo transformations in reverse order, and check the result">
+If you modeled the monthly log change and have a forecast `fc` of the next few log changes:
+
+1. **Undo the difference:** start from the log of the last observed value and add up the forecast changes. In R, `log(last) + cumsum(fc)`.
+2. **Undo the log:** take `exp()` of the result, which is the same as `last * exp(cumsum(fc))`. If the changes were in percent, divide by 100 first.
+3. **Check one number by hand.** The 12-month rate is `exp()` of the sum of the 12 forecast log changes, minus 1. If your index forecast and this number disagree, a step is wrong.
+
+`forecast()` does steps 1 and 2 for you if you fit the model to the *level* with `d = 1` (and `lambda = 0` for the log), which is why the outlook lab models log prices directly. Two things it cannot fix: exp() of a log forecast is a **median**, not a mean (the gap is small for inflation, larger for volatile series; see [Chapter 10](/chapters/uncertainty/)), and the intervals must be transformed from the log scale bound by bound, never by adding and subtracting a fixed amount in levels.
+</Callout>
+
+### Practice: from a forecast of log changes to a price level
+
+Your manager wants two numbers for a pricing memo: the **level** of the core PCE price index in September 2027, and the **12-month inflation rate** it implies. A colleague has already fitted an ARMA(1,1) with a mean to monthly log changes (in %) and produced 12 monthly forecasts. Turn them into the numbers your manager asked for.
+
+<div class="breakout">
+<CodeLab client:load id="ch06-ex-levels" exercise title="Exercise: turn log-change forecasts into a price level" r={exLvR} solution={exLvSolR} check={exLvCheckR} py={exLvPy} solutionPy={exLvSolPy} checkPy={exLvCheckPy} packages={['forecast']} pyPackages={['statsmodels']}
+  goal="Cumulate 12 forecasts of monthly log changes, convert them back to the price index with exp(), and compute September 2027's 12-month inflation."
+  hints={['Undo the difference first: a running total of the monthly changes is `cumsum()` in R and `np.cumsum()` in Python.', 'Then undo the log: the inverse of log() is `exp()` (`np.exp()` in Python).', 'The 12-month rate compares September 2027 with September 2026, the last observed value: `as.numeric(tail(pce, 1))` in R, `last` in Python.']} />
+</div>
+
+The answer, 2.77%, matches the mean-reverting model in the outlook below (2.8%): it is the same model, written once for log changes and once for log prices with d = 1.
 
 ## The inflation outlook
 
@@ -282,7 +553,7 @@ Replace the six-month step with full time-series cross-validation, `tsCV(lp, fun
 
 ## Your turn
 
-The unemployment rate is the other half of the Fed's mandate. Decide how many differences it needs, fit an ARIMA, and check whether the residuals are white noise. Fill in the two blanks (`______`) and press **Run & check**.
+The unemployment rate is the other half of the Fed's mandate. Put the whole chapter together: decide how many differences it needs, fit an ARIMA, and check whether the residuals are white noise. Fill in the two blanks (`______`) and press **Run & check**.
 
 <div class="breakout">
 <CodeLab client:load id="ch06-ex1" exercise title="Exercise: identify, fit and check a model for unemployment" r={exR} solution={exSolR} check={exCheckR} packages={['forecast']}
@@ -293,43 +564,94 @@ The unemployment rate is the other half of the Fed's mandate. Decide how many di
 ## Chapter checklist
 
 - **Stationary** series return to a fixed level and have bounded forecast intervals; **unit-root** series do not, and their intervals widen like √h.
-- Test with **ADF and KPSS together**: their nulls are opposite. Use `ndiffs()` and `nsdiffs()`, and remember that ADF has low power near φ = 1.
-- **Difference** to remove a stochastic trend, **seasonally difference** to remove drifting seasonality, and watch for **over-differencing** (a lag-1 ACF near −0.5).
-- Read the **ACF and PACF** to shortlist AR, MA or ARMA orders, then let AICc and out-of-sample accuracy decide. Never compare AICc across different d.
-- Check residuals with **`checkresiduals()`**: a large Ljung–Box p-value means nothing obvious is left to model.
+- Read an AR coefficient as **persistence**: φ is the share of a gap that survives one period, and the **half-life** is log(0.5)/log(φ). Always state the frequency.
+- **Trends invent relationships** (food prices and online sales: R² = 0.96 in levels, 0.00 in growth rates) and decide whether a forecast ever reverts. Difference before you correlate trending series.
+- Test with **ADF and KPSS together** and say the result in words: ADF's null is a unit root, KPSS's null is stationarity; "cannot reject" is not "proved". When they conflict, use judgment and out-of-sample forecasts.
+- **Difference** to remove a stochastic trend, at the cost of the level and its mean reversion; **log first** so a difference is a growth rate that adds up; **seasonally difference** NSA data (a seasonal log difference is year-over-year growth).
+- Spot **over-differencing** by a larger standard deviation and a lag-1 ACF of −0.5 or below.
+- Read the **ACF and PACF** to shortlist orders, read a **(p,d,q)(P,D,Q)[m]** label from the differences out, and never compare AICc across different d.
+- Say an **MA term** in words (how much of last period's surprise carries over), translate `drift`/`mean` and σ into units, and read **residual checks** panel by panel.
+- Turn forecasts back into levels in **reverse order**: running sum to undo the difference, exp() to undo the log, and check the 12-month rate by hand.
 - Judge ARIMA against **ETS and a benchmark** on the same rolling-origin errors, and state your unit-root judgment in the memo.
 
 <InstructorKit
-  minutes={75}
-  data={['PCEPILFE', 'UNRATE', 'RSXFSN', 'CPIAUCSL']}
+  minutes={150}
+  data={['PCEPILFE', 'UNRATE', 'RSXFSN', 'CPIUFDSL', 'MRTSSM4541USS', 'IANA', 'M2SL', 'GS10', 'UMCSENT', 'HOUST', 'PAYEMS', 'T10Y3M', 'CPIAUCSL']}
+  sessions={[
+    { title: 'Session 1 · Why and when to difference', plan: [
+      '5 min · Hook: read the lede; every student writes a gut forecast of core PCE inflation a year from now (kept for session 2).',
+      '10 min · Persistence dial and the half-life table; Predict on the loan-default shock (φ = 0.9 gives about 6.6 months).',
+      '10 min · Two kinds of trend; Predict, then the trend-twins explorable: food prices vs online sales, R² 0.96 in levels, 0.00 in growth rates.',
+      '15 min · Spot the random walk; read ADF and KPSS in words with the housing-starts Predict and the verdict map; run the simulation lab.',
+      '15 min · Differencing machine, then the "why and when to difference" lab: log + difference = growth rate, seasonal difference = YoY, the d = 0/1/2 table for unemployment.',
+      '15 min · Activity: the "difference or not?" desk (below).',
+      '5 min · Exit ticket: the 10-year-yield exercise, or one unit-root sentence for a series of your choice.'
+    ] },
+    { title: 'Session 2 · Reading, fitting and forecasting with ARIMA', plan: [
+      '10 min · Fingerprints gallery and the ACF/PACF Predict; decode the label table out loud.',
+      '10 min · Fit lab: ARIMA(0,1,1) vs ARMA(1,1), auto.arima, Ljung–Box.',
+      '12 min · Reading a fitted ARIMA in words (φ as an 18-month half-life, θ = −0.82 as "82% noise", σ ≈ 1.3 points); students do the sentiment half-life exercise.',
+      '10 min · From differences back to levels: Predict, the back-to-levels explorable, and the log-change-to-level exercise.',
+      '28 min · Activity: the persistence debate (below), ending with the FOMC comparison and the gut forecasts from session 1.',
+      '5 min · Wrap-up: the checklist; assign "Your turn" (unemployment) as homework.'
+    ] }
+  ]}
   objectives={[
     'Explain stationarity, and contrast how an AR(1) and a random walk respond to a shock and how their forecast intervals grow.',
-    'Distinguish a deterministic from a stochastic trend, and choose between detrending and differencing.',
-    'Run and interpret `adf.test()`, `kpss.test()`, `ndiffs()` and `nsdiffs()`, including what to do when the tests disagree.',
-    'Identify candidate AR, MA and ARMA orders from the ACF and PACF, and decode ARIMA(p,d,q)(P,D,Q)[m] notation.',
-    'Fit ARIMA models by hand and with `auto.arima()`, and check residuals with the Ljung–Box test.',
-    'Produce a 12-month inflation fan chart and compare ARIMA with ETS and a benchmark on rolling-origin errors.'
+    'Interpret an AR coefficient as persistence, compute and explain a half-life, and convert persistence across data frequencies.',
+    'Show with real data how trends create spurious relationships and forecasts that never revert, and explain what differencing removes and what it costs.',
+    'Run `adf.test()`, `kpss.test()`, `ndiffs()` and `nsdiffs()`, state each result in words (null, decision, action), and handle conflicting tests.',
+    'Use log differences as growth rates, seasonal log differences as year-over-year growth, and recognize over-differencing from the standard deviation and lag-1 ACF.',
+    'Identify candidate AR, MA and ARMA orders from the ACF and PACF, and read ARIMA(p,d,q)(P,D,Q)[m] labels, MA terms, drift and σ in words.',
+    'Fit ARIMA models by hand and with `auto.arima()`, and read residual diagnostics panel by panel.',
+    'Convert forecasts of differenced log series back into levels and 12-month rates, and produce a 12-month inflation fan chart compared with ETS and a benchmark.'
   ]}
   discussion={[
     'Is U.S. inflation stationary? What would each answer imply about the credibility of the Fed’s 2% target?',
     'The unemployment rate cannot exceed 100%, yet unit-root tests often cannot reject a unit root. How can both be true, and which view should a forecaster adopt for a one-year horizon?',
+    'Food prices and online sales have R² = 0.96 in levels. A vendor shows you a similar chart linking your sales to their ad spending. What would you ask them to do before you believe it?',
+    'Inflation falls back to 2% in a forecast. Does that mean prices come back down? Use the back-to-levels explorable to explain the difference to a non-economist.',
     'A colleague picks the model with the lowest AICc among ARIMA(0,1,1) and ARMA(1,1). What is wrong with that comparison, and what would you do instead?'
   ]}
   misconceptions={[
     '“Failing to reject a unit root proves the series has one.” ADF has low power when φ is near 1; check KPSS and think about the economics.',
-    '“More differencing is safer.” Over-differencing adds an artificial MA(1) pattern and widens intervals.',
+    '“A half-life of 6.6 months means the shock is gone after 13 months.” Each half-life halves what is left: after two half-lives a quarter remains.',
+    '“A high R² between two trending series shows they are related.” Shared trends do that on their own; check growth rates.',
+    '“More differencing is safer.” Over-differencing adds an artificial MA(1) pattern, raises the standard deviation and widens intervals.',
+    '“Differencing is free.” It throws away the level, so a mean-reverting series loses its pull back to the mean in the forecast.',
+    '“If inflation returns to 2%, prices return to where they were.” Prices are the running sum of inflation; they keep rising from a higher base.',
     '“A significant Ljung–Box test means the model is useless.” With long samples it flags tiny correlations; inspect the residual ACF and the forecast accuracy before adding terms.',
     '“ARIMA and ETS are rival philosophies.” Many ETS models have exact ARIMA equivalents; Holt’s linear method is an ARIMA(0,2,2).'
   ]}
 >
 
-**The persistence debate (30 minutes).** Split the class into "mean reversion" and "unit root" teams.
+One activity per session. Teams of three.
 
-1. **Predict (5 min).** Each student writes down a point forecast for core PCE inflation 12 months after the latest data, without any code.
-2. **Build (15 min).** The mean-reversion team runs the outlook lab with `Arima(lp, order = c(1, 1, 1), include.drift = TRUE)` as its headline model; the unit-root team keeps `auto.arima()`. Each team produces a fan chart and a two-sentence memo.
-3. **Confront (10 min).** Put both memos next to the FOMC's September 2026 median projections (core PCE 3.4% for 2026 and 2.5% for 2027, Q4 over Q4).
+**Session 1: the "difference or not?" desk (15 minutes).** Each team gets one series from the verdict map: housing starts, consumer sentiment, payroll jobs, the yield spread or the unemployment rate.
 
-*Expected results* (data through September 2026): ARIMA(0,2,1) forecasts **3.1%** for September 2027 with an 80% interval of **2.0% to 4.1%**; ARIMA(1,1,1) with drift forecasts **2.8%**. On the rolling-origin scorecard the 12-month MAE is 0.54 (ARIMA(0,2,1)), 0.56 (ETS), 0.58 (mean-reverting ARIMA) and 0.61 (benchmark). Errors from 2020 onward are more than four times those before 2020. Use the gap between the two teams to discuss why "which d?" is an economic question as much as a statistical one.
+1. **Look (3 min).** Plot the level and the first difference in the verdict map. Before reading the tests, each team writes its guess: d = 0 or d = 1?
+2. **Test (5 min).** Read the four p-values (level and change), the lag-1 autocorrelation of the change and `ndiffs()`.
+3. **Defend (7 min).** Each team writes the one-sentence decision (test, null, result, action) plus one sentence of economics, and reads it out.
+
+*Expected results* (R, `tseries` defaults):
+
+| Series (sample) | Level: ADF p, KPSS p | Change: ADF p, KPSS p | Lag-1 ACF of change | Defensible decision |
+|---|---|---|---|---|
+| Housing starts, log (1990–2019) | 0.82, ≤ 0.01 → unit root | ≤ 0.01, ≥ 0.10 → stationary | −0.37 | d = 1 |
+| Consumer sentiment (1990–2019) | 0.63, 0.012 → unit root | ≤ 0.01, ≥ 0.10 → stationary | −0.04 | d = 1 for short horizons; an AR(1) with φ = 0.95 (half-life 12.7 months) is defensible for longer ones, because the index is bounded |
+| Payroll jobs, log (1990–2019) | 0.22, ≤ 0.01 → unit root | 0.12, ≥ 0.10 → can't tell | 0.77 | d = 1 with AR terms for the persistent growth rate; d = 2 would be over-differencing |
+| Yield spread, 10y − 3m (1990–2026) | 0.039, ≤ 0.01 → conflict | ≤ 0.01, ≥ 0.10 → stationary | 0.31 | either; the spread is persistent (lag-1 ACF 0.98) but has no economic reason to wander forever, so many forecasters use d = 0 |
+| Unemployment rate (1990–2019) | 0.35, 0.047 → unit root, barely | 0.024, ≥ 0.10 → stationary | 0.12 | d = 1 (as `ndiffs()` says); d = 2 raises the standard deviation from 0.15 to 0.20 |
+
+Use the yield spread and payroll jobs to make the point that the tests do not always decide, and the decision has to be defended with economics and out-of-sample forecasts.
+
+**Session 2: the persistence debate (28 minutes).** Split the class into "mean reversion" and "unit root" teams.
+
+1. **Predict (3 min).** Bring back the gut forecasts from session 1.
+2. **Build (15 min).** The mean-reversion team runs the outlook lab with `Arima(lp, order = c(1, 1, 1), include.drift = TRUE)` as its headline model; the unit-root team keeps `auto.arima()`. Each team produces a fan chart and a two-sentence memo that states its d in words and gives the half-life (mean reversion) or the share of each surprise treated as permanent (unit root).
+3. **Confront (10 min).** Put both memos next to the FOMC's September 2026 median projections (core PCE 3.4% for 2026 and 2.5% for 2027, Q4 over Q4), and use the back-to-levels explorable to show what each view implies for the price level.
+
+*Expected results* (data through September 2026): ARIMA(0,2,1) forecasts **3.1%** for September 2027 with an 80% interval of **2.0% to 4.1%**; ARIMA(1,1,1) with drift forecasts **2.8%** (φ = 0.96, half-life about 18 months; the unit-root model's θ = −0.82 treats 18% of each surprise as permanent). In the back-to-levels explorable, the price index in September 2027 is 135.0 with no mean reversion and 134.7 with an 18-month half-life and a 2% anchor. On the rolling-origin scorecard the 12-month MAE is 0.54 (ARIMA(0,2,1)), 0.56 (ETS), 0.58 (mean-reverting ARIMA) and 0.61 (benchmark). Errors from 2020 onward are more than four times those before 2020. Use the gap between the two teams to discuss why "which d?" is an economic question as much as a statistical one.
 
 **ADF power simulation (for the pitfall box).** In R, with `library(tseries)`: `set.seed(123); for (n in c(120, 240, 360)) print(mean(replicate(1000, suppressWarnings(adf.test(arima.sim(list(ar = 0.9), n))$p.value) < 0.05)))`. *Expected:* 0.189, 0.510 and 0.835. It takes about 5 seconds natively (much longer in the browser), so run it locally.
 
@@ -350,8 +672,9 @@ The unemployment rate is the other half of the Fed's mandate. Decide how many di
 9. U.S. Bureau of Labor Statistics. 2025 lapse in appropriations: impact on the Consumer Price Index, FAQ (last modified September 16, 2026). [bls.gov/cpi/additional-resources/2025-federal-government-shutdown-impact-cpi-faq.htm](https://www.bls.gov/cpi/additional-resources/2025-federal-government-shutdown-impact-cpi-faq.htm)
 10. Ljung, G. M., & Box, G. E. P. (1978). On a measure of lack of fit in time series models. *Biometrika*, 65(2), 297–303.
 11. Hyndman, R. J., & Athanasopoulos, G. (2021). *Forecasting: Principles and Practice* (3rd ed.), ch. 9. [otexts.com/fpp3/arima.html](https://otexts.com/fpp3/arima.html)
+12. Nau, R. Identifying the order of differencing in an ARIMA model. *Statistical forecasting: notes on regression and time series analysis*, Fuqua School of Business, Duke University. [people.duke.edu/~rnau/411arim2.htm](https://people.duke.edu/~rnau/411arim2.htm)
 
-Data: FRED, Federal Reserve Bank of St. Louis (PCEPILFE, UNRATE, RSXFSN). Core PCE price index: index 2017 = 100, monthly, seasonally adjusted. Unemployment rate: %, monthly, SA. Retail sales: $ millions, monthly, not seasonally adjusted.
+Data: FRED, Federal Reserve Bank of St. Louis (PCEPILFE, UNRATE, RSXFSN, CPIUFDSL, MRTSSM4541USS, IANA, M2SL, GS10, UMCSENT, HOUST, PAYEMS, T10Y3M). Core PCE price index: index 2017 = 100, monthly, seasonally adjusted. Unemployment rate: %, monthly, SA. Retail sales: \$ millions, monthly, not seasonally adjusted. CPI food: index 1982–84 = 100, SA. E-commerce sales: \$ millions, SA. Iowa nonfarm jobs and total payroll jobs: thousands, SA. M2: \$ billions, SA. 10-year Treasury yield: %, monthly average. Consumer sentiment: index 1966:Q1 = 100. Housing starts: thousands of units, SAAR. Yield spread: percentage points, daily values averaged to months.
 
 </div>
 

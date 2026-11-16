@@ -6,6 +6,8 @@ export interface SummaryInput {
   s: StudioSeries; res: StudioResult; featured: ModelKey;
   lastDate: Date; targetDate: Date; evalStart: Date; evalEnd: Date;
   point: number; lo80: number; hi80: number; latest: number;
+  /** The same calendar month as the target in the latest year of data: the like-with-like comparison for NSA data. */
+  sameMonth?: { date: Date; value: number };
 }
 export interface Summary { text: string; risk: string; riskKind: string; changePct: number }
 
@@ -35,10 +37,16 @@ export function makeSummary(i: SummaryInput): Summary {
   const sc = res.scores.find((x) => x.k === featured)!;
   const best = res.best;
   const H = res.H;
-  const changePct = (i.point / i.latest - 1) * 100;
+  // Compare like with like. NSA data: the same calendar month in the latest year of data (comparing with the latest
+  // month would mostly measure the season). SA data: the latest month. Rates are compared in percentage points.
+  const same = s.adj === 'NSA' && i.sameMonth ? i.sameMonth : null;
+  const refVal = same ? same.value : i.latest, refDate = same ? same.date : i.lastDate;
+  const yrs = Math.round((i.targetDate.getFullYear() - refDate.getFullYear()) + (i.targetDate.getMonth() - refDate.getMonth()) / 12);
+  const refWords = same ? `${monthYear(refDate)}, the same month ${yrs === 1 ? 'a year' : `${yrs} years`} earlier` : `the latest value (${monthYear(refDate)})`;
+  const changePct = (i.point / refVal - 1) * 100;
   const change = s.kind === 'rate'
-    ? `${Math.abs(i.point - i.latest) < 0.05 ? 'roughly unchanged from' : `${(i.point - i.latest > 0 ? 'up' : 'down')} ${Math.abs(i.point - i.latest).toFixed(1)} percentage points from`} ${i.latest.toFixed(1)}% in ${monthYear(i.lastDate)}`
-    : `${Math.abs(changePct) < 0.5 ? 'about the same as' : `${Math.abs(changePct).toFixed(1)}% ${changePct > 0 ? 'above' : 'below'}`} the latest value (${monthYear(i.lastDate)})`;
+    ? `${Math.abs(i.point - refVal) < 0.05 ? 'roughly unchanged from' : `${(i.point - refVal > 0 ? 'up' : 'down')} ${Math.abs(i.point - refVal).toFixed(1)} percentage points from`} ${refVal.toFixed(1)}% in ${monthYear(refDate)}`
+    : `${Math.abs(changePct) < 0.5 ? 'about the same as' : `${Math.abs(changePct).toFixed(1)}% ${changePct > 0 ? 'above' : 'below'}`} ${refWords}`;
   const vsRef = 1 - sc.MAE / res.ref.MAE;
   const refPhrase = featured === 'snaive' ? '' :
     vsRef >= 0 ? `, ${Math.round(vsRef * 100)}% smaller than the “same month last year” rule` : `, ${Math.round(-vsRef * 100)}% larger than the “same month last year” rule`;

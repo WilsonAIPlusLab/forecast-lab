@@ -49,6 +49,7 @@
   function draw() {
     if (!el || !data.length) return;
     const W = el.clientWidth;
+    if (W < 200) return;   // not laid out yet: watchLayout redraws once it has a real width
     const pts = data.map((p, i) => ({ date: p.date, v: bn(p.value), i, known: i < t }));
     const at = (k: number) => pts[t - k];
     const roles = [

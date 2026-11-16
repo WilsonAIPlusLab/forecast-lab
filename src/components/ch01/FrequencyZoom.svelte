@@ -100,8 +100,8 @@
       if (how === 'last') return '<b>Also legitimate.</b> The end-of-period value is what markets quote, but it rests on a single day, so it is jumpier and can disagree with the average about whether the curve was inverted.';
       return '<b>Wrong for a rate.</b> Adding up daily yields gives a number that depends on how many trading days the period has. Look at the ragged pattern: it partly tracks the calendar, not the bond market.';
     }
-    if (how === 'sum') return '<b>Right for a flow.</b> The sum is the total number of new claims filed in the period. Weeks are assigned by their end date, so some months get four weeks and some get five.';
-    if (how === 'mean') return '<b>Also fine.</b> Average weekly claims are comparable across months with four or five weeks, which the sum is not.';
+    if (how === 'sum') return '<b>Right for a total, risky for comparisons.</b> The sum is the number of new claims filed in the period. But weeks are assigned by their end date, so some months get four weeks and some get five: the monthly sum jumps about 25% whenever a month gains a week, even if nothing changed.';
+    if (how === 'mean') return '<b>Best for comparing months.</b> Average weekly claims are comparable across months with four or five weeks, which the sum is not. Use this when you study month-to-month changes.';
     return '<b>Throws information away.</b> The last week alone stands in for the whole period. Fine for a stock, wasteful for a flow.';
   });
 

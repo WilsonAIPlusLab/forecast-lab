@@ -76,7 +76,7 @@
       .call((g) => { g.select('.domain').attr('stroke', C.border); g.selectAll('line').remove(); g.selectAll('text').attr('fill', C.muted).style('font-size', '12px'); });
     svg.append('text').attr('x', W - mr).attr('y', H - 6).attr('text-anchor', 'end').attr('fill', C.muted).style('font-size', '12px').text('30-year mortgage rate (%)');
     svg.append('text').attr('x', ml + 4).attr('y', mt + 12).attr('fill', C.muted).style('font-size', '12px').text('Housing starts (thousands, SAAR)');
-    svg.append('clipPath').attr('id', 'ls-clip').append('rect').attr('x', ml).attr('y', mt).attr('width', W - ml - mr).attr('height', H - mt - mb);
+    svg.append('clipPath').attr('id', 'ls-clip').append('rect').attr('x', ml).attr('y', mt).attr('width', Math.max(0, W - ml - mr)).attr('height', Math.max(0, H - mt - mb));
     svg.append('g').attr('class', 'sq').attr('clip-path', 'url(#ls-clip)');
     svg.append('g').attr('class', 'res');
     svg.append('g').attr('class', 'pts').selectAll('circle').data(pts).join('circle')

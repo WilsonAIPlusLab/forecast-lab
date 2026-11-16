@@ -1,7 +1,9 @@
 # Generates the precomputed data behind the Chapter 12 explorables (not a student lab).
 # Run from the site folder:  "/c/Program Files/R/R-4.4.3/bin/Rscript.exe" src/labs/ch12/make_data.R
-# Writes src/components/ch12/shap_data.json and src/components/ch12/global_local.json.
+# Writes src/components/ch12/shap_data.json, global_local.json and interpret_data.json.
 # Models and settings are exactly those of Labs 12.3 (SHAP) and 12.4 (global vs local), so the numbers match.
+# interpret_data.json feeds LevelsVsGrowth (growth vs levels target) and CreditSplit (refits with random
+# column sampling). The LearningBudget explorable needs no file: it boosts in the browser with boost.ts.
 site <- normalizePath("."); setwd(file.path(site, "public"))
 source("r/course.R")
 source(file.path(site, "src/labs/ch12/features_setup.R"))
@@ -65,5 +67,61 @@ runs <- lapply(c(2, 3, 5, 8, 12, 29), function(years) {
 size <- aggregate(sales ~ name, data = test_rows, FUN = mean)
 jsonlite::write_json(list(runs = runs, avg_sales_bn = setNames(as.list(size$sales / 1000), size$name), test_from = "2023-01", test_to = format(max(test_rows$date), "%Y-%m")),
                      file.path(out_dir, "global_local.json"), auto_unbox = TRUE, digits = 5)
+# ── 3. Growth target (Lab 12.3's tuned model): forecasts and SHAP receipts in $ billions ─────────
+# Feeds the LevelsVsGrowth and CreditSplit explorables (interpret_data.json).
+P <- list(eta = 0.1, max_depth = 2, tree_method = "exact", nthread = 1)   # the tuned settings of Lab 12.2
+DM <- function(df, cols, label = NULL) xgb.DMatrix(as.matrix(df[, cols]), label = label)
+fit_g <- xgb.train(params = P, data = DM(train, features, train$growth), nrounds = 38)
+Sg <- predict(fit_g, DM(test, features), predcontrib = TRUE)       # % points of growth
+pg <- predict(fit_g, DM(test, features))
+usd_g <- Sg * test$lag1 / 100 / 1000                                 # same receipt in $ billions
+
+# ── 4. Levels target: the same trees, asked to predict sales in $ billions directly ─────────────
+d$sales_ly <- lag_by(d$sales, 12)                                    # sales in the same month last year
+lev <- c("month", "lag1", "sales_ly", "weekend", "sent_lm", "unrate_lm")
+fit_d <- d[d$date <= as.Date("2021-12-01"), ]; val_d <- d[format(d$date, "%Y") == "2022", ]
+es <- xgb.train(params = P, data = DM(fit_d, lev, fit_d$sales / 1000), nrounds = 2000,
+                evals = list(valid = DM(val_d, lev, val_d$sales / 1000)), early_stopping_rounds = 50, verbose = 0)
+n_lev <- attributes(es)$early_stop$best_iteration                    # trees chosen on 2022, as in Lab 12.1 (143)
+tr <- d[d$date <= as.Date("2022-12-01"), ]; te <- d[d$date >= as.Date("2023-01-01"), ]
+fit_l <- xgb.train(params = P, data = DM(tr, lev, tr$sales / 1000), nrounds = n_lev)
+pl <- predict(fit_l, DM(te, lev)); Sl <- predict(fit_l, DM(te, lev), predcontrib = TRUE)
+stopifnot(identical(te$date, test$date))
+cat(sprintf("levels: %d trees, base %.1f, MAE %.2f, max fc %.1f, train max %.1f\n", n_lev, Sl[1, "(Intercept)"],
+            mean(abs(te$sales / 1000 - pl)), max(pl), max(tr$sales) / 1000))
+r1 <- function(v) round(unname(v), 3)
+levels_part <- list(
+  growth_features = features, level_features = lev, level_trees = n_lev,
+  train_max = max(tr$sales) / 1000, train_max_date = format(tr$date[which.max(tr$sales)]),
+  train_mean = mean(tr$sales) / 1000,
+  months = lapply(seq_len(nrow(test)), function(i) list(
+    date = format(test$date[i]), actual = test$sales[i] / 1000, lag1 = test$lag1[i] / 1000,
+    sales_ly = te$sales_ly[i] / 1000,
+    g_fc = test$lag1[i] * (1 + pg[i] / 100) / 1000, g_base = r1(usd_g[i, "(Intercept)"]), g_shap = r1(usd_g[i, features]),
+    g_x = lapply(features, function(f) { v <- test[i, f]; if (is.na(v)) NULL else v }),
+    l_fc = pl[i], l_base = r1(Sl[i, "(Intercept)"]), l_shap = r1(Sl[i, lev]))))
+
+# ── 5. Credit split: refits that differ only in random column sampling ──────────────────────────
+# colsample_bytree = 0.5: each tree may split only on a random half of the 7 features.
+variant <- function(name, cols, p = P, seed = 0) {
+  if (seed > 0) { p$colsample_bytree <- 0.5; p$seed <- seed; set.seed(seed) }
+  fit <- xgb.train(params = p, data = DM(train, cols, train$growth), nrounds = 38)
+  S <- predict(fit, DM(test, cols), predcontrib = TRUE) * test$lag1 / 100 / 1000   # $ billions
+  pr <- test$lag1 * (1 + predict(fit, DM(test, cols)) / 100) / 1000
+  col <- function(f) if (f %in% cols) r1(S[, f]) else rep(0, nrow(test))
+  other <- r1(rowSums(S[, setdiff(cols, c("month", "growth_ly")), drop = FALSE]))
+  cat(sprintf("%-28s MAE %.2f  mean|month| %.2f mean|ly| %.2f\n", name, mean(abs(test$sales / 1000 - pr)),
+              mean(abs(col("month"))), mean(abs(col("growth_ly")))))
+  list(name = name, mae = mean(abs(test$sales / 1000 - pr)), month = col("month"), ly = col("growth_ly"),
+       other = other, base = r1(S[, "(Intercept)"]), fc = r1(pr))
+}
+credit_part <- list(
+  dates = format(test$date), actual = test$sales / 1000, lag1 = test$lag1 / 1000,
+  variants = list(variant("Tuned model (Lab 12.2)", features),
+                  variant("Refit A", features, seed = 1), variant("Refit B", features, seed = 2),
+                  variant("Refit C", features, seed = 3), variant("Refit D", features, seed = 4),
+                  variant("Without calendar month", setdiff(features, "month"))))
+jsonlite::write_json(list(levels = levels_part, credit = credit_part), file.path(out_dir, "interpret_data.json"),
+                     auto_unbox = TRUE, digits = 6, null = "null", na = "null")
 setwd(site)
-cat("wrote", file.path(out_dir, c("shap_data.json", "global_local.json")), "\n")
+cat("wrote", file.path(out_dir, c("shap_data.json", "global_local.json", "interpret_data.json")), "\n")

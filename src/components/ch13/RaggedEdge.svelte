@@ -111,6 +111,7 @@
   function draw() {
     if (!model || !elCal || !elNow || !cur) return;
     const W = elCal.clientWidth, narrow = W < 640, ml = narrow ? 92 : 142, mr = narrow ? 70 : 92;
+    if (W < 250) return; // not laid out yet; watchLayout redraws once it has a real width
     const xd: [Date, Date] = [addDays(model.start, -0.6), addDays(model.end, 0.8)];
     const playhead = addDays(model.start, day);
     const lanes = narrow ? ['Claims (Thu)', 'Jobs (Fri)'] : ['Weekly claims (DOL)', 'Jobs report (BLS)'];
