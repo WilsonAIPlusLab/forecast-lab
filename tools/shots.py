@@ -4,10 +4,10 @@ Writes PNGs to ../_shots/<slug>/ and prints any console errors."""
 import sys, os, asyncio
 from playwright.async_api import async_playwright
 
-BASE = "http://localhost:4322"
+BASE = os.environ.get("SHOTS_BASE", "http://localhost:4322")   # e.g. a static server on your own build folder
 SLUGS = sys.argv[1:] or ["first-forecast", "time-series-data", "decomposition", "benchmarks", "regression", "nonlinear-regression", "exponential-smoothing", "arima",
                           "dynamic-regression", "var", "uncertainty", "random-forests", "boosting-shap", "nowcasting", "forecast-studio"]
-OUT = os.path.join("..", "_shots")
+OUT = os.environ.get("SHOTS_OUT", os.path.join("..", "_shots"))
 CHROME = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
 
 async def shoot(browser, slug, width, height, tag):

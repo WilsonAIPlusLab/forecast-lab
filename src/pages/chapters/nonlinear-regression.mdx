@@ -2,6 +2,10 @@
 layout: ../../layouts/Chapter.astro
 slug: nonlinear-regression
 minutes: 110
+sessions:
+  - title: Will this client say yes? Logistic regression for business decisions
+  - title: Will there be a recession next year? Probability forecasts for the economy
+    starts: part-2-will-there-be-a-recession-next-year
 build:
   - A campaign targeting plan for a real bank (gain curve, lift and profit) that says whom to call and what it will earn
   - A recession-probability tracker in the style of the New York Fed's yield-curve model, with NBER recessions shaded
@@ -11,6 +15,7 @@ skills: ['glm(family = binomial)', logit, probit, odds ratio, marginal effect, m
 import CodeLab from '../../components/CodeLab.svelte';
 import Callout from '../../components/Callout.astro';
 import KeyIdea from '../../components/KeyIdea.astro';
+import SessionBreak from '../../components/SessionBreak.astro';
 import Predict from '../../components/Predict.svelte';
 import Term from '../../components/Term.astro';
 import InstructorKit from '../../components/InstructorKit.astro';
@@ -66,6 +71,8 @@ import exCheckPy from '../../labs/ch08/exercise_check.py?raw';
 You will work with two kinds of real data. Part 1 uses a Portuguese bank's telephone marketing campaigns, run between May 2008 and November 2010 and published by Moro, Cortez and Rita:<sup>[1](#refs)</sup> thousands of clients, one row each, no time order. Part 2 uses 66 years of monthly U.S. data from FRED: Treasury yields and the official recession dates. One tool, logistic regression, answers both questions. Yes/no forecasts are everywhere in business: will this customer buy, churn, default, click? Will the economy turn down?
 
 <KeyIdea>Keep the regression's straight line, but put it inside a curve. The line predicts the <strong>log-odds</strong>, and the logistic S-curve turns them into a probability that always stays between 0 and 1. Then judge the probabilities two ways: do they <strong>rank</strong> cases well (AUC), and do they <strong>mean what they say</strong> (calibration), on data the model has never seen?</KeyIdea>
+
+<SessionBreak n={1} title="Will this client say yes? Logistic regression for business decisions" goals={['Explain why a straight line fails for yes/no outcomes', 'Read logit coefficients as **odds ratios** and **marginal effects**', 'Turn probabilities into a call list with a cost-based threshold, and spot leakage']} />
 
 ## Part 1. Will this client say yes?
 
@@ -330,6 +337,8 @@ The dataset's own documentation says it plainly: `duration` "highly affects the 
 **Before you trust any predictor, ask one question: would I know this value at the moment I make the forecast?** If not, it is leakage, however good the AUC looks.
 
 Leakage can also be quieter. Each row records a client's *last* call, and `campaign` counts the calls to that client, the last one included. A client who says yes is not called again, while one who keeps saying no may be called many times, so a high count partly records earlier refusals. When you decide whether to dial, you do know how many calls you have made, so the column passes the test. But its odds ratio of 0.91 reflects how the bank stopped calling as well as how persistence works, so do not read it as "each extra call lowers the chance".
+
+<SessionBreak n={2} title="Will there be a recession next year? Probability forecasts for the economy" goals={['Build a forward-looking 0/1 target from time-series data', 'Fit and read the yield-curve logit, with honest standard errors', 'Score probabilities with AUC, the Brier score and calibration, out of sample']} />
 
 ## Part 2. Will there be a recession next year?
 

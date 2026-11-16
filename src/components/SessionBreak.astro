@@ -1,0 +1,25 @@
+---
+// Marks the start of a class session inside a chapter. Each chapter is taught in two 75-minute sessions.
+// <SessionBreak n={1} title="From a straight line to an S-curve" goals={['Explain …', 'Fit …']} />
+// Place n={1} right after the opening KeyIdea and n={2} immediately before the first heading of session 2;
+// list both in the chapter frontmatter (`sessions:`) so the "On this page" list can show them.
+interface Props { n: number; title: string; goals?: string[] }
+const { n, title, goals = [] } = Astro.props;
+const inline = (s: string) => s.replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+---
+<section class="sess" id={`session-${n}`} aria-label={`Session ${n}: ${title}`}>
+  <div class="sess-n" aria-hidden="true">{n}</div>
+  <div class="sess-b">
+    <div class="eyebrow">Session {n} of 2</div>
+    <p class="sess-t">{title}</p>
+    {goals.length > 0 && <ul class="sess-g">{goals.map((g) => <li set:html={inline(g)} />)}</ul>}
+  </div>
+</section>
+<style>
+  .sess { display: grid; grid-template-columns: auto 1fr; gap: 1.1rem; align-items: start; margin: 3.2rem 0 2.2rem; padding: 1.2rem 1.4rem; border-radius: var(--radius); background: color-mix(in srgb, var(--ch, var(--accent)) 9%, var(--surface)); border: 1px solid color-mix(in srgb, var(--ch, var(--accent)) 40%, var(--border)); scroll-margin-top: calc(var(--header-h) + 1rem); }
+  .sess-n { width: 2.6rem; height: 2.6rem; border-radius: 50%; display: grid; place-items: center; font: 800 1.25rem var(--font-ui); color: var(--bg); background: var(--ch, var(--accent)); }
+  .sess-t { font-family: var(--font-display); font-size: 1.35rem; line-height: 1.3; margin: .15rem 0 .3rem; color: var(--text); }
+  .sess-g { margin: .3rem 0 0; padding-left: 1.1rem; font-size: .92rem; color: var(--text-2); }
+  .sess-g li { margin: .15rem 0; }
+  @media (max-width: 520px) { .sess { grid-template-columns: 1fr; gap: .5rem; } }
+</style>

@@ -1,5 +1,5 @@
 """Run every lab natively (R and Python), with hidden setups prepended and exercises run as solution + check.
-Usage (from site/): python tools/check_all.py      Prints a summary and any failures."""
+Usage (from site/): python tools/check_all.py [folder ...]      Prints a summary and any failures."""
 import glob, os, re, subprocess, tempfile, sys, io
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 RS = r"C:\Program Files\R\R-4.4.3\bin\Rscript.exe"
@@ -7,15 +7,15 @@ SETUP = {"ch08": "setup", "ch12": "features_setup", "nonlinear": "setup_bank"}
 SKIP = re.compile(r"(_check|setup|make_data|build_data|xgboost_lite)\.(R|py)$|/exercise\.(R|py)$|/ex_\w+?\.(R|py)$")
 tmp = tempfile.mkdtemp()
 results = []
+ONLY = sys.argv[1:]   # optional: lab folders to check, e.g. python tools/check_all.py ch03 nonlinear
 for ext in ("R", "py"):
     for f in sorted(glob.glob(f"src/labs/*/*.{ext}")):
+        if ONLY and f.replace("\\", "/").split("/")[2] not in ONLY: continue
         f = f.replace("\\", "/")
         folder = f.split("/")[2]
         name = os.path.basename(f)
-        if SKIP.search(f) and not name.startswith(("exercise_solution", "ex_logit_solution", "ex_pois_solution")):
+        if SKIP.search(f) and "_solution" not in name:
             continue
-        if folder == "nonlinear" and name == "activity.R":
-            pass
         parts = []
         if folder in SETUP: parts.append(f"src/labs/{folder}/{SETUP[folder]}.{ext}")
         parts.append(f)

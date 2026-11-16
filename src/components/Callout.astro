@@ -1,12 +1,13 @@
 ---
-// <Callout type="intuition|pitfall|business|tip|math" title="...">  — math renders as a collapsible "Under the hood" box
-interface Props { type?: 'intuition' | 'pitfall' | 'business' | 'tip' | 'math'; title?: string; open?: boolean }
+// <Callout type="intuition|pitfall|business|tip|empirical|math" title="...">  — empirical = applied advice (transformations, reading coefficients, data traps)  — math renders as a collapsible "Under the hood" box
+interface Props { type?: 'intuition' | 'pitfall' | 'business' | 'tip' | 'empirical' | 'math'; title?: string; open?: boolean }
 const { type = 'intuition', title, open = false } = Astro.props;
 const meta = {
   intuition: { icon: '◐', label: 'Intuition', c: '#22d3ee' },
   pitfall: { icon: '!', label: 'Pitfall', c: '#f87171' },
   business: { icon: '$', label: 'In practice', c: '#f59e0b' },
   tip: { icon: '↗', label: 'Try this', c: '#34d399' },
+  empirical: { icon: '✎', label: 'Empirical tip', c: '#e9b949' },
   math: { icon: 'Σ', label: 'Show the math', c: '#a99bff' },
 }[type];
 ---

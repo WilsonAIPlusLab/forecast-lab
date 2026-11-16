@@ -11,6 +11,16 @@ const href = (s: string) => `${base}chapters/${s}/`;
 const hasParts = headings.some((h: any) => h.depth === 2 && /^Part \d/.test(h.text));
 const toc = headings.filter((h: any) => h.depth === 2 || (hasParts && h.depth === 3));
 const nSections = toc.filter((h: any) => h.depth === 2).length;
+// Two-session split (frontmatter `sessions: [{ title }, { title, starts: <slug of session 2's first heading> }]`):
+// the "On this page" list shows a session label before each session's sections.
+const sessions: { title: string; starts?: string }[] = frontmatter.sessions ?? [];
+type TocItem = { session?: number; title?: string; depth?: number; slug?: string; text?: string };
+const items: TocItem[] = [];
+if (sessions.length) items.push({ session: 1, title: sessions[0].title });
+for (const h of toc) {
+  sessions.forEach((s, k) => { if (k > 0 && s.starts === h.slug) items.push({ session: k + 1, title: s.title }); });
+  items.push(h);
+}
 const pad = (n: number) => String(n).padStart(2, '0');
 // Per-chapter signature hero visual: src/components/heroes/<slug>.astro (optional)
 const heroes = import.meta.glob('../components/heroes/*.astro', { eager: true }) as Record<string, any>;
@@ -66,7 +76,7 @@ const Hero = heroes[`../components/heroes/${ch.slug}.astro`]?.default;
           <details class="toc-m">
             <summary>On this page <span class="muted">({nSections} sections)</span></summary>
             <nav aria-label="On this page (compact)">
-              <ol>{toc.map((h: any) => <li class:list={[{ sub: h.depth === 3 }]}><a href={`#${h.slug}`}>{h.text}</a></li>)}</ol>
+              <ol>{items.map((h: any) => h.session ? <li class="sess-li"><a href={`#session-${h.session}`}>Session {h.session}: {h.title}</a></li> : <li class:list={[{ sub: h.depth === 3 }]}><a href={`#${h.slug}`}>{h.text}</a></li>)}</ol>
             </nav>
           </details>
         </div>
@@ -86,7 +96,7 @@ const Hero = heroes[`../components/heroes/${ch.slug}.astro`]?.default;
     {toc.length > 0 && (
       <aside class="toc" aria-label="On this page">
         <div class="eyebrow">On this page</div>
-        {toc.map((h: any) => <a href={`#${h.slug}`} data-id={h.slug} class:list={[{ sub: h.depth === 3 }]}>{h.text}</a>)}
+        {items.map((h: any) => h.session ? <a href={`#session-${h.session}`} data-id={`session-${h.session}`} class="sess-a">Session {h.session} · {h.title}</a> : <a href={`#${h.slug}`} data-id={h.slug} class:list={[{ sub: h.depth === 3 }]}>{h.text}</a>)}
       </aside>
     )}
   </div>
@@ -170,6 +180,9 @@ const Hero = heroes[`../components/heroes/${ch.slug}.astro`]?.default;
     .toc a:hover { color: var(--text); }
     .toc a.on { color: var(--text); border-left-color: var(--ch); }
     .toc a.sub { padding-left: 1.3rem; font-size: .76rem; }
+    .toc a.sess-a { margin-top: .7rem; font-weight: 700; color: var(--text-2); border-left-color: var(--ch); font-size: .74rem; text-transform: uppercase; letter-spacing: .04em; }
+    .toc a.sess-a:first-of-type { margin-top: .2rem; }
+    .toc-m li.sess-li { list-style: none; margin: .6rem 0 .2rem -1.2rem; font-weight: 700; }
     .toc-m li.sub { margin-left: 1.1rem; list-style: circle; font-size: .86rem; }
     /* must follow the .toc rule above, or the desktop TOC shows up under the chapter on narrow screens */
     @media (max-width: 1280px) { .toc { display: none; } }

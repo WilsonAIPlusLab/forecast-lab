@@ -1,8 +1,12 @@
 ---
 // End-of-chapter kit for instructors: objectives, discussion prompts, misconceptions, in-class activity (slot).
-// <InstructorKit objectives={[...]} discussion={[...]} misconceptions={[...]} minutes={50}> …activity markdown… </InstructorKit>
-interface Props { objectives: string[]; discussion?: string[]; misconceptions?: string[]; minutes?: number; data?: string[] }
-const { objectives, discussion = [], misconceptions = [], minutes, data = [] } = Astro.props;
+// <InstructorKit objectives={[...]} discussion={[...]} misconceptions={[...]} data={[...]}
+//   sessions={[{ title: '…', plan: ['10 min · Warm-up: …', '20 min · …'] }, { title: '…', plan: [...] }]}> …activity markdown… </InstructorKit>
+// `sessions` is the two-session teaching plan (75 minutes each); each plan line starts with its minutes.
+interface Session { title: string; plan: string[] }
+interface Props { objectives: string[]; discussion?: string[]; misconceptions?: string[]; minutes?: number; data?: string[]; sessions?: Session[] }
+const { objectives, discussion = [], misconceptions = [], minutes, data = [], sessions = [] } = Astro.props;
+const mins = (plan: string[]) => plan.reduce((t, l) => t + (parseInt(l, 10) || 0), 0);
 const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
 const srcLink = (id: string) => {
   const uci: Record<string, string> = { bank_marketing: 'https://archive.ics.uci.edu/dataset/222/bank+marketing' };
@@ -15,8 +19,18 @@ const inline = (s: string) => s.replace(/`([^`]+)`/g, '<code>$1</code>').replace
 <section class="kit" aria-labelledby="kit-h">
   <div class="kit-top">
     <h2 id="kit-h">Instructor kit</h2>
-    <p class="kit-sub">Everything needed to teach this chapter{minutes ? ` in about ${minutes} minutes of class time` : ''}. Every chart above has PNG/SVG download buttons (hover over a chart) for your slides.</p>
+    <p class="kit-sub">Everything needed to teach this chapter{sessions.length ? ` in ${sessions.length} class sessions of about ${Math.max(...sessions.map((x) => mins(x.plan)))} minutes` : minutes ? ` in about ${minutes} minutes of class time` : ''}. Every chart above has PNG/SVG download buttons (hover over a chart) for your slides.</p>
   </div>
+  {sessions.length > 0 && (
+    <div class="kit-sessions">
+      {sessions.map((x, k) => (
+        <div class="kit-card kit-sess">
+          <h3><a href={`#session-${k + 1}`}>Session {k + 1}</a>: {x.title} <span class="muted">({mins(x.plan)} min)</span></h3>
+          <ol class="kit-plan">{x.plan.map((o) => <li set:html={inline(o)} />)}</ol>
+        </div>
+      ))}
+    </div>
+  )}
   <div class="kit-grid">
     <div class="kit-card">
       <h3>Learning objectives</h3>
@@ -43,7 +57,7 @@ const inline = (s: string) => s.replace(/`([^`]+)`/g, '<code>$1</code>').replace
     )}
   </div>
   <details class="kit-act">
-    <summary>In-class activity, with solutions</summary>
+    <summary>In-class {sessions.length > 1 ? 'activities' : 'activity'}, with solutions</summary>
     <div class="kit-act-b"><slot /></div>
   </details>
 </section>
@@ -57,6 +71,11 @@ const inline = (s: string) => s.replace(/`([^`]+)`/g, '<code>$1</code>').replace
   .kit-card h3 { margin: 0 0 .5rem; font-size: 1rem; }
   .kit-lead { color: var(--muted); font-size: .85rem; margin-bottom: .4rem; }
   .kit-card ol, .kit-card ul { padding-left: 1.15rem; color: var(--text-2); }
+  .kit-sessions { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
+  .kit-sess { border-top: 3px solid var(--ch, var(--accent)); }
+  .kit-plan { list-style: none; padding-left: 0 !important; }
+  .kit-plan li { padding: .3rem 0; border-bottom: 1px dashed var(--border); }
+  .kit-plan li:last-child { border-bottom: 0; }
   .kit-act { margin-top: 1rem; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
   .kit-act summary { cursor: pointer; padding: .8rem 1.1rem; font-weight: 650; }
   .kit-act-b { padding: 0 1.1rem 1rem; font-size: .94rem; color: var(--text-2); }
