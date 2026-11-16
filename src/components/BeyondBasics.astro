@@ -1,0 +1,28 @@
+---
+// Collapsed end-of-chapter box for material that is NOT part of the two class sessions:
+// more advanced extensions, extra labs and extra practice that "can wait for later".
+// <BeyondBasics topics={['Newey–West standard errors', 'The Brier decomposition']}> …markdown, labs, explorables… </BeyondBasics>
+// Inside, use #### headings (or bold lead-ins) so these items stay out of the "On this page" list.
+interface Props { topics?: string[] }
+const { topics = [] } = Astro.props;
+---
+<details class="beyond" id="beyond-the-basics">
+  <summary>
+    <span class="b-k">Beyond the basics</span>
+    <span class="b-t">Optional, not covered in class. Come back to these once the fundamentals above feel solid.</span>
+    {topics.length > 0 && <span class="b-list">{topics.join(' · ')}</span>}
+    <span class="b-chev" aria-hidden="true">▸</span>
+  </summary>
+  <div class="b-body"><slot /></div>
+</details>
+<style>
+  .beyond { margin: 3rem 0 1.5rem; border: 1px dashed var(--border-strong); border-radius: var(--radius); background: var(--bg-2); }
+  .beyond summary { cursor: pointer; list-style: none; display: grid; grid-template-columns: 1fr auto; gap: .25rem .8rem; padding: 1rem 1.2rem; }
+  .beyond summary::-webkit-details-marker { display: none; }
+  .b-k { font: 750 1.05rem var(--font-ui); color: var(--text); }
+  .b-t { grid-column: 1; font-size: .88rem; color: var(--muted); }
+  .b-list { grid-column: 1; font-size: .82rem; color: var(--text-2); }
+  .b-chev { grid-column: 2; grid-row: 1 / span 3; align-self: center; transition: transform .2s; color: var(--muted); }
+  .beyond[open] .b-chev { transform: rotate(90deg); }
+  .b-body { padding: 0 1.2rem 1.2rem; border-top: 1px dashed var(--border); }
+</style>
